@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Payment Success | Alpha Striker 2.0</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" type="text/css" href="../css/common/header.css">
+
+  <link rel="stylesheet" type="text/css" href="../css/pay/paysuccess.css">
+  <script src="../js/common.js"></script>
+  <script src="../js/pay/paysuccess.js"></script>
+</head>
+<body>
+  <!-- Include common header component -->
+  <div id="header-container"></div>
+  
+  <div class="payment-status-container">
+    <!-- Payment Processing Section -->
+    <div class="payment-loading">
+      <div class="loading-content">
+        <div class="spinner-container">
+          <div class="spinner"></div>
+          <div class="spinner-glow"></div>
+        </div>
+        <h2>Processing Your Payment</h2>
+        <p>Please wait while we securely process your transaction...</p>
+        <div class="progress-dots">
+          <span class="dot active"></span>
+          <span class="dot active"></span>
+          <span class="dot"></span>
+        </div>
+        <div class="security-notice">
+          <i class="fas fa-shield-alt"></i>
+          <span>Your payment is secured with 256-bit SSL encryption</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Payment Success Section -->
+    <div class="payment-success" style="display: none;">
+      <div class="success-content">
+        <div class="success-animation">
+          <div class="success-checkmark">
+            <i class="fas fa-check-circle"></i>
+          </div>
+        </div>
+        
+        <h2>Payment Successful!</h2>
+        <p class="success-message">Thank you for your purchase! Your booking has been confirmed.</p>
+        
+        <div class="booking-confirmation">
+          <div class="confirmation-details">
+            <div class="detail-item">
+              <i class="fas fa-ticket-alt"></i>
+              <span>Booking ID: <strong>#BK-2024-001</strong></span>
+            </div>
+            <div class="detail-item">
+              <i class="fas fa-envelope"></i>
+              <span>Confirmation email sent</span>
+            </div>
+            <div class="detail-item">
+              <i class="fas fa-mobile-alt"></i>
+              <span>Mobile ticket ready</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="action-buttons">
+          <button class="primary-btn" onclick="location.href='homepage.html'">
+            <i class="fas fa-home"></i>
+            Back to Home
+          </button>
+          <button class="secondary-btn" onclick="location.href='generate_ticket.html'">
+            <i class="fas fa-list"></i>
+            View My Bookings
+          </button>
+        </div>
+        
+        <div class="next-steps">
+          <h3>What's Next?</h3>
+          <div class="steps-grid">
+            <div class="step-item" onclick="location.href='generate_ticket.html'" style="cursor: pointer;">
+              <i class="fas fa-qrcode"></i>
+              <h4>Show QR Code</h4>
+              <p>Present your mobile ticket at the theater</p>
+            </div>
+            <div class="step-item">
+              <i class="fas fa-clock"></i>
+              <h4>Arrive Early</h4>
+              <p>Please arrive 15 minutes before showtime</p>
+            </div>
+            <div class="step-item">
+              <i class="fas fa-popcorn"></i>
+              <h4>Enjoy the Show</h4>
+              <p>Grab some snacks and enjoy your movie!</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div id="bottom-container"></div>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!-- Common footer component -->
+<div class="dark-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-column">
+        <h3>CineTix</h3>
+        <p>The ultimate destination for movie enthusiasts to book tickets and enjoy premium cinema experiences.</p>
+        <div class="social-icons">
+          <a href="#" class="social-icon"><i class="fab fa-facebook-f"></i></a>
+          <a href="#" class="social-icon"><i class="fab fa-twitter"></i></a>
+          <a href="#" class="social-icon"><i class="fab fa-instagram"></i></a>
+          <a href="#" class="social-icon"><i class="fab fa-youtube"></i></a>
+        </div>
+      </div>
+      
+      <div class="footer-column">
+        <h3>Quick Links</h3>
+        <ul class="footer-links-list">
+          <li><a href="movies">Movies</a></li>
+          <li><a href="theaters">Theaters</a></li>
+          <li><a href="upcoming-releases">Upcoming Releases</a></li>
+          <li><a href="gift-cards">Gift Cards</a></li>
+          <li><a href="offers">Offers & Discounts</a></li>
+        </ul>
+      </div>
+      
+      <div class="footer-column">
+        <h3>Support</h3>
+        <ul class="footer-links-list">
+          <li><a href="faqs">FAQs</a></li>
+          <li><a href="contact">Contact Us</a></li>
+          <li><a href="terms">Terms of Service</a></li>
+          <li><a href="privacy">Privacy Policy</a></li>
+          <li><a href="help">Help Center</a></li>
+        </ul>
+      </div>
+      
+      <div class="footer-column">
+        <h3>Download Our App</h3>
+        <p>Get the best movie booking experience on your mobile device.</p>
+        <a href="#" class="app-store-link">
+          <img src="" alt="App Store" id="app-store-img">
+        </a>
+      </div>
+    </div>
+    
+    <div class="footer-bottom">
+      <p>&copy; 2025 Alpha Striker 2.0. All rights reserved.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// Fix path issues
+document.addEventListener('DOMContentLoaded', function() {
+  // Check if currently in pages directory
+  const inPagesDir = window.location.pathname.includes('/pages/');
+  
+  // Get App Store image
+  const appStoreImg = document.getElementById('app-store-img');
+  
+  // Get all links
+  const allLinks = document.querySelectorAll('.footer-links-list a');
+  
+  if (inPagesDir) {
+    // If in pages directory, use path relative to pages
+          appStoreImg.setAttribute('src', '../img/homepage/app-store.png');
+      
+      // Fix links
+    allLinks.forEach(link => {
+      const href = link.getAttribute('href');
+      if (href === 'movies') {
+        link.setAttribute('href', 'homepage.html');
+      } else if (href === 'theaters') {
+        link.setAttribute('href', 'theater.html');
+      } else if (href === 'offers') {
+        link.setAttribute('href', 'offer.html');
+      } else if (href === 'contact') {
+        link.setAttribute('href', 'about.html');
+      } else {
+        link.setAttribute('href', '#');
+      }
+    });
+  } else {
+    // If in root directory, use path relative to root
+          appStoreImg.setAttribute('src', 'img/homepage/app-store.png');
+      
+      // Fix links
+    allLinks.forEach(link => {
+      const href = link.getAttribute('href');
+      if (href === 'movies') {
+        link.setAttribute('href', 'pages/homepage.html');
+      } else if (href === 'theaters') {
+        link.setAttribute('href', 'pages/theater.html');
+      } else if (href === 'offers') {
+        link.setAttribute('href', 'pages/offer.html');
+      } else if (href === 'contact') {
+        link.setAttribute('href', 'pages/about.html');
+      } else {
+        link.setAttribute('href', '#');
+      }
+    });
+  }
+});
+</script> 

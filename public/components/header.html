@@ -1,0 +1,61 @@
+<!-- Common header component -->
+<header class="header">
+  <div class="logo-container">
+    <a href="homepage.html" class="logo-link">
+      <img src="img/logo.jpg" alt="Alpha Striker 2.0" id="logo-image">
+    </a>
+  </div>
+  
+  <nav class="nav-links">
+    <a href="pages/homepage.html" class="nav-link" data-page="homepage.html">Movies</a>
+    <a href="pages/theater.html" class="nav-link" data-page="theater.html">Theaters</a>
+    <a href="pages/offer.html" class="nav-link" data-page="offer.html">Offers</a>
+    <a href="pages/about.html" class="nav-link" data-page="about.html">About</a>
+  </nav>
+  
+  <div class="user-actions">
+    <div class="user-profile">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+      <span class="user-name" id="header-username">544350851</span>
+    </div>
+    <a href="login.html" class="logout-btn">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+      Logout
+    </a>
+  </div>
+</header>
+
+<script>
+  // Fix path issues
+document.addEventListener('DOMContentLoaded', function() {
+  // Check if currently in pages directory
+  const inPagesDir = window.location.pathname.includes('/pages/');
+  
+  // Get logo link and image elements
+  const logoLink = document.querySelector('.logo-link');
+  const logoImg = document.getElementById('logo-image');
+  
+  // Get all navigation links and logout button
+  const navLinks = document.querySelectorAll('.nav-link');
+  const logoutBtn = document.querySelector('.logout-btn');
+  
+  if (inPagesDir) {
+    // If in pages directory, use path relative to pages
+    logoLink.setAttribute('href', 'homepage.html');
+    logoImg.setAttribute('src', '../img/logo.jpg');
+    
+    navLinks.forEach(link => {
+      const page = link.getAttribute('data-page');
+      link.setAttribute('href', page);
+    });
+    
+    logoutBtn.setAttribute('href', '../login.html');
+  } else {
+    // If in root directory, use path relative to root
+    logoLink.setAttribute('href', 'pages/homepage.html');
+    logoImg.setAttribute('src', 'img/logo.jpg');
+    
+    // Navigation links and logout button are already set correctly
+  }
+});
+</script> 

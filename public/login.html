@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login | Alpha Striker 2.0</title>
+  <link rel="stylesheet" type="text/css" href="css/login/login.css">
+  <script src="js/dark-mode-init.js"></script>
+</head>
+<body>
+    <!-- Login Page -->
+    <div id="login-page" style="display:block;">
+      <div class="container">
+        <div class="logo-section">
+            <img src="img/logo.jpg" alt="logo">
+          <p>Your Ultimate Movie Experience</p>
+        </div>
+        
+        <div class="auth-container card">
+          <div class="auth-header">
+            <h1>Welcome Back</h1>
+            <p>Sign in to continue your movie journey</p>
+          </div>
+          
+          <form id="login-form" onsubmit="loginUser(event)">
+            <div class="form-group">
+              <label for="email" class="form-label">Email</label>
+              <input type="email" id="email" class="form-input" placeholder="Enter your email" required>
+            </div>
+            
+            <div class="form-group">
+              <label for="password" class="form-label">Password</label>
+              <input type="password" id="password" class="form-input" placeholder="Enter your password" required>
+            </div>
+            
+            <div class="remember-forgot">
+              <div class="remember-me">
+                <input type="checkbox" id="remember">
+                <label for="remember">Remember me</label>
+              </div>
+              <a href="pwd.html" class="forgot-password">Forgot Password?</a>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Sign In</button>
+          </form>
+          
+          <div class="auth-footer">
+            <p>Don't have an account? <a href="#" class="auth-link" onclick="showPage('register-page')">Create Account</a></p>
+            <p>Administrator access: <a href="admin/login.html" class="auth-link">Admin Login</a></p>
+          </div>
+          
+          <div class="social-buttons">
+            <p>Or continue with</p>
+            <div class="social-icons">
+              <button class="social-icon">
+                <img style="width:20px;height: 20px;" src="img/google.png"/>
+              </button>
+              <button class="social-icon">
+                <img style="width:20px;height: 20px;" src="img/github.png"/>
+              </button>
+              <button class="social-icon">
+                <img style="width:20px;height: 20px;" src="img/apple.png"/>
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <div class="copyright">
+          <p>© 2025 CineTix. All rights reserved.</p>
+        </div>
+      </div>
+    </div>
+  
+    <!-- Register Page -->
+    <div id="register-page" style="display:none;">
+      <div class="container">
+        <div class="logo-section">
+          <h1>CineTix</h1>
+          <p>Your Ultimate Movie Experience</p>
+        </div>
+        
+        <div class="auth-container card">
+          <div class="auth-header">
+            <h1>Create Account</h1>
+            <p>Sign up to start your movie journey</p>
+          </div>
+          
+          <form id="register-form" onsubmit="registerUser(event)">
+            <div class="form-group">
+              <label for="name" class="form-label">Full Name</label>
+              <input type="text" id="name" class="form-input" placeholder="Enter your full name" required>
+            </div>
+            
+            <div class="form-group">
+              <label for="reg-email" class="form-label">Email</label>
+              <input type="email" id="reg-email" class="form-input" placeholder="Enter your email" required>
+            </div>
+            
+            <div class="form-group">
+              <label for="reg-password" class="form-label">Password</label>
+              <input type="password" id="reg-password" class="form-input" placeholder="Create a password" required>
+            </div>
+            
+            <div class="form-group">
+              <label for="confirm-password" class="form-label">Confirm Password</label>
+              <input type="password" id="confirm-password" class="form-input" placeholder="Confirm your password" required>
+            </div>
+            
+            <div class="terms-check">
+              <input type="checkbox" id="terms" required>
+              <label for="terms">I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a></label>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Create Account</button>
+          </form>
+          
+          <div class="auth-footer">
+            <p>Already have an account? <a href="#" class="auth-link" onclick="showPage('login-page')">Sign In</a></p>
+          </div>
+          
+          <div class="social-buttons">
+            <p>Or sign up with</p>
+            <div class="social-icons">
+              <button class="social-icon">
+                <img style="width:20px;height: 20px;" src="img/google.png"/>
+              </button>
+              <button class="social-icon">
+                <img style="width:20px;height: 20px;" src="img/github.png"/>
+              </button>
+              <button class="social-icon">
+                <img style="width:20px;height: 20px;" src="img/apple.png"/>
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <div class="copyright">
+          <p>© 2025 Alpha Strikers 2.0. All rights reserved.</p>
+        </div>
+      </div>
+    </div>
+    <script type="text/javascript" src="js/login/login.js"></script>
+  </body>
+</html>

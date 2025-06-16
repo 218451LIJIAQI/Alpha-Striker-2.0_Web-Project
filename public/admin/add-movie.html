@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Add New Movie</title>
+    <link href="../css/common/header.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4361ee;
+            --primary-dark: #3046c9;
+            --secondary: #ff3366;
+            --gradient: linear-gradient(135deg, #4361ee, #3a0ca3);
+            --text-light: #f8f9fa;
+            --text-dark: #20232a;
+            --bg-light: #f8f9fa;
+            --card-bg: #ffffff;
+            --card-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+            line-height: 1.6;
+        }
+
+        .admin-nav {
+            background: var(--gradient);
+            padding: 15px 40px;
+            box-shadow: 0 4px 20px rgba(67, 97, 238, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+        }
+
+        .admin-logo {
+            color: white;
+            font-size: 24px;
+            font-weight: 700;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .admin-logo i {
+            font-size: 28px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 20px;
+        }
+
+        .admin-nav a {
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .admin-nav a:hover, .admin-nav a.active {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .logout-btn {
+            background-color: rgba(255, 255, 255, 0.2);
+            border: none;
+            border-radius: 20px;
+            padding: 8px 15px;
+            color: white;
+            cursor: pointer;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .admin-content {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 40px;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: var(--card-shadow);
+        }
+
+        .page-header h1 {
+            font-size: 28px;
+            color: var(--text-dark);
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .page-header h1 i {
+            color: var(--primary);
+        }
+
+        .page-header p {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .form-container {
+            background: var(--card-bg);
+            border-radius: 20px;
+            box-shadow: var(--card-shadow);
+            padding: 40px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text-dark);
+            font-size: 14px;
+        }
+
+        .form-group input, 
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e7ff;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            background: #fff;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
+        }
+
+        .form-group textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        .preview-container {
+            margin-top: 15px;
+            text-align: center;
+        }
+
+        .preview-img {
+            max-width: 200px;
+            max-height: 300px;
+            border-radius: 12px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .preview-img:hover {
+            transform: scale(1.05);
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+
+        .submit-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px 30px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(67, 97, 238, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .submit-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(67, 97, 238, 0.3);
+        }
+
+        .cancel-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 14px 30px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .cancel-btn:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        @media (max-width: 768px) {
+            .admin-nav {
+                flex-direction: column;
+                gap: 20px;
+                padding: 20px;
+            }
+
+            .nav-links {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .form-actions {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-nav">
+        <div class="nav-left">
+            <a href="dashboard.html" class="admin-logo">
+                <img src="../img/logo.jpg" alt="logo" style="width: 32px; height: 16px; margin-right: 10px;">
+                Alpha Striker
+            </a>
+            <div class="nav-links">
+                <a href="dashboard.html">
+                    <i class="fas fa-tachometer-alt"></i>
+                    Dashboard
+                </a>
+                <a href="user.html">
+                    <i class="fas fa-users"></i>
+                    User
+                </a>
+                <a href="seat.html">
+                    <i class="fas fa-chair"></i>
+                    Seat
+                </a>
+                <a href="movies.html" class="active">
+                    <i class="fas fa-film"></i>
+                    Movies
+                </a>
+                <a href="offers.html">
+                    <i class="fas fa-tags"></i>
+                    Offers
+                </a>
+            </div>
+        </div>
+        <div class="admin-nav-right">
+            <div class="admin-user-section">
+                <div class="admin-user-profile">
+                    <div class="admin-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <span class="admin-user-name" id="admin-username">Admin</span>
+                </div>
+            </div>
+            <a href="login.html" id="logout" class="logout-btn">
+                <i class="fas fa-sign-out-alt"></i>
+                Logout
+            </a>
+        </div>
+    </div>
+    
+    <div class="admin-content">
+        <div class="page-header">
+            <h1>
+                <i class="fas fa-plus-circle"></i>
+                Add New Movie
+            </h1>
+            <p>Create a new movie entry for your theater system</p>
+        </div>
+        
+        <div class="form-container">
+            <form id="movie-form">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="movie_name">Movie Name</label>
+                        <input type="text" id="movie_name" name="movie_name" required placeholder="Enter movie name">
+                    </div>
+                    <div class="form-group">
+                        <label for="movie_type">Movie Type</label>
+                        <input type="text" id="movie_type" name="movie_type" required placeholder="e.g., Action, Comedy, Drama">
+                    </div>
+                    <div class="form-group">
+                        <label for="tag">Tag</label>
+                        <input type="text" id="tag" name="tag" placeholder="e.g., New Release, Popular">
+                    </div>
+                    <div class="form-group">
+                        <label for="star">Rating (0-10)</label>
+                        <input type="number" id="star" name="star" step="0.1" min="0" max="10" required placeholder="8.5">
+                    </div>
+                    <div class="form-group">
+                        <label for="times">Duration</label>
+                        <input type="text" id="times" name="times" required placeholder="120 minutes">
+                    </div>
+                    <div class="form-group">
+                        <label for="money">Price ($)</label>
+                        <input type="number" id="money" name="money" step="0.01" min="0" required placeholder="12.99">
+                    </div>
+                    <div class="form-group full-width">
+                        <label for="img">Poster Image URL</label>
+                        <input type="text" id="img" name="img" required placeholder="https://example.com/poster.jpg">
+                        <div class="preview-container">
+                            <img id="preview" class="preview-img" style="display:none;">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="submit-btn">
+                        <i class="fas fa-save"></i>
+                        Add Movie
+                    </button>
+                    <a href="movies.html" class="cancel-btn">
+                        <i class="fas fa-times"></i>
+                        Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        // Load admin user info
+        document.addEventListener('DOMContentLoaded', function() {
+            const adminUsername = localStorage.getItem('adminUser') || 'Admin';
+            const adminUsernameElement = document.getElementById('admin-username');
+            if (adminUsernameElement) {
+                adminUsernameElement.textContent = adminUsername;
+            }
+        });
+
+        // Image preview
+        document.getElementById('img').addEventListener('input', function() {
+            const preview = document.getElementById('preview');
+            preview.src = this.value;
+            preview.style.display = this.value ? 'block' : 'none';
+        });
+
+        // Form submission
+        document.getElementById('movie-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const data = {};
+            formData.forEach((value, key) => data[key] = value);
+            
+            fetch('/index.php/admin/movie/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.success) {
+                    alert('Movie added successfully!');
+                    window.location.href = 'movies.html';
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to add movie'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while adding the movie');
+            });
+        });
+
+        // Logout functionality
+        document.getElementById('logout').addEventListener('click', function() {
+            localStorage.removeItem('adminToken');
+            window.location.href = 'login.html';
+        });
+    </script>
+</body>
+</html>

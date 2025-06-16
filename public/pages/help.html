@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Home | Alpha Striker 2.0</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" type="text/css" href="../css/common/header.css">
+  <link rel="stylesheet" type="text/css" href="../css/common/footer.css">
+  <link rel="stylesheet" type="text/css" href="../css/homepage/homepage.css">
+  <script src="../js/common.js"></script>
+  <script src="../js/homepage/homepage.js" defer></script>
+   <style>
+        .cons {
+            font-family: 'Segoe UI', sans-serif;
+            max-width: 800px;
+            margin: 30px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .section-title {
+            color: #2c3e50;
+            margin: 30px 0 15px;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 5px;
+        }
+
+        .search-box {
+            margin: 20px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .topic-list {
+            list-style: none;
+            padding-left: 20px;
+        }
+
+        .topic-list li {
+            margin: 10px 0;
+        }
+
+        .video-tutorials .topic-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 0;
+        }
+
+        .video-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .guide-link {
+            color: #e74c3c;
+            text-decoration: none;
+        }
+
+        .contact-info {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .contact-item {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+  <!-- Include common header component -->
+  <div id="header-container"></div>
+  <div class="cons">
+<h1>Welcome to the CineTix Help Center</h1>
+    <p>your one-stop resource for everything you need to know about booking, managing, and enjoying your movie experience. Dive into the sections below to find step-by-step guides, troubleshooting tips, video walkthroughs, and more!</p>
+
+    <h2 class="section-title">🔍 Quick Search</h2>
+    <div class="search-box">
+        Use our search bar at the top of the Help Center to instantly find articles by keywords such as 
+        <strong>"refund," "promo code," "4DX," or "app crash."</strong>
+    </div>
+
+    <h2 class="section-title">📚 Help Topics</h2>
+    <ul class="topic-list">
+        <li><strong>1. Account & Registration</strong>
+            <ul>
+                <li>How to Create an Account</li>
+                <li>Managing Your Profile & Password</li>
+                <li>Verifying Your Email</li>
+                <li>Social Sign-In (Google/Facebook)</li>
+            </ul>
+        </li>
+        <li><strong>2. Booking & Tickets</strong>
+            <ul>
+                <li>Searching for Movies & Showtimes</li>
+                <li>Selecting Seats & Formats (IMAX, 4DX, VIP)</li>
+                <li>Applying Promo Codes & Coupons</li>
+                <li>E-Ticket Usage & Theater Check-In</li>
+                <li>Group Bookings & Corporate Orders</li>
+            </ul>
+        </li>
+        <!-- Other topics added in the same structure, repetitive code omitted here -->
+        <li><strong>7. Promotions & Events</strong>
+            <ul>
+                <li>Current Deals & Flash Sales</li>
+                <li>How to Redeem an Event Pass</li>
+                <li>Hosting Private Screenings</li>
+                <li>Student & Senior Discounts</li>
+            </ul>
+        </li>
+    </ul>
+
+    <h2 class="section-title">📺 Video Tutorials</h2>
+    <ul class="topic-list video-tutorials">
+        <li class="video-item">
+            ▶️ <a class="guide-link" href="https://youtu.be/3LrFVT4gqJQ">Booking Your First Ticket (2 min)</a>
+        </li>
+        <li class="video-item">
+            ▶️ Using the CineTix Mobile App (3 min)
+        </li>
+        <li class="video-item">
+            ▶️ Applying Promo Codes (1.5 min)
+        </li>
+        <li class="video-item">
+            ▶️ Managing Your Membership (2.5 min)
+        </li>
+    </ul>
+    <p>Tip: Click the ▶️ icon next to any tutorial for a quick video walkthrough!  
+    Here's a video link button: <a href="https://youtu.be/3LrFVT4gqJQ">https://youtu.be/3LrFVT4gqJQ</a>, click to jump to this web</p>
+
+    <h2 class="section-title">📝 Step-By-Step Guides</h2>
+    <ul class="topic-list">
+        <li><a class="guide-link" href="#">How to Change Your Show Date or Time</a></li>
+        <li><a class="guide-link" href="#">Canceling vs. Rescheduling: What You Need to Know</a></li>
+        <li><a class="guide-link" href="#">Adding Multiple Tickets to One Order</a></li>
+        <li><a class="guide-link" href="#">Sharing E-Tickets with Friends</a></li>
+        <li><a class="guide-link" href="#">Updating Your Payment Information</a></li>
+    </ul>
+
+    <h2 class="section-title">💬 Community & Feedback</h2>
+    <ul class="topic-list">
+        <li>CineTix Forum: Join fellow moviegoers to share reviews, tips, and Q&A.</li>
+        <li>Feature Requests: Tell us what you'd like to see next!</li>
+        <li>Bug Reports: Report glitches and get updates on fixes.</li>
+    </ul>
+
+    <h2 class="section-title">📞 Need Personalized Help?</h2>
+    <div class="contact-info">
+        <div class="contact-item">
+            <strong>Live Chat:</strong> Click the blue chat bubble (9 AM-9 PM daily).
+        </div>
+        <div class="contact-item">
+            <strong>Phone Support:</strong> 176073401 (9 AM-6 PM).
+        </div>
+        <div class="contact-item">
+            <strong>Email:</strong> <a href="mailto:lijiaqi0807@gmail.com">lijiaqi0807@gmail.com</a> (response within 24 hrs).
+        </div>
+    </div>
+
+    <p>We're constantly updating our Help Center with new articles, videos, and how-to's - so check back often. Enjoy your CineTix experience!</p>
+
+ </div>
+  <div id="bottom-container"></div>
+  
+</body>
+</html>

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alpha Striker 2.0</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="css/common/header.css">
+    <link rel="stylesheet" type="text/css" href="css/homepage/homepage.css">
+    <script src="js/common.js"></script>
+</head>
+<body>
+    <!-- Include common header component -->
+    <div id="header-container"></div>
+
+    <div class="content">
+        <h1>Welcome to Alpha Striker 2.0</h1>
+        <p>We are redirecting to the homepage...</p>
+    </div>
+
+    <script>
+        // Redirect to homepage after page loads
+        window.onload = function() {
+            setTimeout(function() {
+                window.location.href = 'pages/homepage.html';
+            }, 2000); // Jump after 2 seconds
+        };
+    </script>
+</body>
+</html> 

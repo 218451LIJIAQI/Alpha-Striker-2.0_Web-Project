@@ -1,0 +1,570 @@
+/* Payment Success Page Styles */
+:root {
+  --primary: #4361ee;
+  --primary-dark: #3046c9;
+  --success: #4caf50;
+  --success-light: #c8e6c9;
+  --text-dark: #20232a;
+  --text-light: #6c757d;
+  --bg-light: #f8f9fa;
+  --card-bg: #ffffff;
+  --border-color: #e9ecef;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  --gradient: linear-gradient(135deg, #4361ee, #3a0ca3);
+  --gradient-success: linear-gradient(135deg, #4caf50, #2e7d32);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  color: var(--text-dark);
+  line-height: 1.6;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.payment-status-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  min-height: calc(100vh - 200px); /* Account for header and footer */
+}
+
+/* Payment Loading Styles */
+.payment-loading {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.loading-content {
+  background: var(--card-bg);
+  border-radius: 20px;
+  padding: 60px 40px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+.spinner-container {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 40px;
+}
+
+.spinner {
+  width: 80px;
+  height: 80px;
+  border: 6px solid var(--border-color);
+  border-top: 6px solid var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  position: relative;
+  z-index: 2;
+}
+
+.spinner-glow {
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(67, 97, 238, 0.2) 0%, transparent 70%);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50% { transform: scale(1.1); opacity: 1; }
+}
+
+.loading-content h2 {
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin-bottom: 15px;
+}
+
+.loading-content p {
+  font-size: 1.1rem;
+  color: var(--text-light);
+  margin-bottom: 30px;
+}
+
+.progress-dots {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 30px;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.dot.active {
+  background: var(--primary);
+  animation: dotPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes dotPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}
+
+.security-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 15px 20px;
+  background: var(--success-light);
+  border-radius: 10px;
+  color: var(--success);
+  font-weight: 500;
+}
+
+.security-notice i {
+  font-size: 18px;
+}
+
+/* Payment Success Styles */
+.payment-success {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.success-content {
+  background: var(--card-bg);
+  border-radius: 20px;
+  padding: 60px 40px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+/* Success Animation */
+.success-animation {
+  margin-bottom: 40px;
+}
+
+.success-checkmark {
+  display: inline-block;
+  margin: 10px auto;
+  animation: successPop 0.6s ease-in-out;
+}
+
+.success-checkmark i {
+  font-size: 120px;
+  color: #4caf50;
+  text-shadow: 0 0 20px rgba(76, 175, 80, 0.3);
+  animation: checkGlow 2s ease-in-out infinite;
+}
+
+@keyframes successPop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes checkGlow {
+  0%, 100% {
+    text-shadow: 0 0 20px rgba(76, 175, 80, 0.3);
+  }
+  50% {
+    text-shadow: 0 0 30px rgba(76, 175, 80, 0.6), 0 0 40px rgba(76, 175, 80, 0.4);
+  }
+}
+
+.success-content h2 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--success);
+  margin-bottom: 15px;
+}
+
+.success-message {
+  font-size: 1.2rem;
+  color: var(--text-light);
+  margin-bottom: 40px;
+}
+
+/* Booking Confirmation */
+.booking-confirmation {
+  background: var(--bg-light);
+  border-radius: 15px;
+  padding: 30px;
+  margin-bottom: 40px;
+}
+
+.confirmation-details {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.detail-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  font-size: 1.1rem;
+  color: var(--text-dark);
+}
+
+.detail-item i {
+  width: 24px;
+  color: var(--primary);
+  font-size: 18px;
+}
+
+/* Action Buttons */
+.action-buttons {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin-bottom: 50px;
+}
+
+.primary-btn, .secondary-btn {
+  padding: 15px 30px;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 160px;
+  justify-content: center;
+}
+
+.primary-btn {
+  background: var(--gradient);
+  color: white;
+  box-shadow: 0 8px 20px rgba(67, 97, 238, 0.3);
+}
+
+.primary-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(67, 97, 238, 0.4);
+}
+
+.secondary-btn {
+  background: white;
+  color: var(--primary);
+  border: 2px solid var(--primary);
+}
+
+.secondary-btn:hover {
+  background: var(--primary);
+  color: white;
+  transform: translateY(-2px);
+}
+
+/* Next Steps */
+.next-steps {
+  text-align: left;
+}
+
+.next-steps h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin-bottom: 25px;
+  text-align: center;
+}
+
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 25px;
+}
+
+.step-item {
+  text-align: center;
+  padding: 25px 20px;
+  background: var(--bg-light);
+  border-radius: 15px;
+  transition: all 0.3s ease;
+}
+
+.step-item:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.step-item[onclick] {
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.step-item[onclick]:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 30px rgba(67, 97, 238, 0.2);
+  background: linear-gradient(135deg, rgba(67, 97, 238, 0.05), rgba(58, 12, 163, 0.05));
+}
+
+.step-item i {
+  font-size: 2.5rem;
+  color: var(--primary);
+  margin-bottom: 15px;
+}
+
+.step-item h4 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin-bottom: 10px;
+}
+
+.step-item p {
+  color: var(--text-light);
+  font-size: 14px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .payment-status-container {
+    padding: 20px 15px;
+  }
+  
+  .loading-content,
+  .success-content {
+    padding: 40px 25px;
+  }
+  
+  .loading-content h2,
+  .success-content h2 {
+    font-size: 1.8rem;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .primary-btn, .secondary-btn {
+    width: 100%;
+    max-width: 280px;
+  }
+  
+  .steps-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .confirmation-details {
+    text-align: center;
+  }
+  
+  .detail-item {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .spinner {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .spinner-glow {
+    width: 80px;
+    height: 80px;
+    top: -10px;
+    left: -10px;
+  }
+  
+  .success-checkmark {
+    width: 100px;
+    height: 100px;
+  }
+  
+  .success-checkmark .check-icon {
+    width: 100px;
+    height: 100px;
+  }
+}
+
+/* Footer Alignment Fix */
+#bottom-container {
+  margin-top: auto;
+}
+
+.homepage-footer {
+  margin-top: 0 !important;
+}
+
+/* Dark Mode Styles */
+body.dark-mode {
+  background: linear-gradient(135deg, #1a1d24 0%, #2c2f36 100%);
+  color: #e1e5e9;
+}
+
+body.dark-mode .payment-status-container {
+  background: transparent;
+}
+
+body.dark-mode .loading-content,
+body.dark-mode .success-content {
+  background: #2c2f36;
+  border: 1px solid #3a3d44;
+  color: #e1e5e9;
+}
+
+body.dark-mode .loading-content h2,
+body.dark-mode .success-content h2 {
+  color: #e1e5e9;
+}
+
+body.dark-mode .loading-content p,
+body.dark-mode .success-message {
+  color: #9e9e9e;
+}
+
+body.dark-mode .spinner {
+  border-color: #3a3d44;
+  border-top-color: #64b5f6;
+}
+
+body.dark-mode .spinner-glow {
+  background: radial-gradient(circle, rgba(100, 181, 246, 0.2) 0%, transparent 70%);
+}
+
+body.dark-mode .dot {
+  background: #3a3d44;
+}
+
+body.dark-mode .dot.active {
+  background: #64b5f6;
+}
+
+body.dark-mode .security-notice {
+  background: rgba(76, 175, 80, 0.1);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  color: #81c784;
+}
+
+body.dark-mode .booking-confirmation {
+  background: #1e2126;
+  border: 1px solid #3a3d44;
+}
+
+body.dark-mode .confirmation-details {
+  background: transparent;
+}
+
+body.dark-mode .detail-item {
+  color: #e1e5e9;
+}
+
+body.dark-mode .detail-item i {
+  color: #64b5f6;
+}
+
+body.dark-mode .primary-btn {
+  background: var(--gradient);
+  border: none;
+  color: white;
+}
+
+body.dark-mode .primary-btn:hover {
+  background: linear-gradient(135deg, #5a6fd8, #4c63d2);
+  transform: translateY(-2px);
+}
+
+body.dark-mode .secondary-btn {
+  background: #1e2126;
+  border: 1px solid #3a3d44;
+  color: #e1e5e9;
+}
+
+body.dark-mode .secondary-btn:hover {
+  background: #242830;
+  border-color: #64b5f6;
+  color: #64b5f6;
+}
+
+body.dark-mode .next-steps {
+  background: #1e2126;
+  border: 1px solid #3a3d44;
+}
+
+body.dark-mode .next-steps h3 {
+  color: #e1e5e9;
+}
+
+body.dark-mode .step-item {
+  background: #1a1d24;
+  border: 1px solid #3a3d44;
+  color: #e1e5e9;
+}
+
+body.dark-mode .step-item:hover {
+  background: #242830;
+  border-color: #64b5f6;
+  transform: translateY(-5px);
+}
+
+body.dark-mode .step-item[onclick]:hover {
+  background: rgba(100, 181, 246, 0.1);
+  border-color: #64b5f6;
+}
+
+body.dark-mode .step-item i {
+  color: #64b5f6;
+}
+
+body.dark-mode .step-item h4 {
+  color: #e1e5e9;
+}
+
+body.dark-mode .step-item p {
+  color: #9e9e9e;
+}
+
+/* Dark mode success checkmark glow effect */
+body.dark-mode .success-checkmark i {
+  color: #4caf50;
+  text-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+}
+
+@keyframes checkGlowDark {
+  0%, 100% {
+    text-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+  }
+  50% {
+    text-shadow: 0 0 30px rgba(76, 175, 80, 0.8);
+  }
+}
+
+body.dark-mode .success-checkmark i {
+  animation: checkGlowDark 2s ease-in-out infinite;
+}

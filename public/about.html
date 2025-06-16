@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About Us | Alpha Striker 2.0</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+        
+        body {
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        header {
+            background: linear-gradient(to right, #3a4ed5, #4f7af2);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+        }
+        
+        .logo {
+            width: 80px;
+            height: auto;
+            background-color: white;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        
+        nav ul {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+        
+        nav a {
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        
+        .user-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .user-actions button {
+            background-color: transparent;
+            color: white;
+            border: 1px solid white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .hero {
+            position: relative;
+            height: 500px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-align: center;
+            overflow: hidden;
+        }
+        
+        .hero-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: -1;
+            filter: brightness(0.4);
+        }
+        
+        .hero-content {
+            max-width: 800px;
+            padding: 2rem;
+            z-index: 1;
+        }
+        
+        .hero h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            line-height: 1.2;
+        }
+        
+        .hero p {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+        }
+        
+        .section-title {
+            font-size: 2.5rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            color: #333;
+            position: relative;
+            padding-bottom: 1rem;
+        }
+        
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 3px;
+            background-color: #3a4ed5;
+        }
+        
+        .our-story {
+            display: flex;
+            align-items: center;
+            gap: 4rem;
+            margin-bottom: 6rem;
+        }
+        
+        .story-image {
+            flex: 1;
+            position: relative;
+        }
+        
+        .story-image img {
+            width: 100%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .story-image::before {
+            content: '';
+            position: absolute;
+            top: -20px;
+            left: -20px;
+            width: 80%;
+            height: 80%;
+            border: 3px solid #3a4ed5;
+            border-radius: 10px;
+            z-index: -1;
+        }
+        
+        .story-content {
+            flex: 1;
+        }
+        
+        .story-content h3 {
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            color: #3a4ed5;
+        }
+        
+        .story-content p {
+            margin-bottom: 1.5rem;
+            color: #555;
+        }
+        
+        .counter-section {
+            background: linear-gradient(to right, #3a4ed5, #4f7af2);
+            padding: 4rem 0;
+            color: white;
+            text-align: center;
+            margin: 4rem 0;
+        }
+        
+        .counter-container {
+            display: flex;
+            justify-content: space-around;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        
+        .counter-item {
+            flex: 1;
+            padding: 0 1rem;
+        }
+        
+        .counter-number {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .counter-text {
+            font-size: 1.2rem;
+        }
+        
+        .mission-values {
+            background-color: white;
+            padding: 4rem 0;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            margin-bottom: 6rem;
+        }
+        
+        .mission-values-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        
+        .value-card {
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .value-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+        
+        .value-icon {
+            font-size: 3rem;
+            margin-bottom: 1.5rem;
+            color: #3a4ed5;
+        }
+        
+        .value-title {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+        
+        .value-description {
+            color: #666;
+        }
+        
+        .team-section {
+            margin-bottom: 6rem;
+        }
+        
+        .team-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 2rem;
+        }
+        
+        .team-member {
+            background-color: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease;
+        }
+        
+        .team-member:hover {
+            transform: translateY(-10px);
+        }
+        
+        .team-photo {
+            width: 100%;
+            height: 250px;
+            overflow: hidden;
+        }
+        
+        .team-photo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.5s ease;
+        }
+        
+        .team-member:hover .team-photo img {
+            transform: scale(1.1);
+        }
+        
+        .team-info {
+            padding: 1.5rem;
+            text-align: center;
+        }
+        
+        .team-name {
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+        
+        .team-position {
+            color: #3a4ed5;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+        
+        .team-bio {
+            color: #666;
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .social-links {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+        }
+        
+        .social-link {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            background-color: #f5f5f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.3s ease;
+            color: #3a4ed5;
+            text-decoration: none;
+            font-size: 1.2rem;
+        }
+        
+        .social-link:hover {
+            background-color: #3a4ed5;
+            color: white;
+        }
+        
+        .testimonials {
+            background-color: #f9f9f9;
+            padding: 4rem 0;
+            margin-bottom: 6rem;
+        }
+        
+        .testimonial-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        
+        .testimonial-card {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            position: relative;
+        }
+        
+        .testimonial-card::before {
+            content: '"';
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 5rem;
+            color: #f0f0f0;
+            line-height: 1;
+            z-index: 0;
+        }
+        
+        
+        .testimonial-content {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .testimonial-text {
+            margin-bottom: 1.5rem;
+            color: #555;
+            font-style: italic;
+        }
+        
+        .testimonial-author {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .author-image {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            overflow: hidden;
+        }
+        
+        .author-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .author-info h4 {
+            font-size: 1.1rem;
+            color: #333;
+            margin-bottom: 0.2rem;
+        }
+        
+        .author-info p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .partners-section {
+            text-align: center;
+            margin-bottom: 6rem;
+        }
+        
+        .partners-logos {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 3rem;
+            margin-top: 3rem;
+        }
+        
+        .partner-logo {
+            width: 150px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            filter: grayscale(100%);
+            opacity: 0.7;
+            transition: all 0.3s ease;
+        }
+        
+        .partner-logo:hover {
+            filter: grayscale(0);
+            opacity: 1;
+        }
+        
+        .partner-logo img {
+            max-width: 100%;
+            max-height: 100%;
+        }
+        
+        .contact-section {
+            background: linear-gradient(to right, #3a4ed5, #4f7af2);
+            padding: 4rem 0;
+            color: white;
+            text-align: center;
+            margin-bottom: 0;
+        }
+        
+        .contact-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        
+        .contact-section h2 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .contact-section p {
+            max-width: 600px;
+            margin: 0 auto 2rem;
+        }
+        
+        .contact-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .contact-button {
+            background-color: white;
+            color: #3a4ed5;
+            padding: 1rem 2rem;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .contact-button:hover {
+            background-color: #f0f0f0;
+            transform: translateY(-5px);
+        }
+        
+        footer {
+            background-color: #333;
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 1rem;
+        }
+        
+        .footer-links a {
+            color: #ddd;
+            text-decoration: none;
+        }
+        
+        @keyframes float {
+            0% {
+                transform: translateY(0px);
+            }
+            50% {
+                transform: translateY(-10px);
+            }
+            100% {
+                transform: translateY(0px);
+            }
+        }
+        
+        .floating {
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        @media (max-width: 992px) {
+            .our-story {
+                flex-direction: column;
+                gap: 2rem;
+            }
+            
+            .mission-values-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .counter-container {
+                flex-wrap: wrap;
+                gap: 2rem;
+            }
+            
+            .counter-item {
+                flex-basis: 40%;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            header {
+                flex-direction: column;
+                padding: 1rem;
+                gap: 1rem;
+            }
+            
+            nav ul {
+                gap: 1rem;
+            }
+            
+            .hero {
+                height: 400px;
+            }
+            
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+            
+            .mission-values-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .counter-item {
+                flex-basis: 100%;
+                margin-bottom: 2rem;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            nav ul {
+                gap: 0.5rem;
+            }
+            
+            .hero h1 {
+                font-size: 2rem;
+            }
+            
+            .section-title {
+                font-size: 2rem;
+            }
+            
+            .testimonial-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .partners-logos {
+                gap: 1.5rem;
+            }
+            
+            .partner-logo {
+                width: 120px;
+                height: 60px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <img src="logo.jpg" alt="Logo" class="logo">
+        
+        <nav>
+            <ul>
+                <li><a href="#">Movies</a></li>
+                <li><a href="#">Theaters</a></li>
+                <li><a href="#">Offers</a></li>
+                <li><a href="#">About</a></li>
+            </ul>
+        </nav>
+        
+        <div class="user-actions">
+            <span>John Doe</span>
+            <button>Logout</button>
+        </div>
+    </header>
+    
+    <section class="hero">
+        <img src="cinema.jpg" alt="Cinema experience" class="hero-image">
+        <div class="hero-content">
+            <h1>Revolutionizing Your Cinema Experience</h1>
+            <p>Since 2015, Alpha Striker 2.0 has been dedicated to bringing the magic of cinema closer to you with innovative technology and exceptional service.</p>
+        </div>
+    </section>
+    
+    <div class="container">
+        <h2 class="section-title">Our Story</h2>
+        
+        <div class="our-story">
+            <div class="story-image floating">
+                <img src="team.jpg" alt="MoviesGo founding team">
+            </div>
+            
+            <div class="story-content">
+                <h3>From Vision to Reality</h3>
+                <p>Alpha Striker 2.0 began with a simple idea: to create a seamless bridge between moviegoers and theaters. Founded in 2015 by a group of film enthusiasts and tech innovators, we set out to transform the way people experience cinema.</p>
+                
+                <p>What started as a small startup with a handful of partner theaters has now grown into the nation's leading movie ticketing platform, serving millions of movie lovers across 500+ cities.</p>
+                
+                <p>Our journey has been driven by a passion for innovation and a deep love for the cinematic experience. We've continuously evolved our platform to make movie discovery and ticket booking as simple and enjoyable as watching the movie itself.</p>
+            </div>
+        </div>
+    </div>
+    
+    <section class="counter-section">
+        <div class="counter-container">
+            <div class="counter-item">
+                <div class="counter-number">10+</div>
+                <div class="counter-text">Years of Excellence</div>
+            </div>
+            
+            <div class="counter-item">
+                <div class="counter-number">15M+</div>
+                <div class="counter-text">Happy Customers</div>
+            </div>
+            
+            <div class="counter-item">
+                <div class="counter-number">2,000+</div>
+                <div class="counter-text">Partner Theaters</div>
+            </div>
+            
+            <div class="counter-item">
+                <div class="counter-number">500+</div>
+                <div class="counter-text">Cities Covered</div>
+            </div>
+        </div>
+    </section>
+    
+    <div class="container">
+        <section class="mission-values">
+            <h2 class="section-title">Our Mission & Values</h2>
+            
+            <div class="mission-values-container">
+                <div class="value-card">
+                    <div class="value-icon">🎬</div>
+                    <h3 class="value-title">Innovation</h3>
+                    <p class="value-description">We constantly push the boundaries of technology to create better, more seamless cinema experiences for our users.</p>
+                </div>
+                
+                <div class="value-card">
+                    <div class="value-icon">🤝</div>
+                    <h3 class="value-title">Customer First</h3>
+                    <p class="value-description">Every feature we develop and service we provide is designed with our customers' needs and preferences in mind.</p>
+                </div>
+                
+                <div class="value-card">
+                    <div class="value-icon">🌟</div>
+                    <h3 class="value-title">Excellence</h3>
+                    <p class="value-description">We strive for excellence in everything we do, from our platform's user experience to our customer support.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="team-section">
+            <h2 class="section-title">Meet Our Leadership Team</h2>
+            
+            <div class="team-container">
+                <div class="team-member">
+                    <div class="team-photo">
+                        <img src="jiaqi.jpg" alt="CEO Photo">
+                    </div>
+                    <div class="team-info">
+                        <h3 class="team-name">LI JIAQI</h3>
+                        <p class="team-position">CEO & Founder</p>
+                        <p class="team-bio">Film enthusiast and tech visionary who founded Alpha Striker 2.0 with the mission to revolutionize movie ticketing.</p>
+                        <div class="social-links">
+                            <a href="#" class="social-link">in</a>
+                            <a href="#" class="social-link">t</a>
+                        </div>
+                    </div>
+                </div>
+                
+                
+                <div class="team-member">
+                    <div class="team-photo">
+                        <img src="yeehan.jpg" alt="COO Photo">
+                    </div>
+                    <div class="team-info">
+                        <h3 class="team-name">LEE YEE HAN</h3>
+                        <p class="team-position">Chief Operations & Technology Officer</p>
+                        <p class="team-bio">Strategic thinker who oversees Alpha Striker 2.0's partnerships and ensures smooth operations across all fronts.</p>
+                        <div class="social-links">
+                            <a href="#" class="social-link">in</a>
+                            <a href="#" class="social-link">t</a>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="team-member">
+                    <div class="team-photo">
+                        <img src="jiaqing.jpg" alt="CMO Photo">
+                    </div>
+                    <div class="team-info">
+                        <h3 class="team-name">LOW JIA QING</h3>
+                        <p class="team-position">Chief Marketing Officer</p>
+                        <p class="team-bio">Creative force behind Alpha Striker 2.0's brand identity and marketing campaigns that connect with movie lovers.</p>
+                        <div class="social-links">
+                            <a href="#" class="social-link">in</a>
+                            <a href="#" class="social-link">t</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section class="testimonials">
+            <h2 class="section-title">What Our Customers Say</h2>
+            
+            <div class="testimonial-container">
+                <div class="testimonial-card">
+                    <div class="testimonial-content">
+                        <p class="testimonial-text">Alpha Striker 2.0 has completely transformed how I experience movies. The app is so intuitive, and I love the seat selection feature. I haven't stood in a ticket line for years now!</p>
+                        
+                        <div class="testimonial-author">
+                            <div class="author-image">
+                                <img src="userlogo.jpeg" alt="Customer photo">
+                            </div>
+                            <div class="author-info">
+                                <h4>David Thompson</h4>
+                                <p>Loyal Customer, 5 years</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="testimonial-card">
+                    <div class="testimonial-content">
+                        <p class="testimonial-text">As a movie buff who watches at least two films every week, Alpha Striker 2.0 has been a game-changer. The recommendations are spot-on, and the rewards program has saved me a ton of money!</p>
+                        
+                        <div class="testimonial-author">
+                            <div class="author-image">
+                                <img src="userlogo.jpeg" alt="Customer photo">
+                            </div>
+                            <div class="author-info">
+                                <h4>Jennifer Lopez</h4>
+                                <p>Film Enthusiast</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="testimonial-card">
+                    <div class="testimonial-content">
+                        <p class="testimonial-text">The customer service at Alpha Striker 2.0 is exceptional. I had an issue with a booking once, and they resolved it immediately. Their team really cares about providing a great experience!</p>
+                        
+                        <div class="testimonial-author">
+                            <div class="author-image">
+                                <img src="userlogo.jpeg" alt="Customer photo">
+                            </div>
+                            <div class="author-info">
+                                <h4>Robert Chen</h4>
+                                <p>Family Movie Night Organizer</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section class="partners-section">
+            <h2 class="section-title">Our Partners</h2>
+            
+            <div class="partners-logos">
+                <div class="partner-logo">
+                    <img src="plogo1.jpeg" alt="Partner Logo">
+                </div>
+                
+                <div class="partner-logo">
+                    <img src="plogo2.jpg" alt="Partner Logo">
+                </div>
+                
+                <div class="partner-logo">
+                    <img src="plogo3.jpeg" alt="Partner Logo">
+                </div>
+                
+                <div class="partner-logo">
+                    <img src="plogo4.jpeg" alt="Partner Logo">
+                </div>
+
+                <div class="partner-logo">
+                    <img src="amc.jpg" alt="Partner Logo">
+                </div>
+
+                
+                <div class="partner-logo">
+                    <img src="logo5.jpg" alt="Partner Logo">
+                </div>
+                
+                <div class="partner-logo">
+                    <img src="upmlogo.jpg" alt="Partner Logo">
+                </div>
+                
+                <div class="partner-logo">
+                    <img src="popcorn_logo.jpg" alt="Partner Logo">
+                </div>
+            </div>
+        </section>
+    </div>
+    
+    <section class="contact-section">
+        <div class="contact-container">
+            <h2>Get in Touch</h2>
+            <p>Have questions, feedback, or suggestions? We'd love to hear from you! Reach out to our team using any of the methods below.</p>
+            
+            <div class="contact-buttons">
+                <a href="#" class="contact-button">📞 Call Us</a>
+                <a href="#" class="contact-button">✉️ Email Us</a>
+                <a href="#" class="contact-button">💬 Live Chat</a>
+            </div>
+        </div>
+    </section>
+    
+    <footer>
+        <p>&copy; Alpha Striker 2.0. All rights reserved.</p>
+        <div class="footer-links">
+            <a href="#">Privacy Policy</a>
+            <a href="#">Terms of Service</a>
+            <a href="#">Contact Us</a>
+            <a href="#">FAQs</a>
+        </div>
+    </footer>
+</body>
+</html>

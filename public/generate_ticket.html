@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Ticket | Alpha Striker 2.0</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+        
+        :root {
+            --primary: #3a36e0;
+            --secondary: #6c63ff;
+            --accent: #00d9ff;
+            --dark: #1a1a2e;
+            --light: #ffffff;
+            --gray: #f0f0f0;
+            --text-dark: #333333;
+            --text-muted: #6e6e6e;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
+            min-height: 100vh;
+        }
+
+        /* Header styling - modernized */
+        header {
+            background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 15px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            position: relative;
+            z-index: 10;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            font-size: 22px;
+            letter-spacing: 0.5px;
+        }
+        
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background-color: white;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            font-size: 18px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 40px;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+            position: relative;
+            padding: 5px 0;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-links a:hover {
+            color: var(--accent);
+        }
+        
+        .nav-links a:after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 2px;
+            bottom: 0;
+            left: 0;
+            background-color: var(--accent);
+            transition: width 0.3s ease;
+        }
+        
+        .nav-links a:hover:after {
+            width: 100%;
+        }
+
+        .user-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .user-avatar {
+            width: 35px;
+            height: 35px;
+            background-color: var(--accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--dark);
+            font-weight: bold;
+        }
+
+        .logout-btn {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 24px;
+            padding: 6px 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .logout-btn:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        /* Ticket container */
+        .container {
+            max-width: 400px;
+            margin: 40px auto;
+            padding: 0 20px;
+            perspective: 1000px;
+        }
+
+        /* Ticket styling - enhanced */
+        .ticket {
+            background-color: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 15px 35px rgba(50, 50, 93, 0.1), 0 5px 15px rgba(0, 0, 0, 0.07);
+            transform-style: preserve-3d;
+            transition: transform 0.6s ease, box-shadow 0.6s ease;
+        }
+        
+        .ticket:hover {
+            transform: translateY(-5px) rotateX(2deg);
+            box-shadow: 0 20px 40px rgba(50, 50, 93, 0.15), 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .ticket-header {
+            background: linear-gradient(120deg, #6c63ff 0%, #3a36e0 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .ticket-header:before {
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            right: -10px;
+            bottom: -10px;
+            background: linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.1) 75%, transparent 75%, transparent);
+            background-size: 20px 20px;
+            z-index: 1;
+            opacity: 0.3;
+        }
+
+        .menu-icon {
+            font-size: 20px;
+            z-index: 2;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+        
+        .menu-icon:hover {
+            transform: scale(1.1);
+        }
+
+        .cinema-name {
+            text-align: center;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            z-index: 2;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .search-icon {
+            font-size: 20px;
+            color: var(--accent);
+            z-index: 2;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+        
+        .search-icon:hover {
+            transform: scale(1.1);
+        }
+
+        .movie-banner {
+            background: linear-gradient(rgba(30, 30, 30, 0.8), rgba(20, 20, 20, 0.9));
+            color: white;
+            padding: 35px 25px;
+            position: relative;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .movie-banner:after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--accent), var(--secondary));
+        }
+
+        .movie-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+
+        .movie-duration {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-weight: 300;
+        }
+
+        .movie-genre {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+        
+        .genre-tags {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .genre-tag {
+            background-color: rgba(255, 255, 255, 0.15);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+
+        .rating {
+            color: #ffd700;
+            letter-spacing: 2px;
+        }
+
+        .ticket-details {
+            padding: 25px;
+            position: relative;
+        }
+        
+        .ticket-details:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 15px;
+            right: 15px;
+            height: 1px;
+            background: radial-gradient(circle, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0) 70%);
+        }
+
+        .seat-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 35px;
+            position: relative;
+        }
+        
+        .seat-info:after {
+            content: '';
+            position: absolute;
+            bottom: -15px;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0,0,0,0.1), transparent);
+        }
+
+        .detail-column {
+            text-align: center;
+            position: relative;
+            padding: 5px 15px;
+            transition: transform 0.3s ease;
+        }
+        
+        .detail-column:hover {
+            transform: translateY(-3px);
+        }
+        
+        .detail-column:not(:last-child):after {
+            content: '';
+            position: absolute;
+            top: 10%;
+            right: 0;
+            height: 80%;
+            width: 1px;
+            background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.1), transparent);
+        }
+
+        .detail-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .detail-value {
+            font-size: 28px;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        .datetime-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 25px 0;
+        }
+
+        .date-time {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: transform 0.3s ease;
+        }
+        
+        .date-time:hover {
+            transform: translateY(-2px);
+        }
+
+        .icon {
+            width: 36px;
+            height: 36px;
+            background-color: var(--gray);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            font-size: 16px;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .text-info {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .text-info div:last-child {
+            font-weight: 500;
+            color: var(--text-dark);
+        }
+
+
+        .barcode-container {
+            margin: 20px 0;
+            position: relative;
+            padding: 10px 0;
+        }
+        
+        .barcode-container:before,
+        .barcode-container:after {
+            content: '';
+            position: absolute;
+            left: -25px;
+            width: 25px;
+            height: 15px;
+            background-color: var(--gray);
+            border-top-right-radius: 15px;
+            border-bottom-right-radius: 15px;
+        }
+        
+        .barcode-container:before {
+            top: 40%;
+        }
+        
+        .barcode-container:after {
+            bottom: 40%;
+        }
+        
+        .barcode-inner {
+            position: relative;
+            background-color: var(--gray);
+            padding: 15px;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+        }
+
+        .barcode {
+            height: 60px;
+            max-width: 100%;
+            background-color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        }
+        
+        .ticket-id {
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 5px;
+            letter-spacing: 2px;
+        }
+        
+        .refresh-icon {
+            text-align: right;
+            color: var(--primary);
+            font-size: 20px;
+            margin-top: 15px;
+            cursor: pointer;
+            transition: transform 0.5s ease;
+        }
+        
+        .refresh-icon:hover {
+            transform: rotate(180deg);
+        }
+        
+        /* Animation */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 500px) {
+            header {
+                padding: 15px 20px;
+            }
+            
+            .nav-links {
+                gap: 20px;
+            }
+            
+            .user-section span {
+                display: none;
+            }
+            
+            .logout-btn span {
+                display: none;
+            }
+            
+            .datetime-info {
+                flex-wrap: wrap;
+            }
+            
+            .date-time {
+                margin-bottom: 10px;
+            }
+            
+            .price {
+                margin-left: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <img src="logo.jpg" alt="logo" style="height: 80px ;width: 80px;">
+            
+        </div>
+        <nav class="nav-links">
+            <a href="#">Movies</a>
+            <a href="#">Theaters</a>
+            <a href="#">Offers</a>
+            <a href="#">About</a>
+        </nav>
+        <div class="user-section">
+            <div class="user-avatar">J</div>
+            <span>John Doe</span>
+            <button class="logout-btn">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
+            </button>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="ticket">
+        
+            <!-- Movie banner -->
+            <div class="movie-banner">
+                <h1 class="movie-title">FROZEN 2</h1>
+                <div class="movie-duration">
+                    <span>180 min</span>
+                </div>
+                <div class="movie-genre">
+                    <div class="genre-tags">
+                        <div class="genre-tag">Animation</div>
+                        <div class="genre-tag">Sci-Fi</div>
+                        <div class="genre-tag">Adventure</div>
+                    </div>
+                    <span class="rating">★★★★☆</span>
+                </div>
+            </div>
+            
+            <!-- Ticket details -->
+            <div class="ticket-details">
+                <div class="seat-info">
+                    <div class="detail-column">
+                        <div class="detail-label">SALON</div>
+                        <div class="detail-value">09</div>
+                    </div>
+                    <div class="detail-column">
+                        <div class="detail-label">ROW</div>
+                        <div class="detail-value">11</div>
+                    </div>
+                    <div class="detail-column">
+                        <div class="detail-label">SEAT</div>
+                        <div class="detail-value">16</div>
+                    </div>
+                </div>
+                
+                <div class="datetime-info">
+                    <div class="date-time">
+                        <div class="icon"><i class="fas fa-calendar-alt"></i></div>
+                        <div class="text-info">
+                            <div class="detail-label">DATE</div>
+                            <div>15.03.2025</div>
+                        </div>
+                    </div>
+                    <div class="date-time">
+                        <div class="icon"><i class="fas fa-clock"></i></div>
+                        <div class="text-info">
+                            <div class="detail-label">TIME</div>
+                            <div>19:30 PM</div>
+                        </div>
+                    </div>
+                    
+                </div>
+                
+                <!-- Barcode -->
+                <div class="barcode-container">
+                    <div class="barcode-inner">
+                        <svg class="barcode" viewBox="0 0 250 60">
+                            <rect x="5" y="5" width="3" height="50" fill="black"/>
+                            <rect x="12" y="5" width="1" height="50" fill="black"/>
+                            <rect x="16" y="5" width="2" height="50" fill="black"/>
+                            <rect x="22" y="5" width="3" height="50" fill="black"/>
+                            <rect x="27" y="5" width="1" height="50" fill="black"/>
+                            <rect x="32" y="5" width="3" height="50" fill="black"/>
+                            <rect x="38" y="5" width="2" height="50" fill="black"/>
+                            <rect x="42" y="5" width="1" height="50" fill="black"/>
+                            <rect x="46" y="5" width="4" height="50" fill="black"/>
+                            <rect x="52" y="5" width="1" height="50" fill="black"/>
+                            <rect x="56" y="5" width="2" height="50" fill="black"/>
+                            <rect x="61" y="5" width="3" height="50" fill="black"/>
+                            <rect x="66" y="5" width="1" height="50" fill="black"/>
+                            <rect x="70" y="5" width="2" height="50" fill="black"/>
+                            <rect x="75" y="5" width="4" height="50" fill="black"/>
+                            <rect x="82" y="5" width="1" height="50" fill="black"/>
+                            <rect x="85" y="5" width="3" height="50" fill="black"/>
+                            <rect x="91" y="5" width="2" height="50" fill="black"/>
+                            <rect x="95" y="5" width="1" height="50" fill="black"/>
+                            <rect x="99" y="5" width="3" height="50" fill="black"/>
+                            <rect x="105" y="5" width="1" height="50" fill="black"/>
+                            <rect x="110" y="5" width="2" height="50" fill="black"/>
+                            <rect x="115" y="5" width="3" height="50" fill="black"/>
+                            <rect x="120" y="5" width="1" height="50" fill="black"/>
+                            <rect x="125" y="5" width="2" height="50" fill="black"/>
+                            <rect x="130" y="5" width="1" height="50" fill="black"/>
+                            <rect x="135" y="5" width="3" height="50" fill="black"/>
+                            <rect x="140" y="5" width="1" height="50" fill="black"/>
+                            <rect x="145" y="5" width="2" height="50" fill="black"/>
+                            <rect x="150" y="5" width="3" height="50" fill="black"/>
+                            <rect x="155" y="5" width="4" height="50" fill="black"/>
+                            <rect x="162" y="5" width="1" height="50" fill="black"/>
+                            <rect x="165" y="5" width="2" height="50" fill="black"/>
+                            <rect x="170" y="5" width="3" height="50" fill="black"/>
+                            <rect x="175" y="5" width="1" height="50" fill="black"/>
+                            <rect x="180" y="5" width="2" height="50" fill="black"/>
+                            <rect x="185" y="5" width="4" height="50" fill="black"/>
+                            <rect x="192" y="5" width="1" height="50" fill="black"/>
+                            <rect x="195" y="5" width="2" height="50" fill="black"/>
+                            <rect x="200" y="5" width="3" height="50" fill="black"/>
+                            <rect x="205" y="5" width="1" height="50" fill="black"/>
+                            <rect x="210" y="5" width="2" height="50" fill="black"/>
+                            <rect x="215" y="5" width="3" height="50" fill="black"/>
+                            <rect x="220" y="5" width="1" height="50" fill="black"/>
+                            <rect x="225" y="5" width="4" height="50" fill="black"/>
+                            <rect x="232" y="5" width="1" height="50" fill="black"/>
+                            <rect x="235" y="5" width="3" height="50" fill="black"/>
+                            <rect x="242" y="5" width="2" height="50" fill="black"/>
+                        </svg>
+                    </div>
+                    <div class="ticket-id">TKT-25479631</div>
+                </div>
+                
+                <div class="refresh-icon"><i class="fas fa-sync-alt"></i></div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

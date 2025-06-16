@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Theater Details | Alpha Striker 2.0</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" type="text/css" href="../css/common/header.css">
+  <link rel="stylesheet" type="text/css" href="../css/common/footer.css">
+  <link rel="stylesheet" type="text/css" href="../css/theater/theaterdetail.css">
+  <script src="../js/common.js"></script>
+  <script src="../js/theater/theaterdetail.js" defer></script>
+</head>
+<body>
+  <div id="header-container"></div>
+  
+  <div class="theater-detail-container">
+    <!-- Theater Hero Section -->
+    <div class="theater-hero" id="theater-hero">
+      <!-- Dynamically load theater hero information -->
+    </div>
+
+    <!-- Quick Info Cards -->
+    <div class="quick-info-grid" id="quick-info-grid">
+      <!-- Dynamically load quick info cards -->
+    </div>
+
+    <!-- Now Showing Movies -->
+    <div class="section">
+      <h2 class="section-title">
+        <i class="fas fa-film"></i>
+        Now Showing
+      </h2>
+      <div class="movies-list" id="movies-list">
+        <!-- Dynamically load currently showing movies -->
+      </div>
+    </div>
+
+    <!-- Theater Information Tabs -->
+    <div class="section">
+      <div class="tabs-container">
+        <div class="tabs-header">
+          <button class="tab-btn active" data-tab="facilities">
+            <i class="fas fa-star"></i>
+            Facilities & Amenities
+          </button>
+          <button class="tab-btn" data-tab="technical">
+            <i class="fas fa-cogs"></i>
+            Technical Specifications
+          </button>
+          <button class="tab-btn" data-tab="dining">
+            <i class="fas fa-utensils"></i>
+            Food & Dining
+          </button>
+          <button class="tab-btn" data-tab="accessibility">
+            <i class="fas fa-universal-access"></i>
+            Accessibility
+          </button>
+          <button class="tab-btn" data-tab="safety">
+            <i class="fas fa-shield-alt"></i>
+            Safety Measures
+          </button>
+        </div>
+
+        <div class="tabs-content">
+          <!-- Facilities Tab -->
+          <div class="tab-content active" id="facilities-tab">
+            <div class="amenities-grid" id="amenities-grid">
+              <!-- Dynamically load detailed amenities -->
+            </div>
+          </div>
+
+          <!-- Technical Specifications Tab -->
+          <div class="tab-content" id="technical-tab">
+            <div class="tech-specs-grid" id="tech-specs-grid">
+              <!-- Dynamically load technical specifications -->
+            </div>
+          </div>
+
+          <!-- Food & Dining Tab -->
+          <div class="tab-content" id="dining-tab">
+            <div class="dining-info" id="dining-info">
+              <!-- Dynamically load dining information -->
+            </div>
+          </div>
+
+          <!-- Accessibility Tab -->
+          <div class="tab-content" id="accessibility-tab">
+            <div class="accessibility-info" id="accessibility-info">
+              <!-- Dynamically load accessibility information -->
+            </div>
+          </div>
+
+          <!-- Safety Measures Tab -->
+          <div class="tab-content" id="safety-tab">
+            <div class="safety-measures" id="safety-measures">
+              <!-- Dynamically load safety measures -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Operating Hours & Contact -->
+    <div class="section">
+      <div class="info-cards-row">
+        <div class="info-card">
+          <h3><i class="fas fa-clock"></i> Operating Hours</h3>
+          <div id="operating-hours">
+            <!-- Dynamically load operating hours -->
+          </div>
+        </div>
+        
+        <div class="info-card">
+          <h3><i class="fas fa-ticket-alt"></i> Ticket Pricing</h3>
+          <div id="ticket-pricing">
+            <!-- Dynamically load ticket pricing -->
+          </div>
+        </div>
+        
+        <div class="info-card">
+          <h3><i class="fas fa-phone"></i> Contact Information</h3>
+          <div id="contact-info">
+            <!-- Dynamically load contact information -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Location & Map -->
+    <div class="section">
+      <h2 class="section-title">
+        <i class="fas fa-map-marker-alt"></i>
+        Location & Directions
+      </h2>
+      <div class="location-section" id="location-section">
+        <!-- Dynamically load location and map -->
+      </div>
+    </div>
+
+    <!-- Customer Reviews -->
+    <div class="section">
+      <h2 class="section-title">
+        <i class="fas fa-star"></i>
+        Customer Reviews
+      </h2>
+      <div class="reviews-section" id="reviews-section">
+        <!-- Dynamically load customer reviews -->
+      </div>
+    </div>
+
+    <!-- Virtual Tour Section -->
+    <div class="section">
+      <h2 class="section-title">
+        <i class="fas fa-vr-cardboard"></i>
+        Virtual Tour
+      </h2>
+      <div class="virtual-tour" id="virtual-tour">
+        <!-- Virtual tour content -->
+      </div>
+    </div>
+  </div>
+
+  <div id="bottom-container"></div>
+
+  <script>
+    // Get theater number from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const theaterCode = urlParams.get('theater_code');
+
+    // Initialize tabs functionality
+    initTabs();
+
+    // Load theater details
+    if(theaterCode) {
+      fetch(`/index.php/theater/theater/getTheaterDetails?theater_code=${theaterCode}`)
+        .then(response => response.json())
+        .then(data => {
+          if(data.success) {
+            renderTheaterDetails(data.data);
+            renderEnhancedContent(data.data);
+          }
+        });
+    }
+
+    // Initialize tabs functionality
+    function initTabs() {
+      const tabBtns = document.querySelectorAll('.tab-btn');
+      const tabContents = document.querySelectorAll('.tab-content');
+
+      tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const targetTab = btn.getAttribute('data-tab');
+          
+          // Remove active class from all tabs and contents
+          tabBtns.forEach(b => b.classList.remove('active'));
+          tabContents.forEach(c => c.classList.remove('active'));
+          
+          // Add active class to clicked tab and corresponding content
+          btn.classList.add('active');
+          document.getElementById(`${targetTab}-tab`).classList.add('active');
+        });
+      });
+    }
+
+    // Render theater details
+    function renderTheaterDetails(theater) {
+      const hero = document.getElementById('theater-hero');
+      
+      hero.innerHTML = `
+        <div class="hero-background">
+          <img src="${theater.img}" alt="${theater.theater_name}">
+          <div class="hero-overlay"></div>
+        </div>
+        <div class="hero-content">
+          <div class="theater-badge">${getBadgeText(theater)}</div>
+          <h1 class="theater-name">${theater.theater_name}</h1>
+          <div class="theater-subtitle">${getTheaterSubtitle(theater)}</div>
+          <div class="theater-rating-hero">
+            <div class="stars">
+              ${getStarRating(theater.star)}
+            </div>
+            <span>${theater.star}/5 (${theater.reviews} reviews)</span>
+          </div>
+          <div class="theater-address-hero">
+            <i class="fas fa-map-marker-alt"></i>
+            <span>${theater.address}</span>
+          </div>
+          <div class="hero-actions">
+            <button class="btn-primary" onclick="bookTickets()">
+              <i class="fas fa-ticket-alt"></i>
+              Book Tickets Now
+            </button>
+            <button class="btn-secondary" onclick="getDirections()">
+              <i class="fas fa-directions"></i>
+              Get Directions
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // Render enhanced content
+    function renderEnhancedContent(theater) {
+      renderQuickInfo(theater);
+      renderDetailedAmenities(theater);
+      renderTechnicalSpecs(theater);
+      renderDiningInfo(theater);
+      renderAccessibilityInfo(theater);
+      renderSafetyMeasures(theater);
+      renderOperatingHours(theater);
+      renderTicketPricing(theater);
+      renderContactInfo(theater);
+      renderLocationMap(theater);
+      renderReviews(theater);
+      renderVirtualTour(theater);
+    }
+
+    function renderQuickInfo(theater) {
+      const quickInfo = document.getElementById('quick-info-grid');
+      quickInfo.innerHTML = `
+        <div class="quick-info-card">
+          <i class="fas fa-chair"></i>
+          <div class="info-content">
+            <span class="info-number">${getScreenCount(theater)}</span>
+            <span class="info-label">Screens</span>
+          </div>
+        </div>
+        <div class="quick-info-card">
+          <i class="fas fa-users"></i>
+          <div class="info-content">
+            <span class="info-number">${getTotalSeats(theater)}</span>
+            <span class="info-label">Total Seats</span>
+          </div>
+        </div>
+        <div class="quick-info-card">
+          <i class="fas fa-parking"></i>
+          <div class="info-content">
+            <span class="info-number">${getParkingSpaces(theater)}</span>
+            <span class="info-label">Parking Spaces</span>
+          </div>
+        </div>
+        <div class="quick-info-card">
+          <i class="fas fa-clock"></i>
+          <div class="info-content">
+            <span class="info-number">Open</span>
+            <span class="info-label">Daily 10AM-12AM</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderDetailedAmenities(theater) {
+      const amenities = theater.amenity.split(',').map(a => a.trim());
+      const amenitiesGrid = document.getElementById('amenities-grid');
+      
+      const amenityDetails = getAmenityDetails(amenities);
+      
+      amenitiesGrid.innerHTML = amenityDetails.map(amenity => `
+        <div class="amenity-card">
+          <div class="amenity-icon">
+            <i class="${amenity.icon}"></i>
+          </div>
+          <div class="amenity-content">
+            <h4>${amenity.name}</h4>
+            <p>${amenity.description}</p>
+            <div class="amenity-features">
+              ${amenity.features.map(f => `<span class="feature-tag">${f}</span>`).join('')}
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderTechnicalSpecs(theater) {
+      const techSpecs = document.getElementById('tech-specs-grid');
+      const specs = getTechnicalSpecs(theater);
+      
+      techSpecs.innerHTML = specs.map(spec => `
+        <div class="tech-spec-card">
+          <div class="spec-icon">
+            <i class="${spec.icon}"></i>
+          </div>
+          <div class="spec-content">
+            <h4>${spec.title}</h4>
+            <p>${spec.description}</p>
+            <div class="spec-details">
+              ${spec.details.map(d => `<div class="spec-item">${d}</div>`).join('')}
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderDiningInfo(theater) {
+      const diningInfo = document.getElementById('dining-info');
+      const dining = getDiningOptions(theater);
+      
+      diningInfo.innerHTML = `
+        <div class="dining-overview">
+          <h3>Concession Stand & Dining Options</h3>
+          <p>Enjoy a wide variety of snacks, meals, and beverages during your movie experience.</p>
+        </div>
+        <div class="dining-options">
+          ${dining.map(option => `
+            <div class="dining-option">
+              <div class="dining-image">
+                <img src="${option.image}" alt="${option.name}">
+              </div>
+              <div class="dining-content">
+                <h4>${option.name}</h4>
+                <p>${option.description}</p>
+                <div class="dining-menu">
+                  ${option.items.map(item => `<span class="menu-item">${item}</span>`).join('')}
+                </div>
+                <div class="dining-price">Starting from $${option.priceRange}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderAccessibilityInfo(theater) {
+      const accessibilityInfo = document.getElementById('accessibility-info');
+      const accessibility = getAccessibilityFeatures(theater);
+      
+      accessibilityInfo.innerHTML = `
+        <div class="accessibility-overview">
+          <h3>We Welcome Everyone</h3>
+          <p>Our theater is designed to provide an inclusive and comfortable experience for all guests.</p>
+        </div>
+        <div class="accessibility-features">
+          ${accessibility.map(feature => `
+            <div class="accessibility-feature">
+              <div class="feature-icon">
+                <i class="${feature.icon}"></i>
+              </div>
+              <div class="feature-content">
+                <h4>${feature.title}</h4>
+                <p>${feature.description}</p>
+                ${feature.details ? `<ul>${feature.details.map(d => `<li>${d}</li>`).join('')}</ul>` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderSafetyMeasures(theater) {
+      const safetyMeasures = document.getElementById('safety-measures');
+      const safety = getSafetyMeasures(theater);
+      
+      safetyMeasures.innerHTML = `
+        <div class="safety-overview">
+          <h3>Your Safety is Our Priority</h3>
+          <p>We maintain the highest standards of safety and cleanliness for your peace of mind.</p>
+        </div>
+        <div class="safety-grid">
+          ${safety.map(measure => `
+            <div class="safety-card">
+              <div class="safety-icon">
+                <i class="${measure.icon}"></i>
+              </div>
+              <div class="safety-content">
+                <h4>${measure.title}</h4>
+                <p>${measure.description}</p>
+                <div class="safety-actions">
+                  ${measure.actions.map(a => `<div class="safety-action">${a}</div>`).join('')}
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderOperatingHours(theater) {
+      const operatingHours = document.getElementById('operating-hours');
+      const hours = getOperatingHours(theater);
+      
+      operatingHours.innerHTML = `
+        <div class="hours-grid">
+          ${hours.map(day => `
+            <div class="hours-row ${day.isToday ? 'today' : ''}">
+              <span class="day">${day.day}</span>
+              <span class="time">${day.hours}</span>
+            </div>
+          `).join('')}
+        </div>
+        <div class="hours-note">
+          <i class="fas fa-info-circle"></i>
+          Hours may vary on holidays and special events
+        </div>
+      `;
+    }
+
+    function renderTicketPricing(theater) {
+      const ticketPricing = document.getElementById('ticket-pricing');
+      const pricing = getTicketPricing(theater);
+      
+      ticketPricing.innerHTML = `
+        <div class="pricing-grid">
+          ${pricing.map(tier => `
+            <div class="pricing-tier">
+              <div class="tier-header">
+                <h4>${tier.type}</h4>
+                <span class="price">$${tier.price}</span>
+              </div>
+              <div class="tier-details">
+                ${tier.features.map(f => `<div class="tier-feature">${f}</div>`).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="pricing-note">
+          <i class="fas fa-tag"></i>
+          Special discounts available for seniors, students, and children
+        </div>
+      `;
+    }
+
+    function renderContactInfo(theater) {
+      const contactInfo = document.getElementById('contact-info');
+      const contact = getContactInfo(theater);
+      
+      contactInfo.innerHTML = `
+        <div class="contact-methods">
+          ${contact.map(method => `
+            <div class="contact-method">
+              <i class="${method.icon}"></i>
+              <div class="contact-details">
+                <span class="contact-label">${method.label}</span>
+                <span class="contact-value">${method.value}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="contact-actions">
+          <button class="contact-btn" onclick="callTheater()">
+            <i class="fas fa-phone"></i>
+            Call Now
+          </button>
+          <button class="contact-btn" onclick="emailTheater()">
+            <i class="fas fa-envelope"></i>
+            Send Email
+          </button>
+        </div>
+      `;
+    }
+
+    function renderLocationMap(theater) {
+      const locationSection = document.getElementById('location-section');
+      
+      locationSection.innerHTML = `
+        <div class="location-content">
+          <div class="location-info">
+            <div class="address-block">
+              <h3>Address</h3>
+              <p>${theater.address}</p>
+            </div>
+            <div class="transport-info">
+              <h4>Transportation Options</h4>
+              <div class="transport-methods">
+                <div class="transport-method">
+                  <i class="fas fa-car"></i>
+                  <span>Free parking available</span>
+                </div>
+                <div class="transport-method">
+                  <i class="fas fa-bus"></i>
+                  <span>Bus routes: 15, 23, 42</span>
+                </div>
+                <div class="transport-method">
+                  <i class="fas fa-subway"></i>
+                  <span>Metro: 0.3 miles from Central Station</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="map-placeholder">
+            <div class="map-container">
+              <i class="fas fa-map"></i>
+              <p>Interactive Map</p>
+              <button class="map-btn" onclick="openGoogleMaps()">View on Google Maps</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderReviews(theater) {
+      const reviewsSection = document.getElementById('reviews-section');
+      const reviews = getSampleReviews(theater);
+      
+      reviewsSection.innerHTML = `
+        <div class="reviews-overview">
+          <div class="reviews-stats">
+            <div class="overall-rating">
+              <span class="rating-number">${theater.star}</span>
+              <div class="rating-stars">${getStarRating(theater.star)}</div>
+              <span class="rating-text">Based on ${theater.reviews} reviews</span>
+            </div>
+            <div class="rating-breakdown">
+              <div class="rating-bar">
+                <span>5 stars</span>
+                <div class="bar"><div class="fill" style="width: 70%"></div></div>
+                <span>70%</span>
+              </div>
+              <div class="rating-bar">
+                <span>4 stars</span>
+                <div class="bar"><div class="fill" style="width: 20%"></div></div>
+                <span>20%</span>
+              </div>
+              <div class="rating-bar">
+                <span>3 stars</span>
+                <div class="bar"><div class="fill" style="width: 7%"></div></div>
+                <span>7%</span>
+              </div>
+              <div class="rating-bar">
+                <span>2 stars</span>
+                <div class="bar"><div class="fill" style="width: 2%"></div></div>
+                <span>2%</span>
+              </div>
+              <div class="rating-bar">
+                <span>1 star</span>
+                <div class="bar"><div class="fill" style="width: 1%"></div></div>
+                <span>1%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="reviews-list">
+          ${reviews.map(review => `
+            <div class="review-card">
+              <div class="review-header">
+                <div class="reviewer-info">
+                  <div class="reviewer-avatar">
+                    <i class="fas fa-user-circle"></i>
+                  </div>
+                  <div class="reviewer-details">
+                    <span class="reviewer-name">${review.name}</span>
+                    <span class="review-date">${review.date}</span>
+                  </div>
+                </div>
+                <div class="review-rating">
+                  ${getStarRating(review.rating)}
+                </div>
+              </div>
+              <div class="review-content">
+                <p>${review.content}</p>
+              </div>
+              <div class="review-footer">
+                <button class="review-action">
+                  <i class="fas fa-thumbs-up"></i>
+                  Helpful (${review.helpful})
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="reviews-actions">
+          <button class="btn-primary" onclick="writeReview()">
+            <i class="fas fa-edit"></i>
+            Write a Review
+          </button>
+          <button class="btn-secondary" onclick="viewAllReviews()">
+            View All Reviews
+          </button>
+        </div>
+      `;
+    }
+
+    function renderVirtualTour(theater) {
+      const virtualTour = document.getElementById('virtual-tour');
+      
+      virtualTour.innerHTML = `
+        <div class="tour-container">
+          <div class="tour-preview">
+            <div class="tour-image">
+              <img src="${theater.img}" alt="Virtual Tour Preview">
+              <div class="play-overlay">
+                <button class="play-btn" onclick="startVirtualTour()">
+                  <i class="fas fa-play"></i>
+                </button>
+              </div>
+            </div>
+            <div class="tour-info">
+              <h3>Take a Virtual Tour</h3>
+              <p>Explore our theater from the comfort of your home. See our premium seating, state-of-the-art screens, and modern amenities.</p>
+              <div class="tour-features">
+                <div class="tour-feature">
+                  <i class="fas fa-vr-cardboard"></i>
+                  <span>360° VR Experience</span>
+                </div>
+                <div class="tour-feature">
+                  <i class="fas fa-mobile-alt"></i>
+                  <span>Mobile Compatible</span>
+                </div>
+                <div class="tour-feature">
+                  <i class="fas fa-eye"></i>
+                  <span>HD Quality</span>
+                </div>
+              </div>
+              <button class="btn-primary tour-btn" onclick="startVirtualTour()">
+                <i class="fas fa-vr-cardboard"></i>
+                Start Virtual Tour
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Helper functions for generating data
+    function getBadgeText(theater) {
+      const amenities = theater.amenity.toLowerCase();
+      if (amenities.includes('imax')) return 'IMAX Theater';
+      if (amenities.includes('4dx')) return '4DX Experience';
+      if (amenities.includes('vip')) return 'VIP Cinema';
+      return 'Premium Theater';
+    }
+
+    function getTheaterSubtitle(theater) {
+      return 'State-of-the-art cinema with premium entertainment experience';
+    }
+
+    function getScreenCount(theater) {
+      return Math.floor(Math.random() * 8) + 5; // 5-12 screens
+    }
+
+    function getTotalSeats(theater) {
+      return (getScreenCount(theater) * 150) + Math.floor(Math.random() * 200); // Approximate
+    }
+
+    function getParkingSpaces(theater) {
+      return Math.floor(getTotalSeats(theater) * 0.8); // 80% of seat count
+    }
+
+    // Generate star rating based on score
+    function getStarRating(rating) {
+      const fullStars = Math.floor(rating);
+      const hasHalfStar = rating % 1 >= 0.5;
+      
+      let stars = '';
+      for (let i = 1; i <= 5; i++) {
+        if (i <= fullStars) {
+          stars += '<i class="fas fa-star"></i>';
+        } else if (i === fullStars + 1 && hasHalfStar) {
+          stars += '<i class="fas fa-star-half-alt"></i>';
+        } else {
+          stars += '<i class="far fa-star"></i>';
+        }
+      }
+      return stars;
+    }
+
+    // Data generation functions
+    function getAmenityDetails(amenities) {
+      const amenityMap = {
+        'IMAX': {
+          name: 'IMAX Experience',
+          icon: 'fas fa-expand',
+          description: 'Immersive large-format film experience with crystal-clear imagery and wrap-around sound.',
+          features: ['70mm Film', 'Laser Projection', 'Custom Sound System']
+        },
+        '4DX': {
+          name: '4DX Motion Seats',
+          icon: 'fas fa-chair',
+          description: 'Multi-sensory cinema experience with moving seats and environmental effects.',
+          features: ['Motion Seats', 'Environmental Effects', 'Scent Dispensers']
+        },
+        'VIP': {
+          name: 'VIP Lounge',
+          icon: 'fas fa-crown',
+          description: 'Premium seating with luxury recliners and personalized service.',
+          features: ['Leather Recliners', 'Reserved Seating', 'Premium Service']
+        },
+        'Dolby Atmos': {
+          name: 'Dolby Atmos Sound',
+          icon: 'fas fa-volume-up',
+          description: 'Object-based surround sound that creates an immersive audio experience.',
+          features: ['360° Sound', 'Overhead Speakers', 'Object-Based Audio']
+        },
+        'RPX': {
+          name: 'RPX Theater',
+          icon: 'fas fa-desktop',
+          description: 'Regal Premium Experience with enhanced sight, sound and seating.',
+          features: ['Wall-to-Wall Screen', 'Plush Seating', 'Enhanced Audio']
+        }
+      };
+
+      return amenities.map(a => amenityMap[a] || {
+        name: a,
+        icon: 'fas fa-check-circle',
+        description: `Enjoy our ${a.toLowerCase()} facility for enhanced movie experience.`,
+        features: ['Premium Quality', 'Latest Technology', 'Comfortable Experience']
+      });
+    }
+
+    function getTechnicalSpecs(theater) {
+      return [
+        {
+          title: 'Projection Technology',
+          icon: 'fas fa-video',
+          description: 'State-of-the-art digital projection systems',
+          details: ['4K Digital Projection', 'Laser Light Source', 'HDR Compatible', '35mm Film Capability']
+        },
+        {
+          title: 'Audio Systems',
+          icon: 'fas fa-music',
+          description: 'Premium surround sound technology',
+          details: ['Dolby Atmos', '7.1 Surround Sound', 'THX Certified', 'Custom Tuned Acoustics']
+        },
+        {
+          title: 'Screen Technology',
+          icon: 'fas fa-tv',
+          description: 'Advanced screen materials and sizes',
+          details: ['Silver Screen Technology', 'Curved Screens Available', 'Up to 70ft Wide', 'Anti-Glare Coating']
+        },
+        {
+          title: 'Seating Technology',
+          icon: 'fas fa-couch',
+          description: 'Comfort and technology integrated seating',
+          details: ['Electric Recliners', 'USB Charging Ports', 'Cup Holders', 'Personal Reading Lights']
+        }
+      ];
+    }
+
+    function getDiningOptions(theater) {
+      return [
+        {
+          name: 'Classic Concessions',
+          image: '../img/theater/concessions.jpg',
+          description: 'Traditional movie snacks and beverages',
+          items: ['Popcorn', 'Candy', 'Nachos', 'Soft Drinks', 'Hot Dogs'],
+          priceRange: '3.50'
+        },
+        {
+          name: 'Gourmet Kitchen',
+          image: '../img/theater/gourmet.jpg',
+          description: 'Fresh-made meals and premium snacks',
+          items: ['Artisan Pizza', 'Gourmet Burgers', 'Loaded Fries', 'Craft Beer', 'Wine Selection'],
+          priceRange: '12.00'
+        },
+        {
+          name: 'Healthy Options',
+          image: '../img/theater/healthy.jpg',
+          description: 'Nutritious snacks and organic beverages',
+          items: ['Fresh Fruit', 'Veggie Wraps', 'Smoothies', 'Organic Juices', 'Trail Mix'],
+          priceRange: '6.50'
+        }
+      ];
+    }
+
+    function getAccessibilityFeatures(theater) {
+      return [
+        {
+          title: 'Wheelchair Accessibility',
+          icon: 'fas fa-wheelchair',
+          description: 'Full wheelchair access throughout the facility',
+          details: ['Wheelchair accessible entrances', 'Dedicated wheelchair seating areas', 'Accessible restrooms', 'Lowered concession counters']
+        },
+        {
+          title: 'Hearing Assistance',
+          icon: 'fas fa-assistive-listening-systems',
+          description: 'Audio assistance for hearing impaired guests',
+          details: ['Assisted listening devices', 'Closed captioning displays', 'Sign language interpreters (by request)', 'Induction loop systems']
+        },
+        {
+          title: 'Visual Assistance',
+          icon: 'fas fa-eye',
+          description: 'Support for visually impaired guests',
+          details: ['Audio description devices', 'Large print materials', 'Braille signage', 'Guide dog friendly']
+        },
+        {
+          title: 'Special Needs Support',
+          icon: 'fas fa-heart',
+          description: 'Additional support for guests with special needs',
+          details: ['Sensory-friendly showings', 'Quiet spaces available', 'Staff trained in assistance', 'Family restrooms']
+        }
+      ];
+    }
+
+    function getSafetyMeasures(theater) {
+      return [
+        {
+          title: 'Health & Sanitation',
+          icon: 'fas fa-hands-wash',
+          description: 'Comprehensive cleaning and hygiene protocols',
+          actions: ['Enhanced cleaning between shows', 'Hand sanitizer stations', 'Air filtration systems', 'Regular disinfection']
+        },
+        {
+          title: 'Emergency Preparedness',
+          icon: 'fas fa-shield-alt',
+          description: 'Complete emergency response systems',
+          actions: ['Fire detection systems', 'Emergency exits clearly marked', 'Trained staff for emergencies', 'First aid stations']
+        },
+        {
+          title: 'Security Measures',
+          icon: 'fas fa-lock',
+          description: 'Professional security for guest safety',
+          actions: ['24/7 security personnel', 'CCTV monitoring', 'Bag inspection policies', 'Emergency communication systems']
+        },
+        {
+          title: 'Crowd Management',
+          icon: 'fas fa-users',
+          description: 'Safe and orderly guest flow management',
+          actions: ['Capacity monitoring', 'Queue management systems', 'Clear signage and directions', 'Staff assistance available']
+        }
+      ];
+    }
+
+    function getOperatingHours(theater) {
+      const today = new Date().getDay();
+      return [
+        { day: 'Monday', hours: '10:00 AM - 11:00 PM', isToday: today === 1 },
+        { day: 'Tuesday', hours: '10:00 AM - 11:00 PM', isToday: today === 2 },
+        { day: 'Wednesday', hours: '10:00 AM - 11:00 PM', isToday: today === 3 },
+        { day: 'Thursday', hours: '10:00 AM - 11:00 PM', isToday: today === 4 },
+        { day: 'Friday', hours: '10:00 AM - 12:00 AM', isToday: today === 5 },
+        { day: 'Saturday', hours: '9:00 AM - 12:00 AM', isToday: today === 6 },
+        { day: 'Sunday', hours: '9:00 AM - 11:00 PM', isToday: today === 0 }
+      ];
+    }
+
+    function getTicketPricing(theater) {
+      return [
+        {
+          type: 'Standard',
+          price: '12.50',
+          features: ['Regular seating', 'Standard audio/video', 'All showtimes']
+        },
+        {
+          type: 'Premium',
+          price: '16.50',
+          features: ['Reclining seats', 'Enhanced audio', 'Premium screens']
+        },
+        {
+          type: 'VIP',
+          price: '24.50',
+          features: ['Luxury recliners', 'Reserved seating', 'Premium service']
+        },
+        {
+          type: 'IMAX',
+          price: '19.50',
+          features: ['IMAX experience', 'Large format screen', 'Immersive sound']
+        }
+      ];
+    }
+
+    function getContactInfo(theater) {
+      return [
+        { icon: 'fas fa-phone', label: 'Phone', value: '(555) 123-4567' },
+        { icon: 'fas fa-envelope', label: 'Email', value: 'info@cinetix.com' },
+        { icon: 'fas fa-globe', label: 'Website', value: 'www.cinetix.com' },
+        { icon: 'fas fa-clock', label: 'Hours', value: 'Daily 10AM - 12AM' }
+      ];
+    }
+
+    function getSampleReviews(theater) {
+      return [
+        {
+          name: 'Sarah Johnson',
+          date: '2 days ago',
+          rating: 5,
+          helpful: 12,
+          content: 'Amazing theater experience! The IMAX screen was incredible and the sound quality was perfect. Staff was very friendly and helpful.'
+        },
+        {
+          name: 'Mike Chen',
+          date: '1 week ago',
+          rating: 4,
+          helpful: 8,
+          content: 'Great theater with comfortable seating. The VIP experience was worth the extra cost. Only downside was the long concession lines.'
+        },
+        {
+          name: 'Emily Rodriguez',
+          date: '2 weeks ago',
+          rating: 5,
+          helpful: 15,
+          content: 'Best theater in the area! Clean facilities, great sound, and the 4DX experience was absolutely thrilling. Highly recommend!'
+        }
+      ];
+    }
+
+    // Action functions
+    function bookTickets() {
+      window.location.href = 'homepage.html';
+    }
+
+    function getDirections() {
+      window.open('https://maps.google.com/', '_blank');
+    }
+
+    function startVirtualTour() {
+      window.location.href = '3D Model.html';
+    }
+
+    function callTheater() {
+      window.location.href = 'tel:+15551234567';
+    }
+
+    function emailTheater() {
+      window.location.href = 'mailto:info@cinetix.com';
+    }
+
+    function openGoogleMaps() {
+      window.open('https://maps.google.com/', '_blank');
+    }
+
+    function writeReview() {
+      window.location.href = 'about.html';
+    }
+
+    function viewAllReviews() {
+      window.location.href = 'about.html';
+    }
+  </script>
+</body>
+</html>

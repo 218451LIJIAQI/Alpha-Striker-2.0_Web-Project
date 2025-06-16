@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Payment | Alpha Striker 2.0</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" type="text/css" href="../css/common/header.css">
+
+  <link rel="stylesheet" type="text/css" href="../css/pay/pay.css">
+  <script src="../js/common.js"></script>
+  <script src="../js/pay/pay.js"></script>
+</head>
+<body>
+  <!-- Include common header component -->
+  <div id="header-container"></div>
+  
+  <div class="payment-container">
+    <div class="payment-header">
+      <h1><i class="fas fa-credit-card"></i> Secure Payment</h1>
+      <div class="progress-bar">
+        <div class="progress-step completed">
+          <i class="fas fa-ticket-alt"></i>
+          <span>Select Seats</span>
+        </div>
+        <div class="progress-step active">
+          <i class="fas fa-credit-card"></i>
+          <span>Payment</span>
+        </div>
+        <div class="progress-step">
+          <i class="fas fa-check-circle"></i>
+          <span>Confirmation</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="payment-layout">
+      <div class="payment-main">
+        <!-- Payment Methods Section -->
+        <div class="payment-section">
+          <div class="section-header">
+            <h2><i class="fas fa-wallet"></i> Choose Payment Method</h2>
+            <div class="security-badges">
+              <span class="security-badge"><i class="fas fa-shield-alt"></i> SSL Secured</span>
+              <span class="security-badge"><i class="fas fa-lock"></i> 256-bit Encryption</span>
+            </div>
+          </div>
+          
+          <div class="payment-methods-grid">
+            <div class="payment-method-card active" data-method="card">
+              <div class="method-icon">
+                <i class="fas fa-credit-card"></i>
+              </div>
+              <div class="method-info">
+                <h3>Credit/Debit Card</h3>
+                <p>Visa, Mastercard, American Express</p>
+                <div class="card-icons">
+                  <i class="fab fa-cc-visa"></i>
+                  <i class="fab fa-cc-mastercard"></i>
+                  <i class="fab fa-cc-amex"></i>
+                </div>
+              </div>
+              <div class="method-radio">
+                <input type="radio" id="card" name="payment" value="card" checked>
+                <label for="card"></label>
+              </div>
+            </div>
+
+            <div class="payment-method-card" data-method="paypal">
+              <div class="method-icon paypal">
+                <i class="fab fa-paypal"></i>
+              </div>
+              <div class="method-info">
+                <h3>PayPal</h3>
+                <p>Pay with your PayPal account</p>
+              </div>
+              <div class="method-radio">
+                <input type="radio" id="paypal" name="payment" value="paypal">
+                <label for="paypal"></label>
+              </div>
+            </div>
+
+            <div class="payment-method-card" data-method="applepay">
+              <div class="method-icon apple">
+                <i class="fab fa-apple"></i>
+              </div>
+              <div class="method-info">
+                <h3>Apple Pay</h3>
+                <p>Quick and secure payment</p>
+              </div>
+              <div class="method-radio">
+                <input type="radio" id="applepay" name="payment" value="applepay">
+                <label for="applepay"></label>
+              </div>
+            </div>
+
+            <div class="payment-method-card" data-method="googlepay">
+              <div class="method-icon google">
+                <i class="fab fa-google"></i>
+              </div>
+              <div class="method-info">
+                <h3>Google Pay</h3>
+                <p>Pay with Google</p>
+              </div>
+              <div class="method-radio">
+                <input type="radio" id="googlepay" name="payment" value="googlepay">
+                <label for="googlepay"></label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card Details Form -->
+          <div class="card-form" id="card-form">
+            <h3><i class="fas fa-credit-card"></i> Card Details</h3>
+            <div class="form-row">
+              <div class="form-group full-width">
+                <label for="card-number">Card Number</label>
+                <div class="input-with-icon">
+                  <input type="text" id="card-number" placeholder="1234 5678 9012 3456" maxlength="19">
+                  <i class="fas fa-credit-card input-icon"></i>
+                </div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="expiry">Expiry Date</label>
+                <input type="text" id="expiry" placeholder="MM/YY" maxlength="5">
+              </div>
+              <div class="form-group">
+                <label for="cvv">CVV</label>
+                <div class="input-with-icon">
+                  <input type="text" id="cvv" placeholder="123" maxlength="4">
+                  <i class="fas fa-question-circle input-icon" title="3-digit code on the back of your card"></i>
+                </div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group full-width">
+                <label for="cardholder-name">Cardholder Name</label>
+                <input type="text" id="cardholder-name" placeholder="John Doe">
+              </div>
+            </div>
+          </div>
+
+          <!-- Promo Code Section -->
+          <div class="promo-section">
+            <h3><i class="fas fa-tag"></i> Promo Code</h3>
+            <div class="promo-input-group">
+              <input type="text" id="coupon-code" placeholder="Enter promo code">
+              <button id="verify-coupon" class="promo-btn">
+                <i class="fas fa-check"></i> Apply
+              </button>
+            </div>
+            <div class="promo-suggestions">
+              <span class="promo-tag">WELCOME10</span>
+              <span class="promo-tag">STUDENT15</span>
+              <span class="promo-tag">WEEKEND20</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Order Summary Sidebar -->
+      <div class="payment-sidebar">
+        <div class="order-summary">
+          <div class="summary-header">
+            <h2><i class="fas fa-receipt"></i> Order Summary</h2>
+          </div>
+
+          <!-- Movie Info -->
+          <div class="movie-summary" id="movie-info">
+            <!-- Movie details will be populated by JavaScript -->
+          </div>
+
+          <!-- Booking Details -->
+          <div class="booking-details">
+            <div class="detail-row">
+              <span class="detail-label"><i class="fas fa-calendar"></i> Date</span>
+              <span class="detail-value" id="booking-date">-</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label"><i class="fas fa-clock"></i> Time</span>
+              <span class="detail-value" id="booking-time">-</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label"><i class="fas fa-chair"></i> Seats</span>
+              <span class="detail-value" id="booking-seats">-</span>
+            </div>
+          </div>
+
+          <!-- Price Breakdown -->
+          <div class="price-breakdown">
+            <div class="price-row">
+              <span>Subtotal</span>
+              <span id="total-price">$0.00</span>
+            </div>
+            <div class="price-row discount-row" id="discount-row" style="display: none;">
+              <span><i class="fas fa-tag"></i> Discount</span>
+              <span id="discount-amount" class="discount-text">$0.00</span>
+            </div>
+            <div class="price-row tax-row">
+              <span>Tax & Fees</span>
+              <span id="tax-amount">$2.50</span>
+            </div>
+            <div class="price-divider"></div>
+            <div class="price-row total-row">
+              <span>Total</span>
+              <span id="amount-due" class="total-amount">$0.00</span>
+            </div>
+          </div>
+
+          <!-- Payment Button -->
+          <button class="pay-now-btn">
+            <i class="fas fa-lock"></i>
+            <span>Secure Payment</span>
+            <span id="final-amount">$0.00</span>
+          </button>
+
+          <!-- Trust Indicators -->
+          <div class="trust-indicators">
+            <div class="trust-item">
+              <i class="fas fa-shield-alt"></i>
+              <span>100% Secure Payment</span>
+            </div>
+            <div class="trust-item">
+              <i class="fas fa-undo"></i>
+              <span>Easy Refund Policy</span>
+            </div>
+            <div class="trust-item">
+              <i class="fas fa-headset"></i>
+              <span>24/7 Customer Support</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="bottom-container"></div>
+</body>
+</html>

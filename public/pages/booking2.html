@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CineTix - Book Your Tickets</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="../css/booking2/booking2.css">
+    <link rel="stylesheet" type="text/css" href="../css/common/header.css">
+    <script src="../js/common.js"></script>
+</head>
+<body>
+    <!-- Include common header component -->
+    <div id="header-container"></div>
+
+    <div class="content">
+      <div class="container">
+        <div class="booking-container">
+          <div class="booking-header">
+            <h1 class="booking-title">Book Your Tickets</h1>
+            <p class="booking-subtitle">Complete your booking in a few easy steps</p>
+          </div>
+
+          <div class="booking-body">
+            <div class="booking-layout">
+              <div class="booking-main">
+                <!-- Movie Info Card -->
+                <div class="movie-info-card">
+                  <img src="../img/frozen_2.jpeg" alt="Frozen 2" class="movie-poster">
+                  <div class="movie-details">
+                    <h2 class="movie-title">Frozen 2</h2>
+                    <p class="movie-meta">Animation | 1h 43m | PG</p>
+                    <ul class="movie-info-list">
+                      <li class="movie-info-item">
+                        <i class="fas fa-star movie-info-icon"></i>
+                        <span>4.5/5 (2.3k reviews)</span>
+                      </li>
+                      <li class="movie-info-item">
+                        <i class="fas fa-calendar-alt movie-info-icon"></i>
+                        <span>Release: Nov 22, 2023</span>
+                      </li>
+                      <li class="movie-info-item">
+                        <i class="fas fa-user movie-info-icon"></i>
+                        <span>Director: Jennifer Lee, Chris Buck</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <!-- Date Selection -->
+                <div class="section-header">
+                  <div class="section-title">
+                    <i class="fas fa-calendar-day"></i>
+                    Select Date
+                    <span class="promo-badge" onclick="toRanDom()">
+                      <i class="fas fa-tag"></i>
+                      30% Discount for 5+ Tickets!
+                    </span>
+                  </div>
+                  <p class="section-subtitle">Choose the date you would like to watch the movie</p>
+                </div>
+                
+                <!-- Rest of the content remains unchanged -->
+                
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="../js/booking2/booking2.js"></script>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login | Alpha Striker 2.0 Admin Panel</title>
+    <link rel="stylesheet" type="text/css" href="../css/login/login.css">
+    <script src="../js/dark-mode-init.js"></script>
+    <style>
+                 /* Additional admin-specific styles */
+         .admin-logo-section img {
+             width: 100px;
+             height: 50px;
+             margin-bottom: 10px;
+         }
+         
+         .admin-branding h1 {
+             font-size: 32px;
+             font-weight: 700;
+             color: #3366cc;
+             margin-bottom: 0;
+         }
+         
+         .admin-branding p {
+             color: #666;
+             font-size: 18px;
+         }
+         
+         .admin-container {
+             background: white;
+             border-radius: 16px;
+             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+             padding: 20px;
+             margin-bottom: 20px;
+             max-width: 400px;
+             margin: 0 auto;
+             padding: 15px;
+             overflow: hidden;
+             max-height: none;
+         }
+         
+         .admin-header {
+             text-align: center;
+             margin-bottom: 30px;
+         }
+         
+         .admin-header h1 {
+             color: #3366cc;
+             font-size: 28px;
+             margin-bottom: 10px;
+         }
+         
+         .admin-header p {
+             color: #666;
+         }
+    </style>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Admin Login Page -->
+    <div id="admin-login-page" style="display:block;">
+        <div class="container">
+                         <div class="logo-section admin-logo-section">
+                 <img src="../img/logo.jpg" alt="logo">
+                 <div class="admin-branding">
+                     <h1>Alpha Striker 2.0 Admin</h1>
+                 </div>
+                 <p>Administrative Control Panel</p>
+             </div>
+            
+            <div class="auth-container card admin-container">
+                <div class="auth-header admin-header">
+                    <h1>Welcome Back, Admin</h1>
+                    <p>Sign in to access the admin dashboard</p>
+                </div>
+                
+                <form id="admin-login-form" onsubmit="loginAdmin(event)">
+                    <div class="form-group">
+                        <label for="admin-username" class="form-label">Username</label>
+                        <input type="text" id="admin-username" name="username" class="form-input" placeholder="Enter your username" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="admin-password" class="form-label">Password</label>
+                        <input type="password" id="admin-password" name="password" class="form-input" placeholder="Enter your password" required>
+                    </div>
+                    
+                    <div class="remember-forgot">
+                        <div class="remember-me">
+                            <input type="checkbox" id="admin-remember">
+                            <label for="admin-remember">Remember me</label>
+                        </div>
+                        <a href="#" class="forgot-password">Forgot Password?</a>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Sign In to Admin Panel</button>
+                </form>
+                
+                <div class="auth-footer">
+                    <p>Authorized personnel only. <a href="../login.html" class="auth-link">User Login</a></p>
+                </div>
+                
+                <div class="social-buttons">
+                    <p>Secure Admin Access</p>
+                    <div class="social-icons">
+                        <button class="social-icon" title="Two-Factor Authentication">
+                            <i class="fas fa-shield-alt" style="color: #3366cc;"></i>
+                        </button>
+                        <button class="social-icon" title="Single Sign-On">
+                            <i class="fas fa-key" style="color: #3366cc;"></i>
+                        </button>
+                        <button class="social-icon" title="Biometric Login">
+                            <i class="fas fa-fingerprint" style="color: #3366cc;"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="copyright">
+                <p>© 2025 Alpha Striker 2.0 Admin Panel. All rights reserved.</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function loginAdmin(event) {
+            event.preventDefault();
+            
+            const username = document.getElementById('admin-username').value;
+            const password = document.getElementById('admin-password').value;
+            
+            if (username && password) {
+                                 // Try sending using FormData method
+                 const formData = new FormData();
+                 formData.append('username', username);
+                 formData.append('password', password);
+
+                 const xhr = new XMLHttpRequest();
+                 xhr.open('POST', '/index.php/admin/auth/login', true);
+
+                 xhr.onreadystatechange = function() {
+                     if (xhr.readyState === 4) {
+                         if (xhr.status === 200) {
+                             const response = JSON.parse(xhr.responseText);
+                             if (response.success) {
+                                 localStorage.setItem('adminToken', response.token);
+                                 localStorage.setItem('adminUser', username);
+                                 // Add success notification animation
+                                 showSuccessMessage('Login successful! Redirecting...');
+                                 setTimeout(() => {
+                                     window.location.href = 'dashboard.html';
+                                 }, 1500);
+                             } else {
+                                 showErrorMessage(response.message || 'Login failed');
+                             }
+                         } else {
+                             showErrorMessage('Request failed, please try again later');
+                         }
+                     }
+                 };
+
+                 xhr.send(formData);
+            } else {
+                showErrorMessage('Please enter valid username and password');
+            }
+        }
+        
+        function showSuccessMessage(message) {
+            showMessage(message, 'success');
+        }
+        
+        function showErrorMessage(message) {
+            showMessage(message, 'error');
+        }
+        
+        function showMessage(message, type) {
+            // Remove existing messages
+            const existingMessage = document.querySelector('.message-popup');
+            if (existingMessage) {
+                existingMessage.remove();
+            }
+            
+            // Create new message
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message-popup ${type}`;
+            messageDiv.textContent = message;
+            messageDiv.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${type === 'success' ? '#4CAF50' : '#f44336'};
+                color: white;
+                padding: 15px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+                z-index: 1000;
+                font-weight: 500;
+                animation: slideIn 0.3s ease-out;
+            `;
+            
+            // Add animation styles
+            if (!document.querySelector('#message-styles')) {
+                const style = document.createElement('style');
+                style.id = 'message-styles';
+                style.textContent = `
+                    @keyframes slideIn {
+                        from { transform: translateX(100%); opacity: 0; }
+                        to { transform: translateX(0); opacity: 1; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+            
+            document.body.appendChild(messageDiv);
+            
+            // Auto remove after 3 seconds
+            setTimeout(() => {
+                if (messageDiv.parentNode) {
+                    messageDiv.style.animation = 'slideIn 0.3s ease-out reverse';
+                    setTimeout(() => messageDiv.remove(), 300);
+                }
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
