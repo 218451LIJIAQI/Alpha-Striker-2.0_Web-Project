@@ -268,7 +268,7 @@ body {
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
 }
 
-.step-item[role="button"] {
+.step-item[onclick] {
   cursor: pointer;
 }
 
@@ -288,13 +288,4 @@ body {
 .step-item p {
   color: var(--text-light);
   font-size: 14px;
-}
-
-@media print {
-  #header-container,
-  #bottom-container,
-  .action-buttons,
-  .next-steps {
-    display: none !important;
-  }
 }

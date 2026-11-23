@@ -17,7 +17,7 @@
     <div class="page-header">
       <div>
         <h1><i class="fas fa-plus-circle"></i> Add New Movie</h1>
-        <p>Enter movie metadata, pricing, poster path, and theater screening assignments.</p>
+        <p>Enter movie metadata, pricing, poster path, and screening theaters.</p>
       </div>
     </div>
 
@@ -54,7 +54,7 @@
 
         <div class="form-group">
           <label for="money" class="form-label">Ticket Price ($) *</label>
-          <input type="number" id="money" name="money" class="form-input" step="0.01" min="0.01" max="9999.99" value="39.00" required>
+          <input type="number" id="money" name="money" class="form-input" step="0.01" min="0" value="39.00" required>
         </div>
 
         <div class="form-group">
@@ -63,17 +63,6 @@
         </div>
 
         <div class="form-group">
-          <label for="daily_showtimes" class="form-label">Daily Showtimes per Theater *</label>
-          <select id="daily_showtimes" name="daily_showtimes" class="form-input">
-            <option value="2">2 Showtimes / Day</option>
-            <option value="3">3 Showtimes / Day</option>
-            <option value="4" selected>4 Showtimes / Day</option>
-            <option value="5">5 Showtimes / Day</option>
-            <option value="6">6 Showtimes / Day</option>
-          </select>
-        </div>
-
-        <div class="form-group full-width">
           <label for="img" class="form-label">Poster Path or URL *</label>
           <input type="text" id="img" name="img" class="form-input" placeholder="../img/homepage/frozen_2.jpeg" required maxlength="500">
           <div class="preview-container">
@@ -82,8 +71,15 @@
         </div>
 
         <div class="form-group full-width">
-          <label class="form-label">Screening Partner Theaters</label>
-          <div id="theater-checklist"></div>
+          <div class="form-label-row">
+            <span class="form-label">Screening Theaters</span>
+            <div class="mini-link-group">
+              <button type="button" class="mini-link-btn" id="select-all-theaters">Select All</button>
+              <button type="button" class="mini-link-btn" id="clear-all-theaters">Clear</button>
+            </div>
+          </div>
+          <div id="theater-check-grid" class="relation-check-grid"></div>
+          <span class="form-hint">Checked partner cinemas will list this film under Now Showing and accept seat bookings.</span>
         </div>
       </div>
 
@@ -102,11 +98,17 @@
       const imgInput = document.getElementById('img');
       AdminApp.bindImagePreview(imgInput, document.getElementById('poster-preview'));
 
-      const checklistEl = document.getElementById('theater-checklist');
+      const theaterGrid = document.getElementById('theater-check-grid');
       const theatersRes = await AdminApp.apiFetch('/index.php/admin/theater/index');
       const theaters = theatersRes.success && Array.isArray(theatersRes.data) ? theatersRes.data : [];
-      const defaultIds = theaters.map(function (t) { return t.theater_code; });
-      AdminApp.renderRelationChecklist(checklistEl, theaters, 'theater_code', 'theater_name', defaultIds, 'theater_codes');
+      AdminApp.renderCheckList(theaterGrid, theaters, 'theater_code', function (t) { return t.theater_name; }, null);
+
+      document.getElementById('select-all-theaters').addEventListener('click', function () {
+        theaterGrid.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = true; });
+      });
+      document.getElementById('clear-all-theaters').addEventListener('click', function () {
+        theaterGrid.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
+      });
 
       document.getElementById('add-movie-form').addEventListener('submit', function (e) {
         e.preventDefault();
@@ -117,9 +119,8 @@
           star: document.getElementById('star').value,
           money: document.getElementById('money').value,
           tag: document.getElementById('tag').value.trim(),
-          daily_showtimes: document.getElementById('daily_showtimes').value,
           img: imgInput.value.trim(),
-          theater_codes: AdminApp.getCheckedIds(checklistEl, 'theater_codes'),
+          theater_codes: AdminApp.getCheckedIds(theaterGrid),
         }, 'movies.html', 'Movie created successfully', 'Failed to create movie');
       });
     });

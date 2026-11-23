@@ -40,10 +40,10 @@
               <span>Select Date</span>
               <span class="promo-tag"><i class="fas fa-fire"></i> 30% Automatic Discount for 5+ Seats!</span>
             </div>
-            <div class="date-selector" role="listbox" aria-label="Screening Dates"></div>
+            <div class="date-selector"></div>
 
             <div class="section-title"><span>Select Showtime</span></div>
-            <div class="time-slots" id="time-slots-container" role="listbox" aria-label="Showtimes">
+            <div class="time-slots">
               <div class="time-slot active">09:30 AM</div>
               <div class="time-slot">12:00 PM</div>
               <div class="time-slot">02:30 PM</div>
@@ -52,15 +52,14 @@
               <div class="time-slot">10:30 PM</div>
             </div>
 
-            <div class="section-title"><span>Select Seats</span></div>
-            <div id="seat-status-banner" style="display:none; margin-bottom:14px;"></div>
+            <div class="section-title"><span>Select Seats (Max 10)</span></div>
             <div class="screen-container">
               <div class="screen"></div>
               <div class="seats-container">
-                <button type="button" class="vr-button" id="vr-preview-btn">
+                <button type="button" class="vr-button" onclick="viewSeatsInVR()">
                   <i class="fas fa-vr-cardboard"></i> 3D Auditorium View
                 </button>
-                <div id="seat-grid-rows" role="group" aria-label="Auditorium Seat Map"></div>
+                <div id="seat-grid-rows"></div>
               </div>
 
               <div class="seat-info">

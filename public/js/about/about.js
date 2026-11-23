@@ -1,8 +1,9 @@
 /**
- * About Page, Support Modals & Live Chat Assistant Controller
+ * About Page, Team Contacts, Support Modals & Live Chat Assistant Controller
  */
 document.addEventListener('DOMContentLoaded', function () {
   initContactModals();
+  initTeamSocialButtons();
   initCallbackScheduler();
   initEmailSupportForms();
   initLiveChat();
@@ -19,6 +20,27 @@ function initContactModals() {
   document.querySelectorAll('.contact-modal').forEach(function (modal) {
     modal.addEventListener('click', function (e) {
       if (e.target === modal) modal.style.display = 'none';
+    });
+  });
+
+  document.querySelector('.call-btn')?.addEventListener('click', function () {
+    window.clickCallUs();
+  });
+  document.querySelector('.email-btn')?.addEventListener('click', function () {
+    window.clickEmailUs();
+  });
+  document.querySelector('.chat-btn')?.addEventListener('click', function () {
+    clickLiveChat();
+  });
+}
+
+function initTeamSocialButtons() {
+  document.querySelectorAll('.team-social-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const member = btn.getAttribute('data-member') || 'Alpha Striker 2.0 Team';
+      const channel = btn.getAttribute('data-channel') || 'Contact';
+      const detail = btn.getAttribute('data-contact') || 'lijiaqi0807@gmail.com';
+      window.showToast(member + ' • ' + channel + ': ' + detail, 'info', 'Leadership Directory');
     });
   });
 }
@@ -115,7 +137,7 @@ function selectCategory(category, triggerEl) {
     feedback: 'Guest Experience Feedback',
   };
 
-  container.style.display = 'block';
+  container.classList.remove('is-hidden');
   container.innerHTML =
     '<h4>' + window.CineTicket.escapeHtml(titles[category] || 'Support Inquiry') + '</h4>' +
     '<div class="form-group"><label>Contact Email</label><input type="email" class="cat-email" placeholder="your.email@example.com"></div>' +
@@ -130,7 +152,7 @@ function selectCategory(category, triggerEl) {
       return;
     }
     window.showToast('Request received! Our team will follow up shortly.', 'success');
-    container.style.display = 'none';
+    container.classList.add('is-hidden');
   });
 }
 

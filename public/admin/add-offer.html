@@ -17,7 +17,7 @@
     <div class="page-header">
       <div>
         <h1><i class="fas fa-plus-circle"></i> Create Promotional Offer</h1>
-        <p>Configure promo code, discount value, category, eligible movies, and expiration date.</p>
+        <p>Configure promo code, discount value, category, eligible movies, and optional member ownership.</p>
       </div>
     </div>
 
@@ -40,12 +40,12 @@
 
         <div class="form-group">
           <label for="promo_code" class="form-label">Promo Code *</label>
-          <input type="text" id="promo_code" name="promo_code" class="form-input" placeholder="e.g. WEEKEND10" required maxlength="50" style="text-transform:uppercase;">
+          <input type="text" id="promo_code" name="promo_code" class="form-input uppercase-input" placeholder="e.g. WEEKEND10" required maxlength="100">
         </div>
 
         <div class="form-group">
           <label for="money" class="form-label">Discount Amount ($) *</label>
-          <input type="number" id="money" name="money" class="form-input" step="0.01" min="0.01" max="9999.99" value="5.00" required>
+          <input type="number" id="money" name="money" class="form-input" step="0.01" min="0" value="5.00" required>
         </div>
 
         <div class="form-group">
@@ -59,11 +59,15 @@
         </div>
 
         <div class="form-group">
+          <label for="user_code" class="form-label">Audience / Member Ownership</label>
+          <select id="user_code" name="user_code" class="form-input">
+            <option value="">Public — All Customers</option>
+          </select>
+        </div>
+
+        <div class="form-group full-width">
           <label for="img" class="form-label">Image Path or URL *</label>
           <input type="text" id="img" name="img" class="form-input" placeholder="../img/offer/student_price.png" required maxlength="500">
-          <div class="preview-container">
-            <img id="offer-preview" class="preview-img" alt="Offer Preview">
-          </div>
         </div>
 
         <div class="form-group full-width">
@@ -72,8 +76,15 @@
         </div>
 
         <div class="form-group full-width">
-          <label class="form-label">Eligible Movies *</label>
-          <div id="movie-checklist"></div>
+          <div class="form-label-row">
+            <span class="form-label">Eligible Movies</span>
+            <div class="mini-link-group">
+              <button type="button" class="mini-link-btn" id="select-all-movies">Select All</button>
+              <button type="button" class="mini-link-btn" id="clear-all-movies">Clear</button>
+            </div>
+          </div>
+          <div id="movie-check-grid" class="relation-check-grid"></div>
+          <span class="form-hint">Only checked movies can redeem this promo code at checkout.</span>
         </div>
       </div>
 
@@ -89,22 +100,34 @@
       AdminApp.renderAdminNav('offers');
       if (!(await AdminApp.ensureAuthenticated())) return;
 
-      const imgInput = document.getElementById('img');
-      AdminApp.bindImagePreview(imgInput, document.getElementById('offer-preview'));
+      const movieGrid = document.getElementById('movie-check-grid');
+      const userSelect = document.getElementById('user_code');
 
-      const checklistEl = document.getElementById('movie-checklist');
-      const moviesRes = await AdminApp.apiFetch('/index.php/admin/movie/index');
+      const [moviesRes, usersRes] = await Promise.all([
+        AdminApp.apiFetch('/index.php/admin/movie/index'),
+        AdminApp.apiFetch('/index.php/admin/user/index'),
+      ]);
+
       const movies = moviesRes.success && Array.isArray(moviesRes.data) ? moviesRes.data : [];
-      const defaultIds = movies.map(function (m) { return m.movie_code; });
-      AdminApp.renderRelationChecklist(checklistEl, movies, 'movie_code', 'movie_name', defaultIds, 'movie_codes');
+      AdminApp.renderCheckList(movieGrid, movies, 'movie_code', function (m) { return m.movie_name; }, null);
+
+      const users = usersRes.success && Array.isArray(usersRes.data) ? usersRes.data : [];
+      users.forEach(function (u) {
+        const opt = document.createElement('option');
+        opt.value = String(u.user_code);
+        opt.textContent = u.user_name + ' (' + u.email + ')';
+        userSelect.appendChild(opt);
+      });
+
+      document.getElementById('select-all-movies').addEventListener('click', function () {
+        movieGrid.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = true; });
+      });
+      document.getElementById('clear-all-movies').addEventListener('click', function () {
+        movieGrid.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
+      });
 
       document.getElementById('add-offer-form').addEventListener('submit', function (e) {
         e.preventDefault();
-        const checkedMovies = AdminApp.getCheckedIds(checklistEl, 'movie_codes');
-        if (movies.length > 0 && checkedMovies.length === 0) {
-          window.showToast('Please select at least one eligible movie', 'warning');
-          return;
-        }
         AdminApp.submitForm('/index.php/admin/offer/create', {
           offer_title: document.getElementById('offer_title').value.trim(),
           offer_type: document.getElementById('offer_type').value,
@@ -112,9 +135,10 @@
           money: document.getElementById('money').value,
           offer_validity: document.getElementById('offer_validity').value,
           badge: document.getElementById('badge').value.trim(),
-          img: imgInput.value.trim(),
+          user_code: userSelect.value,
+          img: document.getElementById('img').value.trim(),
           offer_description: document.getElementById('offer_description').value.trim(),
-          movie_codes: checkedMovies,
+          movie_codes: AdminApp.getCheckedIds(movieGrid),
         }, 'offers.html', 'Offer created successfully', 'Failed to create offer');
       });
     });

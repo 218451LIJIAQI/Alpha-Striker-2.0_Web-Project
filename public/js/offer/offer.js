@@ -1,25 +1,14 @@
 /**
  * Promotional Offers & Promo Code Controller
  */
-let totalCatalogMoviesCount = 0;
-
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', async function () {
   const featuredContainer = document.querySelector('.featured-offers .offers-container');
   if (!featuredContainer) return;
 
-  const tabButtons = document.querySelectorAll('.filter-tabs button');
-  let requestSeq = 0;
+  await window.CineTicket.AuthStore.syncSession();
 
-  window.CineTicket.fetchJson('/index.php/movie/movies/getMovieList')
-    .then(function (res) {
-      if (res && res.success && Array.isArray(res.data)) {
-        totalCatalogMoviesCount = res.data.length;
-      }
-    })
-    .catch(function () {})
-    .finally(function () {
-      fetchOffers('');
-    });
+  const tabButtons = document.querySelectorAll('.filter-tabs button');
+  fetchOffers('');
 
   tabButtons.forEach(function (button) {
     button.addEventListener('click', function () {
@@ -29,40 +18,6 @@ document.addEventListener('DOMContentLoaded', function () {
       fetchOffers(label === 'All Offers' ? '' : label);
     });
   });
-
-  async function fetchOffers(offerType) {
-    const seq = ++requestSeq;
-    const CT = window.CineTicket;
-    const url = '/index.php/offer/offer/getOfferList' +
-      (offerType ? '?offer_type=' + encodeURIComponent(offerType) : '');
-
-    CT.renderStateBlock(featuredContainer, 'loading', 'Loading promotional offers...', 'Checking active promo codes and cinema perks.');
-
-    try {
-      const payload = await CT.fetchJson(url);
-      if (seq !== requestSeq) return;
-      if (payload.success) {
-        renderOffers(payload.data || []);
-      } else {
-        CT.renderStateBlock(
-          featuredContainer,
-          'error',
-          'Failed to load offers',
-          payload.message || 'Could not retrieve active promotions.',
-          function () { fetchOffers(offerType); }
-        );
-      }
-    } catch (_) {
-      if (seq !== requestSeq) return;
-      CT.renderStateBlock(
-        featuredContainer,
-        'error',
-        'Unable to load offers right now',
-        'Please check your connection and click Retry.',
-        function () { fetchOffers(offerType); }
-      );
-    }
-  }
 
   const form = document.querySelector('.newsletter-form');
   form?.addEventListener('submit', function (e) {
@@ -74,15 +29,26 @@ document.addEventListener('DOMContentLoaded', function () {
       emailInput?.focus();
       return;
     }
-    const list = JSON.parse(localStorage.getItem('newsletterEmails') || '[]');
-    if (!list.includes(email.toLowerCase())) {
-      list.push(email.toLowerCase());
-      localStorage.setItem('newsletterEmails', JSON.stringify(list));
-    }
     emailInput.value = '';
     window.showToast('Subscribed! Exclusive cinema offers will be sent to ' + email, 'success');
   });
 });
+
+async function fetchOffers(offerType) {
+  const url = '/index.php/offer/offer/getOfferList' +
+    (offerType ? '?offer_type=' + encodeURIComponent(offerType) : '');
+
+  try {
+    const payload = await window.CineTicket.fetchJson(url);
+    if (payload.success) {
+      renderOffers(payload.data || []);
+    } else {
+      window.showToast(payload.message || 'Failed to load offers', 'error');
+    }
+  } catch (_) {
+    window.showToast('Unable to load offers right now', 'error');
+  }
+}
 
 function copyPromoText(code) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -107,13 +73,11 @@ function renderOffers(offers) {
   const moreSection = moreContainer ? moreContainer.closest('section') : null;
 
   if (!Array.isArray(offers) || offers.length === 0) {
-    window.CineTicket.renderStateBlock(
-      featuredContainer,
-      'empty',
-      'No active offers in this category',
-      'Select All Offers to browse every available cinema promotion.'
-    );
-    if (moreSection) moreSection.style.display = 'none';
+    featuredContainer.innerHTML =
+      '<div class="grid-empty-state">' +
+      '<h3>No active offers in this category</h3>' +
+      '</div>';
+    if (moreSection) moreSection.classList.add('is-hidden');
     return;
   }
 
@@ -124,12 +88,12 @@ function renderOffers(offers) {
   const remaining = offers.slice(3);
   if (moreContainer) {
     if (remaining.length > 0) {
-      if (moreSection) moreSection.style.display = '';
+      if (moreSection) moreSection.classList.remove('is-hidden');
       remaining.forEach(function (offer) {
         moreContainer.appendChild(createOfferCard(offer));
       });
     } else if (moreSection) {
-      moreSection.style.display = 'none';
+      moreSection.classList.add('is-hidden');
     }
   }
 }
@@ -143,18 +107,17 @@ function createOfferCard(offer) {
   if (offer.offer_type === 'Student Deals') card.classList.add('offer-special-student');
   else if (offer.offer_type === 'Weekday Specials') card.classList.add('offer-special-wednesday');
 
-  const badgeText = offer.badge ? String(offer.badge).trim() : '';
+  const badgeText = offer.is_exclusive
+    ? 'MEMBER EXCLUSIVE'
+    : (offer.badge ? String(offer.badge).trim() : '');
   const badgeClass = badgeText ? badgeText.toLowerCase().replace(/\s+/g, '-') : '';
   const savings = offer.money !== undefined && offer.money !== null ? 'Save $' + parseFloat(offer.money).toFixed(2) : '';
-  const movieCodes = Array.isArray(offer.movie_codes) ? offer.movie_codes : [];
-  const isRestricted = totalCatalogMoviesCount > 0 && movieCodes.length > 0 && movieCodes.length < totalCatalogMoviesCount;
-  const scopeNote = isRestricted ? ' • ' + movieCodes.length + ' eligible film(s)' : '';
   const validityLabel = offer.offer_validity
-    ? 'Valid until ' + offer.offer_validity + (savings ? ' • ' + savings : '') + scopeNote
+    ? 'Valid until ' + offer.offer_validity + (savings ? ' • ' + savings : '')
     : (savings || 'Limited-time offer');
-
-  const claimTarget = isRestricted && movieCodes.length === 1
-    ? CT.pageUrl('booking3.html?movie_code=' + encodeURIComponent(movieCodes[0]))
+  const movieCount = Array.isArray(offer.movie_codes) ? offer.movie_codes.length : 0;
+  const targetUrl = movieCount === 1
+    ? CT.pageUrl('booking3.html?movie_code=' + encodeURIComponent(offer.movie_codes[0]))
     : CT.pageUrl('homepage.html');
 
   card.innerHTML =
@@ -165,15 +128,9 @@ function createOfferCard(offer) {
     '<p class="offer-description">' + esc(offer.offer_description) + '</p>' +
     '<div class="promo-code"><span>' + esc(offer.promo_code) + '</span><button type="button" class="copy-code">COPY</button></div>' +
     '<div class="offer-validity"><span>📅</span> <span>' + esc(validityLabel) + '</span></div>' +
-    '<a href="' + esc(claimTarget) + '" class="claim-offer">Use on Booking</a>' +
-    '<a href="#terms" class="terms-link">Terms &amp; Conditions</a>' +
+    '<a href="' + esc(targetUrl) + '" class="claim-offer">Use on Booking</a>' +
+    '<button type="button" class="terms-link">Terms &amp; Conditions</button>' +
     '</div>';
-
-  const fallbackImg = CT.resolveAssetUrl('img/logo.jpg');
-  const imgEl = card.querySelector('.offer-image img');
-  imgEl.addEventListener('error', function () {
-    if (imgEl.src !== fallbackImg) imgEl.src = fallbackImg;
-  });
 
   const promoCode = String(offer.promo_code || '');
   card.querySelector('.copy-code').addEventListener('click', function () {
@@ -185,17 +142,14 @@ function createOfferCard(offer) {
     sessionStorage.setItem('selectedPromoCode', promoCode);
     copyPromoText(promoCode);
     setTimeout(function () {
-      window.location.href = claimTarget;
+      window.location.href = targetUrl;
     }, 350);
   });
 
-  card.querySelector('.terms-link').addEventListener('click', function (e) {
-    e.preventDefault();
-    const movieClause = isRestricted
-      ? ' Valid on ' + movieCodes.length + ' designated movie(s).'
-      : ' Valid across all participating screenings.';
+  card.querySelector('.terms-link').addEventListener('click', function () {
+    const scopeNote = movieCount > 0 ? (' Valid across ' + movieCount + ' scheduled title(s).') : '';
     window.showToast(
-      'Enter code ' + promoCode + ' at checkout before ' + (offer.offer_validity || 'expiry') + '.' + movieClause + ' Limit one promo code per order.',
+      'Enter code ' + promoCode + ' at checkout before ' + (offer.offer_validity || 'expiry') + '. Limit one promo code per order.' + scopeNote,
       'info',
       offer.offer_title || 'Offer Terms'
     );

@@ -19,27 +19,26 @@ class Movie extends BaseAdmin
     {
         try {
             $movies = Db::name('movies')->order('movie_code', 'asc')->select();
-            if (!empty($movies)) {
-                $schedules = Db::table('theater_movie')
-                    ->field('movie_code, theater_code, daily_showtimes')
-                    ->order('theater_code', 'asc')
-                    ->select();
-                $theaterMap   = [];
-                $showtimesMap = [];
-                foreach ($schedules as $row) {
-                    $mid = (int) $row['movie_code'];
-                    $theaterMap[$mid][] = (int) $row['theater_code'];
-                    if (!isset($showtimesMap[$mid])) {
-                        $showtimesMap[$mid] = (int) $row['daily_showtimes'];
-                    }
-                }
-                foreach ($movies as &$m) {
-                    $mid = (int) $m['movie_code'];
-                    $m['theater_codes']   = $theaterMap[$mid] ?? [];
-                    $m['daily_showtimes'] = $showtimesMap[$mid] ?? 4;
-                }
-                unset($m);
+            if (empty($movies)) {
+                return $this->ok([]);
             }
+
+            $links      = Db::table('theater_movie')->select();
+            $theaterMap = [];
+            foreach ($links as $row) {
+                $mid = (int) $row['movie_code'];
+                $theaterMap[$mid][] = (int) $row['theater_code'];
+            }
+
+            foreach ($movies as &$m) {
+                $mid                = (int) $m['movie_code'];
+                $tCodes             = $theaterMap[$mid] ?? [];
+                sort($tCodes);
+                $m['theater_codes'] = $tCodes;
+                $m['theater_count'] = count($tCodes);
+            }
+            unset($m);
+
             return $this->ok($movies);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to query movies', $e);
@@ -59,12 +58,11 @@ class Movie extends BaseAdmin
                 return $this->fail('Movie not found', 404);
             }
 
-            $schedules = Db::table('theater_movie')
+            $tCodes = Db::table('theater_movie')
                 ->where('movie_code', $movieId)
                 ->order('theater_code', 'asc')
-                ->select();
-            $movie['theater_codes']   = array_map('intval', array_column($schedules, 'theater_code'));
-            $movie['daily_showtimes'] = !empty($schedules) ? (int) $schedules[0]['daily_showtimes'] : 4;
+                ->column('theater_code');
+            $movie['theater_codes'] = array_map('intval', $tCodes ?: []);
 
             return $this->ok($movie);
         } catch (\Throwable $e) {
@@ -75,68 +73,39 @@ class Movie extends BaseAdmin
     public function create()
     {
         try {
-            $payload = $this->payload();
+            $payload        = $this->payload();
             [$data, $error] = $this->prepareMovieData($payload);
             if ($error !== null) {
                 return $this->fail($error);
             }
 
-            [$theaterCodes, $dailyShowtimes, $schedErr] = $this->resolveScheduleParams(true);
-            if ($schedErr !== null) {
-                return $this->fail($schedErr);
-            }
+            $hasTheaterKey = array_key_exists('theater_codes', $payload);
+            $theaterCodes  = $hasTheaterKey
+                ? $this->resolveValidIds('theater', 'theater_code', $payload['theater_codes'])
+                : array_map('intval', Db::name('theater')->order('theater_code', 'asc')->column('theater_code') ?: []);
 
-            $prevMovieCount = (int) Db::name('movies')->count();
-            $universalOffers = [];
-            if ($prevMovieCount > 0) {
-                $offerCounts = Db::table('movie_offer')
-                    ->field('offer_code, COUNT(*) as cnt')
-                    ->group('offer_code')
-                    ->select();
-                foreach ($offerCounts as $oc) {
-                    if ((int) $oc['cnt'] >= $prevMovieCount) {
-                        $universalOffers[] = (int) $oc['offer_code'];
-                    }
-                }
-            } else {
-                $universalOffers = array_map('intval', Db::name('offer')->column('offer_code'));
-            }
-
-            $now   = date('Y-m-d H:i:s');
-            $today = date('Y-m-d');
-            $data['create_time'] = $now;
+            $hasOfferKey = array_key_exists('offer_codes', $payload);
+            $offerCodes  = $hasOfferKey
+                ? $this->resolveValidIds('offer', 'offer_code', $payload['offer_codes'])
+                : array_map('intval', Db::name('offer')->whereNull('user_code')->order('offer_code', 'asc')->column('offer_code') ?: []);
 
             Db::startTrans();
             try {
-                $movieId = (int) Db::name('movies')->insertGetId($data);
+                $data['create_time'] = date('Y-m-d H:i:s');
+                $movieId             = (int) Db::name('movies')->insertGetId($data);
                 if ($movieId <= 0) {
                     Db::rollback();
                     return $this->fail('Failed to create movie');
                 }
 
-                $this->syncTheaterSchedule($movieId, $theaterCodes, $dailyShowtimes, $today, $now);
-
-                if (!empty($universalOffers)) {
-                    $validities = Db::name('offer')
-                        ->where('offer_code', 'in', $universalOffers)
-                        ->column('offer_validity', 'offer_code');
-                    $offerRows = [];
-                    foreach ($universalOffers as $oid) {
-                        $validTo = $validities[$oid] ?? '2027-12-31';
-                        $offerRows[] = [
-                            'movie_code'       => $movieId,
-                            'offer_code'       => $oid,
-                            'discount_percent' => 0.00,
-                            'valid_from'       => $today,
-                            'valid_to'         => $this->isValidDate($validTo) ? $validTo : '2027-12-31',
-                            'created_time'     => $now,
-                        ];
-                    }
-                    Db::table('movie_offer')->insertAll($offerRows);
-                }
-
+                $this->syncMovieTheaters($movieId, $theaterCodes);
+                $this->syncMovieOffers($movieId, $offerCodes);
                 Db::commit();
-                return $this->ok(['movie_code' => $movieId], 'Movie created successfully');
+
+                return $this->ok([
+                    'movie_code'    => $movieId,
+                    'theater_codes' => $theaterCodes,
+                ], 'Movie created successfully');
             } catch (\Throwable $txErr) {
                 Db::rollback();
                 throw $txErr;
@@ -149,6 +118,7 @@ class Movie extends BaseAdmin
     public function update($movie_code = '')
     {
         try {
+            $payload = $this->payload();
             $movieId = $this->idParam('movie_code', $movie_code);
             if ($movieId <= 0) {
                 return $this->fail('Valid movie_code is required');
@@ -158,33 +128,26 @@ class Movie extends BaseAdmin
                 return $this->fail('Movie not found', 404);
             }
 
-            [$data, $error] = $this->prepareMovieData($this->payload());
+            [$data, $error] = $this->prepareMovieData($payload);
             if ($error !== null) {
                 return $this->fail($error);
             }
 
-            [$theaterCodes, $dailyShowtimes, $schedErr] = $this->resolveScheduleParams(false);
-            if ($schedErr !== null) {
-                return $this->fail($schedErr);
-            }
-
-            $now   = date('Y-m-d H:i:s');
-            $today = date('Y-m-d');
-            $data['update_time'] = $now;
+            $hasTheaterKey = array_key_exists('theater_codes', $payload);
+            $theaterCodes  = $hasTheaterKey
+                ? $this->resolveValidIds('theater', 'theater_code', $payload['theater_codes'])
+                : null;
 
             Db::startTrans();
             try {
+                $data['update_time'] = date('Y-m-d H:i:s');
                 if (Db::name('movies')->where('movie_code', $movieId)->update($data) === false) {
                     Db::rollback();
                     return $this->fail('Failed to update movie');
                 }
 
                 if ($theaterCodes !== null) {
-                    $this->syncTheaterSchedule($movieId, $theaterCodes, $dailyShowtimes, $today, $now);
-                } elseif ($this->hasParam('daily_showtimes')) {
-                    Db::table('theater_movie')
-                        ->where('movie_code', $movieId)
-                        ->update(['daily_showtimes' => $dailyShowtimes]);
+                    $this->syncMovieTheaters($movieId, $theaterCodes);
                 }
 
                 Db::commit();
@@ -206,26 +169,85 @@ class Movie extends BaseAdmin
                 return $this->fail('Valid movie_code is required');
             }
 
-            if (!Db::name('movies')->where('movie_code', $movieId)->find()) {
-                return $this->fail('Movie not found', 404);
-            }
-
             Db::startTrans();
             try {
+                if (!Db::name('movies')->where('movie_code', $movieId)->find()) {
+                    Db::rollback();
+                    return $this->fail('Movie not found', 404);
+                }
+
                 Db::table('theater_movie')->where('movie_code', $movieId)->delete();
                 Db::table('movie_offer')->where('movie_code', $movieId)->delete();
                 Db::name('seat')->where('movie_code', $movieId)->delete();
                 Db::name('movies')->where('movie_code', $movieId)->delete();
+
                 Db::commit();
+                return $this->ok(['movie_code' => $movieId], 'Movie deleted successfully');
             } catch (\Throwable $txErr) {
                 Db::rollback();
                 throw $txErr;
             }
-
-            return $this->ok(['movie_code' => $movieId], 'Movie deleted successfully');
         } catch (\Throwable $e) {
             return $this->serverError('Failed to delete movie', $e);
         }
+    }
+
+    private function syncMovieTheaters($movieId, array $theaterCodes)
+    {
+        Db::table('theater_movie')->where('movie_code', $movieId)->delete();
+        if (empty($theaterCodes)) {
+            return;
+        }
+
+        $now  = date('Y-m-d H:i:s');
+        $rows = [];
+        foreach ($theaterCodes as $tid) {
+            $rows[] = [
+                'theater_code'    => (int) $tid,
+                'movie_code'      => (int) $movieId,
+                'start_date'      => '2026-01-01',
+                'end_date'        => '2027-12-31',
+                'daily_showtimes' => 4,
+                'created_time'    => $now,
+            ];
+        }
+        Db::table('theater_movie')->insertAll($rows);
+    }
+
+    private function syncMovieOffers($movieId, array $offerCodes)
+    {
+        Db::table('movie_offer')->where('movie_code', $movieId)->delete();
+        if (empty($offerCodes)) {
+            return;
+        }
+
+        $offers = Db::name('offer')->where('offer_code', 'in', $offerCodes)->column('offer_validity', 'offer_code');
+        $now    = date('Y-m-d H:i:s');
+        $rows   = [];
+        foreach ($offerCodes as $oid) {
+            $validTo = isset($offers[$oid]) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $offers[$oid])
+                ? $offers[$oid]
+                : '2027-12-31';
+            $rows[] = [
+                'movie_code'       => (int) $movieId,
+                'offer_code'       => (int) $oid,
+                'discount_percent' => 0.00,
+                'valid_from'       => '2026-01-01',
+                'valid_to'         => $validTo,
+                'created_time'     => $now,
+            ];
+        }
+        Db::table('movie_offer')->insertAll($rows);
+    }
+
+    private function resolveValidIds($table, $pk, $raw)
+    {
+        $ids = $this->normalizeIdArray($raw);
+        if (empty($ids)) {
+            return [];
+        }
+        $valid = Db::name($table)->where($pk, 'in', $ids)->order($pk, 'asc')->column($pk);
+        return array_map('intval', $valid ?: []);
     }
 
     private function prepareMovieData(array $payload)
@@ -233,25 +255,25 @@ class Movie extends BaseAdmin
         $data = $this->pickAllowed($payload, self::ALLOWED_FIELDS);
 
         if (empty($data['movie_name']) || $this->textLen($data['movie_name']) > 200) {
-            return [null, 'Movie title is required (1-200 characters)'];
+            return [null, 'Movie title (1-200 characters) is required'];
         }
         if (empty($data['movie_type']) || $this->textLen($data['movie_type']) > 50) {
-            return [null, 'Movie genre is required (1-50 characters)'];
+            return [null, 'Movie genre (1-50 characters) is required'];
         }
-        if (empty($data['img']) || !$this->isSafeAssetUrl($data['img'])) {
-            return [null, 'A valid poster image path or URL is required'];
+        if (empty($data['img']) || $this->textLen($data['img']) > 500) {
+            return [null, 'Poster image path or URL (1-500 characters) is required'];
         }
         if (empty($data['times']) || $this->textLen($data['times']) > 50) {
-            return [null, 'Movie duration is required (1-50 characters)'];
+            return [null, 'Movie duration (1-50 characters) is required'];
+        }
+        if (isset($data['tag']) && $this->textLen($data['tag']) > 50) {
+            return [null, 'Highlight badge must be 50 characters or fewer'];
         }
         if (!isset($data['star']) || !is_numeric($data['star']) || (float) $data['star'] < 0 || (float) $data['star'] > 5) {
             return [null, 'Rating must be between 0.0 and 5.0'];
         }
-        if (!isset($data['money']) || !is_numeric($data['money']) || (float) $data['money'] <= 0 || (float) $data['money'] > 9999.99) {
-            return [null, 'Ticket price must be greater than 0 and at most 9999.99'];
-        }
-        if (isset($data['tag']) && $this->textLen($data['tag']) > 50) {
-            return [null, 'Highlight badge must be 50 characters or fewer'];
+        if (!isset($data['money']) || !is_numeric($data['money']) || (float) $data['money'] < 0) {
+            return [null, 'Ticket price must be a non-negative number'];
         }
 
         $data['tag']   = isset($data['tag']) && $data['tag'] !== '' ? $data['tag'] : null;
@@ -259,61 +281,5 @@ class Movie extends BaseAdmin
         $data['money'] = round((float) $data['money'], 2);
 
         return [$data, null];
-    }
-
-    private function resolveScheduleParams($defaultAllOnOmit)
-    {
-        $dailyShowtimes = 4;
-        if ($this->hasParam('daily_showtimes') && $this->strParam('daily_showtimes') !== '') {
-            $ds = $this->idParam('daily_showtimes');
-            if ($ds < 1 || $ds > 6) {
-                return [null, 4, 'Daily showtimes must be between 1 and 6'];
-            }
-            $dailyShowtimes = $ds;
-        }
-
-        $theaterCodes = $this->intListParam('theater_codes');
-        if ($theaterCodes === false) {
-            return [null, $dailyShowtimes, 'Invalid theater_codes parameter'];
-        }
-
-        if ($theaterCodes === null) {
-            if ($defaultAllOnOmit) {
-                $theaterCodes = array_map('intval', Db::name('theater')->order('theater_code', 'asc')->column('theater_code'));
-            }
-            return [$theaterCodes, $dailyShowtimes, null];
-        }
-
-        if (!empty($theaterCodes)) {
-            $existing = array_map(
-                'intval',
-                Db::name('theater')->where('theater_code', 'in', $theaterCodes)->column('theater_code')
-            );
-            if (count($existing) !== count($theaterCodes)) {
-                return [null, $dailyShowtimes, 'One or more selected theaters do not exist'];
-            }
-        }
-
-        return [$theaterCodes, $dailyShowtimes, null];
-    }
-
-    private function syncTheaterSchedule($movieId, array $theaterCodes, $dailyShowtimes, $today, $now)
-    {
-        Db::table('theater_movie')->where('movie_code', $movieId)->delete();
-        if (empty($theaterCodes)) {
-            return;
-        }
-        $rows = [];
-        foreach ($theaterCodes as $tid) {
-            $rows[] = [
-                'theater_code'    => (int) $tid,
-                'movie_code'      => (int) $movieId,
-                'start_date'      => $today,
-                'end_date'        => '2027-12-31',
-                'daily_showtimes' => (int) $dailyShowtimes,
-                'created_time'    => $now,
-            ];
-        }
-        Db::table('theater_movie')->insertAll($rows);
     }
 }

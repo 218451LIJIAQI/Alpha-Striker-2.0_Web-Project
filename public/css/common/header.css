@@ -1,4 +1,4 @@
-/* Global Reset & Shared Header, Dropdown, Contact Modal, State Block, and Toast Styles */
+/* Global Reset & Shared Header, Dropdown, Contact Modal, Utility, and Toast Styles */
 :root {
   --brand-primary: #4361ee;
   --brand-accent: #e74c3c;
@@ -18,63 +18,33 @@ body {
   width: 100%;
 }
 
+.is-hidden {
+  display: none !important;
+}
+
+.grid-empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 44px 20px;
+}
+
+.grid-empty-state p {
+  margin-top: 8px;
+  opacity: 0.78;
+}
+
+.noscript-fallback {
+  text-align: center;
+  padding: 40px 20px;
+}
+
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible,
-[role="button"]:focus-visible,
-[role="option"]:focus-visible,
-[tabindex="0"]:focus-visible {
+textarea:focus-visible {
   outline: 2px solid var(--brand-primary);
   outline-offset: 2px;
-}
-
-/* Shared Loading / Empty / Error State Component */
-.state-block {
-  grid-column: 1 / -1;
-  width: 100%;
-  text-align: center;
-  padding: 44px 24px;
-  border-radius: 14px;
-  background: var(--surface-bg);
-  border: 1px solid var(--border-color);
-  color: var(--text-main);
-}
-
-.state-block h3 {
-  margin: 8px 0 6px;
-  font-size: 19px;
-}
-
-.state-block p {
-  margin: 0 auto 16px;
-  max-width: 460px;
-  color: var(--text-muted);
-  font-size: 14px;
-}
-
-.state-block-icon {
-  font-size: 32px;
-  color: var(--brand-primary);
-  margin-bottom: 6px;
-}
-
-.state-block-icon.error {
-  color: #dc2626;
-}
-
-.state-retry-btn {
-  padding: 9px 20px;
-  border-radius: 999px;
-  border: none;
-  background: var(--brand-primary);
-  color: #ffffff;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
 }
 
 /* Primary Navigation Bar */
@@ -427,11 +397,11 @@ body.dark-mode .dark-mode-toggle .sun-icon {
   gap: 10px;
 }
 
-/* Unified Toast Notification (positioned below top header so header actions stay unobstructed) */
+/* Unified Toast Notification */
 .user-notification {
   position: fixed;
-  top: 90px;
-  right: 24px;
+  top: 20px;
+  right: 20px;
   background: var(--surface-bg);
   color: var(--text-main);
   border-radius: 10px;

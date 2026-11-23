@@ -8,31 +8,47 @@ use think\facade\Session;
 
 /**
  * Base controller for authenticated admin endpoints.
- * Enforces both server-side admin session AND matching X-Admin-Token / Bearer token (anti-CSRF).
+ * Enforces both active admin session AND non-empty constant-time X-Admin-Token / Bearer verification.
  */
 abstract class BaseAdmin extends ApiController
 {
     public function __construct()
     {
-        if (!self::checkSession($this->payload())) {
+        if (!self::hasAdminSession()) {
             throw new HttpResponseException(
                 $this->fail('Unauthorized: admin login required', 401)
             );
         }
+
+        if (!self::checkSession()) {
+            throw new HttpResponseException(
+                $this->fail('Forbidden: valid X-Admin-Token header is required', 403)
+            );
+        }
     }
 
-    public static function checkSession(array $payload = [])
+    public static function hasAdminSession()
+    {
+        $sessionToken = (string) Session::get('admin_token', '');
+        return Session::get('admin_auth') === true && $sessionToken !== '';
+    }
+
+    public static function checkSession()
     {
         $sessionToken = (string) Session::get('admin_token', '');
         if (Session::get('admin_auth') !== true || $sessionToken === '') {
             return false;
         }
 
-        $clientToken = self::extractToken($payload);
-        return $clientToken !== '' && hash_equals($sessionToken, $clientToken);
+        $clientToken = self::extractToken();
+        if ($clientToken === '') {
+            return false;
+        }
+
+        return hash_equals($sessionToken, $clientToken);
     }
 
-    private static function extractToken(array $payload)
+    private static function extractToken()
     {
         $headerToken = Request::header('x-admin-token');
         if (is_string($headerToken) && trim($headerToken) !== '') {
@@ -42,10 +58,6 @@ abstract class BaseAdmin extends ApiController
         $authHeader = Request::header('authorization');
         if (is_string($authHeader) && stripos($authHeader, 'Bearer ') === 0) {
             return trim(substr($authHeader, 7));
-        }
-
-        if (isset($payload['token']) && is_string($payload['token']) && trim($payload['token']) !== '') {
-            return trim($payload['token']);
         }
 
         return '';

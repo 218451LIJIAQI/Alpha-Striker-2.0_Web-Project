@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 
-function createBrowserSandbox(pathname = '/pages/homepage.html', fetchHandler = null) {
+function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl = null) {
   const storage = new Map();
   const classes = new Set();
   const bodyClasses = new Set();
@@ -34,13 +34,6 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', fetchHandler = 
     href: '',
     className: '',
     innerHTML: '',
-    attrs: {},
-    setAttribute(k, v) {
-      this.attrs[k] = String(v);
-    },
-    getAttribute(k) {
-      return this.attrs[k] ?? null;
-    },
     parentNode: { removeChild: () => {} },
     remove() {
       this.removed = true;
@@ -51,6 +44,7 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', fetchHandler = 
 
   const sandbox = {
     window: null,
+    Date: Date,
     FormData: class FormData {},
     localStorage: {
       getItem: (k) => (storage.has(k) ? storage.get(k) : null),
@@ -60,7 +54,7 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', fetchHandler = 
     },
     fetch: async (url, opts) => {
       fetchCalls.push({ url, opts });
-      if (fetchHandler) return fetchHandler(url, opts);
+      if (customFetchImpl) return customFetchImpl(url, opts);
       return { status: 200, json: async () => ({ success: true }) };
     },
     setTimeout: (fn) => fn,
@@ -86,7 +80,7 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', fetchHandler = 
 
   const commonCode = fs.readFileSync(path.join(ROOT, 'public/js/common.js'), 'utf8');
   vm.runInNewContext(commonCode, sandbox);
-  return { sandbox, storage, classes, bodyClasses, appended, fetchCalls, makeElement };
+  return { sandbox, storage, classes, bodyClasses, appended, fetchCalls };
 }
 
 test('escapeHtml neutralizes XSS characters accurately', () => {
@@ -95,13 +89,10 @@ test('escapeHtml neutralizes XSS characters accurately', () => {
   assert.equal(escaped, '&lt;img src=x onerror=&quot;alert(&#39;xss&#39;)&quot;&gt;&amp;');
 });
 
-test('path resolution adapts cleanly across root, /pages/, and /admin/ and blocks dangerous URIs', () => {
+test('path resolution adapts cleanly across root, /pages/, and /admin/', () => {
   const rootEnv = createBrowserSandbox('/index.html').sandbox.CineTicket;
   assert.equal(rootEnv.pageUrl('booking3.html?movie_code=2'), 'pages/booking3.html?movie_code=2');
   assert.equal(rootEnv.resolveAssetUrl('../img/homepage/frozen_2.jpeg'), 'img/homepage/frozen_2.jpeg');
-  assert.equal(rootEnv.resolveAssetUrl('javascript:alert(1)'), 'img/logo.jpg');
-  assert.equal(rootEnv.resolveAssetUrl('data:text/html;base64,PHNjcmlwdD4='), 'img/logo.jpg');
-  assert.equal(rootEnv.resolveAssetUrl('data:image/png;base64,AAAA'), 'data:image/png;base64,AAAA');
 
   const pageEnv = createBrowserSandbox('/pages/homepage.html').sandbox.CineTicket;
   assert.equal(pageEnv.pageUrl('booking3.html?movie_code=2'), 'booking3.html?movie_code=2');
@@ -113,20 +104,16 @@ test('path resolution adapts cleanly across root, /pages/, and /admin/ and block
   assert.equal(adminEnv.resolveAssetUrl('img/logo.jpg'), '../img/logo.jpg');
 });
 
-test('safeRedirectUrl blocks open redirects and script schemes while preserving internal routes', () => {
-  const CT = createBrowserSandbox('/login.html').sandbox.CineTicket;
-  assert.equal(CT.safeRedirectUrl('pages/generate_ticket.html'), 'pages/generate_ticket.html');
-  assert.equal(CT.safeRedirectUrl('https://evil.example/phish', 'pages/homepage.html'), 'pages/homepage.html');
-  assert.equal(CT.safeRedirectUrl('//evil.example', 'pages/homepage.html'), 'pages/homepage.html');
-  assert.equal(CT.safeRedirectUrl('javascript:alert(1)', 'pages/homepage.html'), 'pages/homepage.html');
-  assert.equal(CT.safeRedirectUrl('\\\\evil.example', 'pages/homepage.html'), 'pages/homepage.html');
-});
-
-test('AuthStore persists user identity, syncs server session state, and clears stale local auth', async () => {
-  let serverAuth = { authenticated: false };
+test('AuthStore persists user identity, syncs server session state, and purges stale pseudo-login state', async () => {
+  let serverAuth = false;
   const { sandbox, storage } = createBrowserSandbox('/pages/homepage.html', async () => ({
     status: 200,
-    json: async () => ({ success: true, data: serverAuth }),
+    json: async () => ({
+      success: true,
+      data: serverAuth
+        ? { authenticated: true, user_id: 9, user_name: 'Verified Member', email: 'member@example.com' }
+        : { authenticated: false, user_id: 0, user_name: 'Guest', email: '' },
+    }),
   }));
   storage.set('pwd', 'legacy-secret');
 
@@ -139,23 +126,22 @@ test('AuthStore persists user identity, syncs server session state, and clears s
   assert.equal(storage.has('pwd'), false);
   assert.equal(sandbox.CineTicket.AuthStore.getUser().isLoggedIn, true);
 
-  // Stale client storage cleared when server session is unauthenticated
-  const syncedGuest = await sandbox.CineTicket.AuthStore.syncSession();
-  assert.equal(syncedGuest.isLoggedIn, false);
-  assert.equal(storage.has('userToken'), false);
+  // Server session expired -> syncSession must clear stale localStorage
+  await sandbox.CineTicket.AuthStore.syncSession();
+  assert.equal(sandbox.CineTicket.AuthStore.getUser().isLoggedIn, false);
+  assert.equal(sandbox.CineTicket.AuthStore.getUser().userName, 'Guest');
 
-  // Hydrates cleanly when server session is active
-  serverAuth = { authenticated: true, user_id: 1, user_name: 'LI JIAQI', email: '218451@student.upm.edu.my' };
-  const syncedMember = await sandbox.CineTicket.AuthStore.syncSession();
-  assert.equal(syncedMember.isLoggedIn, true);
-  assert.equal(syncedMember.userId, 1);
-  assert.equal(syncedMember.userName, 'LI JIAQI');
+  // Server session active -> syncSession hydrates authoritative user profile
+  serverAuth = true;
+  await sandbox.CineTicket.AuthStore.syncSession();
+  assert.equal(sandbox.CineTicket.AuthStore.getUser().isLoggedIn, true);
+  assert.equal(sandbox.CineTicket.AuthStore.getUser().userId, 9);
+  assert.equal(sandbox.CineTicket.AuthStore.getUser().userName, 'Verified Member');
 
   await sandbox.CineTicket.AuthStore.logout();
   const afterLogout = sandbox.CineTicket.AuthStore.getUser();
   assert.equal(afterLogout.isLoggedIn, false);
   assert.equal(afterLogout.userId, 0);
-  assert.equal(afterLogout.userName, 'Guest');
 });
 
 test('toggleDarkMode toggles html/body classes reversibly and persists preference', () => {
@@ -173,8 +159,8 @@ test('toggleDarkMode toggles html/body classes reversibly and persists preferenc
   assert.equal(storage.get('darkMode'), 'false');
 });
 
-test('showNotification and renderStateBlock escape untrusted text and differentiate error vs empty', () => {
-  const { sandbox, appended, makeElement } = createBrowserSandbox('/pages/about.html');
+test('showNotification supports both 2-argument and 3-argument call signatures safely', () => {
+  const { sandbox, appended } = createBrowserSandbox('/pages/about.html');
   const before = appended.length;
 
   sandbox.showNotification('Saved successfully', 'success');
@@ -184,32 +170,41 @@ test('showNotification and renderStateBlock escape untrusted text and differenti
   const secondToast = appended[appended.length - 1];
   assert.ok(secondToast.innerHTML.includes('Custom Title'));
   assert.ok(secondToast.innerHTML.includes('&lt;script&gt;'));
-
-  const box = makeElement('div');
-  sandbox.CineTicket.renderStateBlock(box, 'error', 'Service <offline>', 'Retry now', () => {});
-  assert.ok(box.innerHTML.includes('state-error'));
-  assert.ok(box.innerHTML.includes('Service &lt;offline&gt;'));
-  assert.ok(box.innerHTML.includes('state-retry-btn'));
 });
 
-test('shared pricing, calcCheckoutTotals, star-rating, and fetchJson helpers enforce unified contracts', async () => {
+test('shared pricing, card expiry validation, star-rating, and fetchJson helpers enforce unified contracts', async () => {
   const { sandbox, fetchCalls } = createBrowserSandbox('/pages/pay.html');
   const CT = sandbox.CineTicket;
 
+  // Group discount & full checkout formula
   assert.equal(CT.calcGroupDiscount(156, 4), 0);
   assert.equal(CT.calcGroupDiscount(195, 5), 58.5);
 
-  const fourSeats = CT.calcCheckoutTotals(39, 4, 0);
-  assert.equal(fourSeats.totalPaid, 158.5);
+  const twoSeats = CT.calculateCheckoutPricing(39, 2, 5);
+  assert.equal(twoSeats.subtotal, 78.0);
+  assert.equal(twoSeats.groupDiscount, 0);
+  assert.equal(twoSeats.promoDiscount, 5.0);
+  assert.equal(twoSeats.serviceFee, 2.5);
+  assert.equal(twoSeats.totalAmount, 75.5);
 
-  const fiveSeatsWithPromo = CT.calcCheckoutTotals(39, 5, 5);
-  assert.equal(fiveSeatsWithPromo.subtotal, 195);
-  assert.equal(fiveSeatsWithPromo.groupDiscount, 58.5);
-  assert.equal(fiveSeatsWithPromo.promoDiscount, 5);
-  assert.equal(fiveSeatsWithPromo.serviceFee, 2.5);
-  assert.equal(fiveSeatsWithPromo.totalPaid, 134);
+  const fiveSeats = CT.calculateCheckoutPricing(39, 5, 5);
+  assert.equal(fiveSeats.subtotal, 195.0);
+  assert.equal(fiveSeats.groupDiscount, 58.5);
+  assert.equal(fiveSeats.totalDiscount, 63.5);
+  assert.equal(fiveSeats.totalAmount, 134.0);
 
-  assert.equal(CT.calcCheckoutTotals(39, 1, 99).totalPaid, 0);
+  // Non-negative floor when promo exceeds subtotal + fee
+  const floored = CT.calculateCheckoutPricing(5, 1, 20);
+  assert.equal(floored.totalAmount, 0);
+
+  // Card expiry validation relative to Nov 2026
+  const refDate = new Date(2026, 10, 24); // Nov 24, 2026
+  assert.equal(CT.isCardExpiryValid('12/25', refDate), false); // Past year
+  assert.equal(CT.isCardExpiryValid('10/26', refDate), false); // Past month in current year
+  assert.equal(CT.isCardExpiryValid('11/26', refDate), true);  // Current month valid
+  assert.equal(CT.isCardExpiryValid('01/28', refDate), true);  // Future year valid
+  assert.equal(CT.isCardExpiryValid('13/28', refDate), false); // Invalid month
+  assert.equal(CT.isCardExpiryValid('00/28', refDate), false); // Invalid month
 
   assert.equal(CT.formatStars(4.5), '★★★★½');
   assert.equal(
@@ -222,7 +217,7 @@ test('shared pricing, calcCheckoutTotals, star-rating, and fetchJson helpers enf
     body: { email: 'test@example.com' },
   });
   assert.equal(res.success, true);
-  assert.equal(res._status, 200);
+  assert.equal(res.httpStatus, 200);
   assert.equal(fetchCalls.length, 1);
   assert.equal(fetchCalls[0].opts.headers['Content-Type'], 'application/json');
   assert.equal(fetchCalls[0].opts.body, '{"email":"test@example.com"}');

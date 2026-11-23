@@ -106,7 +106,8 @@ body {
   background-color: #e63946;
 }
 
-.exclusive {
+.exclusive,
+.member-exclusive {
   background-color: #3a4ed5;
 }
 
@@ -217,8 +218,12 @@ body {
 
 .terms-link {
   display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
   text-align: center;
-  margin-top: 0.5rem;
+  margin-top: 0.55rem;
   font-size: 0.82rem;
   color: #666;
   text-decoration: none;

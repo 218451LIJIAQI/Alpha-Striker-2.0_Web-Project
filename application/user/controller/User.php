@@ -8,15 +8,15 @@ use think\facade\Session;
 
 class User extends ApiController
 {
-    private const RESET_TTL_SECONDS = 300;
     private const MAX_RESET_ATTEMPTS = 5;
 
     public function reg()
     {
         try {
+            $data     = $this->payload();
             $name     = $this->strParam('name');
             $email    = strtolower($this->strParam('email'));
-            $password = $this->rawPasswordParam('password');
+            $password = isset($data['password']) ? (string) $data['password'] : '';
 
             if ($name === '' || $this->textLen($name) > 50) {
                 return $this->fail('Please enter a valid name (1-50 characters)');
@@ -24,19 +24,27 @@ class User extends ApiController
             if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100) {
                 return $this->fail('Please enter a valid email address');
             }
-            if (strlen($password) < 6 || strlen($password) > 128) {
-                return $this->fail('Password must be between 6 and 128 characters');
+            if (strlen($password) < 6) {
+                return $this->fail('Password must be at least 6 characters');
             }
             if (Db::name('user')->where('email', $email)->find()) {
                 return $this->fail('This email has already been registered');
             }
 
-            $userId = (int) Db::name('user')->insertGetId([
-                'user_name'   => $name,
-                'email'       => $email,
-                'login_pwd'   => password_hash($password, PASSWORD_BCRYPT),
-                'create_time' => date('Y-m-d H:i:s'),
-            ]);
+            try {
+                $userId = (int) Db::name('user')->insertGetId([
+                    'user_name'   => $name,
+                    'email'       => $email,
+                    'login_pwd'   => password_hash($password, PASSWORD_BCRYPT),
+                    'create_time' => date('Y-m-d H:i:s'),
+                ]);
+            } catch (\Throwable $insertErr) {
+                if ($this->isUniqueConflict($insertErr)) {
+                    return $this->fail('This email has already been registered', 409);
+                }
+                throw $insertErr;
+            }
+
             if ($userId <= 0) {
                 return $this->fail('Registration failed');
             }
@@ -50,30 +58,16 @@ class User extends ApiController
     public function login()
     {
         try {
+            $data     = $this->payload();
             $email    = strtolower($this->strParam('email'));
-            $password = $this->rawPasswordParam('password');
+            $password = isset($data['password']) ? (string) $data['password'] : '';
 
             if ($email === '' || $password === '') {
                 return $this->fail('Email and password are required');
             }
 
             $user = Db::name('user')->where('email', $email)->find();
-            if (!$user) {
-                return $this->fail('Invalid email or password');
-            }
-
-            $storedHash    = (string) ($user['login_pwd'] ?? '');
-            $authenticated = $this->verifyStoredPassword($password, $storedHash);
-            if ($authenticated && !preg_match('/^\$2[ayb]\$/', $storedHash)) {
-                Db::name('user')
-                    ->where('user_code', $user['user_code'])
-                    ->update([
-                        'login_pwd'   => password_hash($password, PASSWORD_BCRYPT),
-                        'update_time' => date('Y-m-d H:i:s'),
-                    ]);
-            }
-
-            if (!$authenticated) {
+            if (!$user || !$this->verifyAndUpgradePassword($user, $password)) {
                 return $this->fail('Invalid email or password');
             }
 
@@ -88,12 +82,27 @@ class User extends ApiController
         }
     }
 
+    public function logout()
+    {
+        try {
+            $this->destroySession();
+            return $this->ok(null, 'Logout successful');
+        } catch (\Throwable $e) {
+            return $this->serverError('Logout failed', $e);
+        }
+    }
+
     public function session()
     {
         try {
             $userId = (int) Session::get('user_id', 0);
             if ($userId <= 0) {
-                return $this->ok(['authenticated' => false]);
+                return $this->ok([
+                    'authenticated' => false,
+                    'user_id'       => 0,
+                    'user_name'     => 'Guest',
+                    'email'         => '',
+                ]);
             }
 
             $user = Db::name('user')
@@ -104,7 +113,12 @@ class User extends ApiController
             if (!$user) {
                 Session::delete('user_id');
                 Session::delete('user_email');
-                return $this->ok(['authenticated' => false]);
+                return $this->ok([
+                    'authenticated' => false,
+                    'user_id'       => 0,
+                    'user_name'     => 'Guest',
+                    'email'         => '',
+                ]);
             }
 
             return $this->ok([
@@ -114,141 +128,152 @@ class User extends ApiController
                 'email'         => $user['email'],
             ]);
         } catch (\Throwable $e) {
-            return $this->serverError('Failed to check session', $e);
+            return $this->serverError('Failed to check session status', $e);
         }
-    }
-
-    public function logout()
-    {
-        Session::delete('user_id');
-        Session::delete('user_email');
-        Session::delete('pwd_reset');
-        return $this->ok(null, 'Logout successful');
     }
 
     public function sendResetCode()
     {
         try {
             $email = strtolower($this->strParam('email'));
-            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100) {
                 return $this->fail('Please enter a valid email address');
             }
 
-            $user = Db::name('user')->where('email', $email)->find();
+            $cooldown = (int) Env::get('auth.reset_cooldown', 2);
+            $lastSent = (int) Session::get('reset_sent_at', 0);
+            $now      = time();
+            if ($cooldown > 0 && $lastSent > 0 && ($now - $lastSent) < $cooldown) {
+                return $this->fail('Please wait before requesting another verification code', 429);
+            }
+
+            $user = Db::name('user')->field('user_code, email')->where('email', $email)->find();
             if (!$user) {
-                return $this->fail('Account not found for this email', 404);
+                return $this->fail('Account not found for this email');
             }
 
-            $configuredCode = trim((string) Env::get('auth.reset_code', ''));
-            $otp = $configuredCode !== ''
-                ? $configuredCode
-                : str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+            $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+            $ttl  = max(60, (int) Env::get('auth.reset_ttl', 600));
 
-            Session::set('pwd_reset', [
+            Session::set('reset_email', $email);
+            Session::set('reset_code_hash', password_hash($code, PASSWORD_BCRYPT));
+            Session::set('reset_expires_at', $now + $ttl);
+            Session::set('reset_attempts', 0);
+            Session::set('reset_sent_at', $now);
+
+            $rawExpose = Env::get('auth.expose_reset_code', getenv('CINETIX_EXPOSE_RESET_CODE') ?: false);
+            $expose    = filter_var($rawExpose, FILTER_VALIDATE_BOOLEAN);
+
+            $respData = [
                 'email'      => $email,
-                'code_hash'  => password_hash($otp, PASSWORD_BCRYPT),
-                'expires_at' => time() + self::RESET_TTL_SECONDS,
-                'attempts'   => 0,
-            ]);
-
-            $exposeDemo = filter_var(Env::get('auth.expose_demo_code', true), FILTER_VALIDATE_BOOLEAN);
-            $respData   = ['expires_in' => self::RESET_TTL_SECONDS];
-            if ($exposeDemo) {
-                $respData['demo_code'] = $otp;
+                'expires_in' => $ttl,
+            ];
+            if ($expose) {
+                $respData['debug_code'] = $code;
             }
 
-            return $this->ok($respData, 'Verification code issued');
+            return $this->ok($respData, 'Verification code generated and sent');
         } catch (\Throwable $e) {
-            return $this->serverError('Failed to issue verification code', $e);
+            return $this->serverError('Failed to send verification code', $e);
         }
     }
 
     public function changePassword()
     {
         try {
-            $newPassword     = $this->rawPasswordParam('pwd');
-            $currentPassword = $this->rawPasswordParam('current_password');
-
-            if (strlen($newPassword) < 6 || strlen($newPassword) > 128) {
-                return $this->fail('New password must be between 6 and 128 characters');
-            }
-
-            $sessionUserId = (int) Session::get('user_id', 0);
-            if ($currentPassword !== '' && $sessionUserId > 0) {
-                $user = Db::name('user')->where('user_code', $sessionUserId)->find();
-                if (!$user) {
-                    Session::delete('user_id');
-                    Session::delete('user_email');
-                    return $this->fail('Session expired, please sign in again', 401);
-                }
-
-                $email = strtolower($this->strParam('email'));
-                if ($email !== '' && $email !== strtolower((string) $user['email'])) {
-                    return $this->fail('Email does not match your signed-in account', 403);
-                }
-
-                if (!$this->verifyStoredPassword($currentPassword, (string) ($user['login_pwd'] ?? ''))) {
-                    return $this->fail('Current password is incorrect');
-                }
-
-                Db::name('user')->where('user_code', $user['user_code'])->update([
-                    'login_pwd'   => password_hash($newPassword, PASSWORD_BCRYPT),
-                    'update_time' => date('Y-m-d H:i:s'),
-                ]);
-                Session::regenerate(true);
-                return $this->ok(null, 'Password updated successfully');
-            }
-
-            $email            = strtolower($this->strParam('email'));
+            $data             = $this->payload();
+            $sessionUserId    = (int) Session::get('user_id', 0);
+            $oldPassword      = isset($data['old_password']) ? (string) $data['old_password'] : '';
+            $newPassword      = isset($data['pwd']) ? (string) $data['pwd'] : '';
             $verificationCode = $this->strParam('verification_code');
 
-            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                return $this->fail('Please enter a valid email address');
-            }
-            if ($verificationCode === '') {
-                return $this->fail('Verification code is required');
+            if (strlen($newPassword) < 6) {
+                return $this->fail('New password must be at least 6 characters');
             }
 
-            $challenge = Session::get('pwd_reset');
-            if (
-                !is_array($challenge)
-                || empty($challenge['email'])
-                || empty($challenge['code_hash'])
-                || empty($challenge['expires_at'])
-            ) {
+            // Path A: Signed-in user changing password by verifying current password
+            if ($oldPassword !== '' && $verificationCode === '') {
+                if ($sessionUserId <= 0) {
+                    return $this->fail('Please sign in to change your password using current password', 401);
+                }
+
+                $user = Db::name('user')->where('user_code', $sessionUserId)->find();
+                if (!$user) {
+                    $this->destroySession();
+                    return $this->fail('Account session is no longer valid', 401);
+                }
+
+                if (!$this->verifyAndUpgradePassword($user, $oldPassword)) {
+                    return $this->fail('Current password is incorrect', 401);
+                }
+
+                if (hash_equals($oldPassword, $newPassword)) {
+                    return $this->fail('New password must be different from your current password');
+                }
+
+                $updated = Db::name('user')
+                    ->where('user_code', $sessionUserId)
+                    ->update([
+                        'login_pwd'   => password_hash($newPassword, PASSWORD_BCRYPT),
+                        'update_time' => date('Y-m-d H:i:s'),
+                    ]);
+
+                if ($updated === false) {
+                    return $this->fail('Password update failed');
+                }
+
+                $this->clearResetChallenge();
+                $this->rotateSession();
+                Session::set('user_id', $sessionUserId);
+                Session::set('user_email', $user['email']);
+
+                return $this->ok(null, 'Password changed successfully');
+            }
+
+            // Path B: Dynamic 6-digit verification code reset bound to session & email
+            $email = strtolower($this->strParam('email'));
+            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100) {
+                return $this->fail('Please enter a valid email address');
+            }
+            if (!preg_match('/^\d{6}$/', $verificationCode)) {
+                return $this->fail('Please enter the 6-digit verification code');
+            }
+
+            $resetEmail   = (string) Session::get('reset_email', '');
+            $resetHash    = (string) Session::get('reset_code_hash', '');
+            $expiresAt    = (int) Session::get('reset_expires_at', 0);
+            $attempts     = (int) Session::get('reset_attempts', 0);
+
+            if ($resetEmail === '' || $resetHash === '' || $expiresAt <= 0) {
                 return $this->fail('Please request a verification code first');
             }
 
-            if (time() > (int) $challenge['expires_at']) {
-                Session::delete('pwd_reset');
-                return $this->fail('Verification code has expired, please request a new one');
+            if (time() > $expiresAt) {
+                $this->clearResetChallenge();
+                return $this->fail('Verification code has expired. Please request a new code.');
             }
 
-            if (strtolower((string) $challenge['email']) !== $email) {
-                return $this->fail('Verification code does not match this email address');
-            }
-
-            $attempts = (int) ($challenge['attempts'] ?? 0);
             if ($attempts >= self::MAX_RESET_ATTEMPTS) {
-                Session::delete('pwd_reset');
-                return $this->fail('Too many invalid attempts, please request a new code');
+                $this->clearResetChallenge();
+                return $this->fail('Too many failed verification attempts. Please request a new code.', 429);
             }
 
-            if (!password_verify($verificationCode, (string) $challenge['code_hash'])) {
+            $emailMatch = hash_equals($resetEmail, $email);
+            $codeMatch  = password_verify($verificationCode, $resetHash);
+            if (!$emailMatch || !$codeMatch) {
                 $attempts++;
                 if ($attempts >= self::MAX_RESET_ATTEMPTS) {
-                    Session::delete('pwd_reset');
-                    return $this->fail('Too many invalid attempts, please request a new code');
+                    $this->clearResetChallenge();
+                    return $this->fail('Too many failed verification attempts. Please request a new code.', 429);
                 }
-                $challenge['attempts'] = $attempts;
-                Session::set('pwd_reset', $challenge);
+                Session::set('reset_attempts', $attempts);
                 return $this->fail('Verification code is incorrect');
             }
 
             $user = Db::name('user')->where('email', $email)->find();
             if (!$user) {
-                Session::delete('pwd_reset');
-                return $this->fail('Account not found for this email', 404);
+                $this->clearResetChallenge();
+                return $this->fail('Account not found for this email');
             }
 
             $updated = Db::name('user')
@@ -262,9 +287,12 @@ class User extends ApiController
                 return $this->fail('Password update failed');
             }
 
-            Session::delete('pwd_reset');
-            Session::delete('user_id');
-            Session::delete('user_email');
+            $this->clearResetChallenge();
+            $this->rotateSession();
+            if ($sessionUserId > 0 && $sessionUserId === (int) $user['user_code']) {
+                Session::set('user_id', $sessionUserId);
+                Session::set('user_email', $user['email']);
+            }
 
             return $this->ok(null, 'Password changed successfully');
         } catch (\Throwable $e) {
@@ -272,25 +300,43 @@ class User extends ApiController
         }
     }
 
-    private function verifyStoredPassword($plain, $storedHash)
+    private function verifyAndUpgradePassword(array $user, $password)
     {
-        if ($storedHash === '') {
-            return false;
-        }
+        $storedHash = (string) ($user['login_pwd'] ?? '');
         if (preg_match('/^\$2[ayb]\$/', $storedHash)) {
-            return password_verify($plain, $storedHash);
+            return password_verify($password, $storedHash);
         }
-        return hash_equals($storedHash, $plain);
+
+        $authenticated = $storedHash !== '' && hash_equals($storedHash, (string) $password);
+        if ($authenticated) {
+            Db::name('user')
+                ->where('user_code', $user['user_code'])
+                ->update([
+                    'login_pwd'   => password_hash((string) $password, PASSWORD_BCRYPT),
+                    'update_time' => date('Y-m-d H:i:s'),
+                ]);
+        }
+        return $authenticated;
+    }
+
+    private function clearResetChallenge()
+    {
+        Session::delete('reset_email');
+        Session::delete('reset_code_hash');
+        Session::delete('reset_expires_at');
+        Session::delete('reset_attempts');
+        Session::delete('reset_sent_at');
     }
 
     private function issueUserSession($userId, $name, $email, $message)
     {
-        Session::regenerate(true);
-        Session::set('user_id', $userId);
-        Session::set('user_email', $email);
+        $this->clearResetChallenge();
+        $this->rotateSession();
+        Session::set('user_id', (int) $userId);
+        Session::set('user_email', (string) $email);
 
         return $this->ok([
-            'user_id'   => $userId,
+            'user_id'   => (int) $userId,
             'user_name' => $name,
             'email'     => $email,
         ], $message);

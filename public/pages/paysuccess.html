@@ -21,8 +21,8 @@
           <div class="spinner"></div>
           <div class="spinner-glow"></div>
         </div>
-        <h2>Confirming Reservation</h2>
-        <p>Finalizing your digital ticket pass and auditorium seats...</p>
+        <h2>Processing Your Payment</h2>
+        <p>Please wait while we securely process your transaction...</p>
         <div class="progress-dots">
           <span class="dot active"></span>
           <span class="dot active"></span>
@@ -30,12 +30,12 @@
         </div>
         <div class="security-notice">
           <i class="fas fa-shield-alt"></i>
-          <span>Your reservation is confirmed and stored in our cinema ledger</span>
+          <span>Your payment is secured with 256-bit SSL encryption</span>
         </div>
       </div>
     </div>
 
-    <div class="payment-success" style="display: none;">
+    <div class="payment-success is-hidden">
       <div class="success-content">
         <div class="success-animation">
           <div class="success-checkmark">
@@ -53,6 +53,10 @@
               <span>Booking ID: <strong>#BK-CONFIRMED</strong></span>
             </div>
             <div class="detail-item">
+              <i class="fas fa-envelope"></i>
+              <span>Confirmation email sent</span>
+            </div>
+            <div class="detail-item">
               <i class="fas fa-qrcode"></i>
               <span>Digital e-ticket ready</span>
             </div>
@@ -60,24 +64,20 @@
         </div>
 
         <div class="action-buttons">
-          <button type="button" class="primary-btn" id="btn-back-home">
+          <button type="button" class="primary-btn" onclick="location.href='homepage.html'">
             <i class="fas fa-home"></i>
             Back to Home
           </button>
-          <button type="button" class="secondary-btn" id="btn-view-tickets">
+          <button type="button" class="secondary-btn" onclick="location.href='generate_ticket.html'">
             <i class="fas fa-list"></i>
             View My Bookings
-          </button>
-          <button type="button" class="secondary-btn" id="btn-print-receipt">
-            <i class="fas fa-print"></i>
-            Print Receipt
           </button>
         </div>
 
         <div class="next-steps">
           <h3>What's Next?</h3>
           <div class="steps-grid">
-            <div class="step-item" id="step-open-tickets" tabindex="0" role="button">
+            <div class="step-item" onclick="location.href='generate_ticket.html'">
               <i class="fas fa-qrcode"></i>
               <h4>Print or Save Ticket</h4>
               <p>Access or print your digital ticket pass</p>

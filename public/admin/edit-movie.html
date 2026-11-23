@@ -17,7 +17,7 @@
     <div class="page-header">
       <div>
         <h1><i class="fas fa-edit"></i> Edit Movie</h1>
-        <p>Update title, genre, runtime, ticket price, badge, or theater schedules.</p>
+        <p>Update title, genre, runtime, ticket price, highlight badge, or assigned theaters.</p>
       </div>
     </div>
 
@@ -54,24 +54,12 @@
 
         <div class="form-group">
           <label for="money" class="form-label">Ticket Price ($) *</label>
-          <input type="number" id="money" name="money" class="form-input" step="0.01" min="0.01" max="9999.99" required>
+          <input type="number" id="money" name="money" class="form-input" step="0.01" min="0" required>
         </div>
 
         <div class="form-group">
           <label for="tag" class="form-label">Highlight Badge (Optional)</label>
           <input type="text" id="tag" name="tag" class="form-input" maxlength="50">
-        </div>
-
-        <div class="form-group">
-          <label for="daily_showtimes" class="form-label">Daily Showtimes per Theater *</label>
-          <select id="daily_showtimes" name="daily_showtimes" class="form-input">
-            <option value="1">1 Showtime / Day</option>
-            <option value="2">2 Showtimes / Day</option>
-            <option value="3">3 Showtimes / Day</option>
-            <option value="4">4 Showtimes / Day</option>
-            <option value="5">5 Showtimes / Day</option>
-            <option value="6">6 Showtimes / Day</option>
-          </select>
         </div>
 
         <div class="form-group full-width">
@@ -83,8 +71,14 @@
         </div>
 
         <div class="form-group full-width">
-          <label class="form-label">Screening Partner Theaters</label>
-          <div id="theater-checklist"></div>
+          <div class="form-label-row">
+            <span class="form-label">Screening Theaters</span>
+            <div class="mini-link-group">
+              <button type="button" class="mini-link-btn" id="select-all-theaters">Select All</button>
+              <button type="button" class="mini-link-btn" id="clear-all-theaters">Clear</button>
+            </div>
+          </div>
+          <div id="theater-check-grid" class="relation-check-grid"></div>
         </div>
       </div>
 
@@ -108,13 +102,12 @@
 
       const imgInput = document.getElementById('img');
       const syncPreview = AdminApp.bindImagePreview(imgInput, document.getElementById('poster-preview'));
-      const checklistEl = document.getElementById('theater-checklist');
+      const theaterGrid = document.getElementById('theater-check-grid');
 
       const [detailRes, theatersRes] = await Promise.all([
         AdminApp.apiFetch('/index.php/admin/movie/getMovieByCode?movie_code=' + encodeURIComponent(movieCode)),
         AdminApp.apiFetch('/index.php/admin/theater/index'),
       ]);
-
       if (!detailRes.success || !detailRes.data) {
         window.showToast(detailRes.message || 'Movie not found', 'error');
         setTimeout(function () { window.location.href = 'movies.html'; }, 700);
@@ -128,12 +121,24 @@
       document.getElementById('star').value = m.star !== undefined ? m.star : '5.0';
       document.getElementById('money').value = m.money !== undefined ? m.money : '39.00';
       document.getElementById('tag').value = m.tag || '';
-      document.getElementById('daily_showtimes').value = String(m.daily_showtimes || 4);
       imgInput.value = m.img || '';
       syncPreview();
 
       const theaters = theatersRes.success && Array.isArray(theatersRes.data) ? theatersRes.data : [];
-      AdminApp.renderRelationChecklist(checklistEl, theaters, 'theater_code', 'theater_name', m.theater_codes || [], 'theater_codes');
+      AdminApp.renderCheckList(
+        theaterGrid,
+        theaters,
+        'theater_code',
+        function (t) { return t.theater_name; },
+        Array.isArray(m.theater_codes) ? m.theater_codes : []
+      );
+
+      document.getElementById('select-all-theaters').addEventListener('click', function () {
+        theaterGrid.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = true; });
+      });
+      document.getElementById('clear-all-theaters').addEventListener('click', function () {
+        theaterGrid.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
+      });
 
       document.getElementById('edit-movie-form').addEventListener('submit', function (e) {
         e.preventDefault();
@@ -145,9 +150,8 @@
           star: document.getElementById('star').value,
           money: document.getElementById('money').value,
           tag: document.getElementById('tag').value.trim(),
-          daily_showtimes: document.getElementById('daily_showtimes').value,
           img: imgInput.value.trim(),
-          theater_codes: AdminApp.getCheckedIds(checklistEl, 'theater_codes'),
+          theater_codes: AdminApp.getCheckedIds(theaterGrid),
         }, 'movies.html', 'Movie updated successfully', 'Failed to update movie');
       });
     });

@@ -23,6 +23,26 @@ class Theater extends BaseAdmin
                 ->order('theater_code', 'asc')
                 ->select();
 
+            if (empty($theaters)) {
+                return $this->ok([]);
+            }
+
+            $links    = Db::table('theater_movie')->select();
+            $movieMap = [];
+            foreach ($links as $row) {
+                $tid = (int) $row['theater_code'];
+                $movieMap[$tid][] = (int) $row['movie_code'];
+            }
+
+            foreach ($theaters as &$t) {
+                $tid              = (int) $t['theater_code'];
+                $mCodes           = $movieMap[$tid] ?? [];
+                sort($mCodes);
+                $t['movie_codes'] = $mCodes;
+                $t['movie_count'] = count($mCodes);
+            }
+            unset($t);
+
             return $this->ok($theaters);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to query theaters', $e);
@@ -38,7 +58,17 @@ class Theater extends BaseAdmin
             }
 
             $theater = Db::name('theater')->where('theater_code', $theaterId)->find();
-            return $theater ? $this->ok($theater) : $this->fail('Theater not found', 404);
+            if (!$theater) {
+                return $this->fail('Theater not found', 404);
+            }
+
+            $mCodes = Db::table('theater_movie')
+                ->where('theater_code', $theaterId)
+                ->order('movie_code', 'asc')
+                ->column('movie_code');
+            $theater['movie_codes'] = array_map('intval', $mCodes ?: []);
+
+            return $this->ok($theater);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to query theater details', $e);
         }
@@ -47,41 +77,38 @@ class Theater extends BaseAdmin
     public function create()
     {
         try {
-            [$data, $error] = $this->prepareTheaterData($this->payload());
+            $payload        = $this->payload();
+            [$data, $error] = $this->prepareTheaterData($payload);
             if ($error !== null) {
                 return $this->fail($error);
             }
 
-            $now   = date('Y-m-d H:i:s');
-            $today = date('Y-m-d');
-            $data['create_time'] = $now;
+            $hasMovieKey = array_key_exists('movie_codes', $payload);
+            $movieCodes  = $hasMovieKey
+                ? $this->resolveValidMovieIds($payload['movie_codes'])
+                : array_map('intval', Db::name('movies')->order('movie_code', 'asc')->column('movie_code') ?: []);
 
             Db::startTrans();
             try {
-                $theaterId = (int) Db::name('theater')->insertGetId($data);
+                $data['create_time'] = date('Y-m-d H:i:s');
+                $theaterId           = (int) Db::name('theater')->insertGetId($data);
                 if ($theaterId <= 0) {
                     Db::rollback();
                     return $this->fail('Failed to create theater');
                 }
 
-                $movieIds = array_map('intval', Db::name('movies')->column('movie_code'));
-                if (!empty($movieIds)) {
-                    $schedRows = [];
-                    foreach ($movieIds as $mid) {
-                        $schedRows[] = [
-                            'theater_code'    => $theaterId,
-                            'movie_code'      => $mid,
-                            'start_date'      => $today,
-                            'end_date'        => '2027-12-31',
-                            'daily_showtimes' => 3,
-                            'created_time'    => $now,
-                        ];
-                    }
-                    Db::table('theater_movie')->insertAll($schedRows);
+                if (empty($data['theater_id'])) {
+                    $autoCode = 'TH-' . str_pad((string) $theaterId, 3, '0', STR_PAD_LEFT);
+                    Db::name('theater')->where('theater_code', $theaterId)->update(['theater_id' => $autoCode]);
                 }
 
+                $this->syncTheaterMovies($theaterId, $movieCodes);
                 Db::commit();
-                return $this->ok(['theater_code' => $theaterId], 'Theater created successfully');
+
+                return $this->ok([
+                    'theater_code' => $theaterId,
+                    'movie_codes'  => $movieCodes,
+                ], 'Theater created successfully');
             } catch (\Throwable $txErr) {
                 Db::rollback();
                 throw $txErr;
@@ -94,25 +121,44 @@ class Theater extends BaseAdmin
     public function update($theater_code = '')
     {
         try {
+            $payload   = $this->payload();
             $theaterId = $this->idParam('theater_code', $theater_code);
             if ($theaterId <= 0) {
                 return $this->fail('Valid theater_code is required');
             }
+
             if (!Db::name('theater')->where('theater_code', $theaterId)->find()) {
                 return $this->fail('Theater not found', 404);
             }
 
-            [$data, $error] = $this->prepareTheaterData($this->payload());
+            [$data, $error] = $this->prepareTheaterData($payload);
             if ($error !== null) {
                 return $this->fail($error);
             }
 
-            $data['update_time'] = date('Y-m-d H:i:s');
-            if (Db::name('theater')->where('theater_code', $theaterId)->update($data) === false) {
-                return $this->fail('Failed to update theater');
-            }
+            $hasMovieKey = array_key_exists('movie_codes', $payload);
+            $movieCodes  = $hasMovieKey
+                ? $this->resolveValidMovieIds($payload['movie_codes'])
+                : null;
 
-            return $this->ok(['theater_code' => $theaterId], 'Theater updated successfully');
+            Db::startTrans();
+            try {
+                $data['update_time'] = date('Y-m-d H:i:s');
+                if (Db::name('theater')->where('theater_code', $theaterId)->update($data) === false) {
+                    Db::rollback();
+                    return $this->fail('Failed to update theater');
+                }
+
+                if ($movieCodes !== null) {
+                    $this->syncTheaterMovies($theaterId, $movieCodes);
+                }
+
+                Db::commit();
+                return $this->ok(['theater_code' => $theaterId], 'Theater updated successfully');
+            } catch (\Throwable $txErr) {
+                Db::rollback();
+                throw $txErr;
+            }
         } catch (\Throwable $e) {
             return $this->serverError('Failed to update theater', $e);
         }
@@ -125,25 +171,59 @@ class Theater extends BaseAdmin
             if ($theaterId <= 0) {
                 return $this->fail('Valid theater_code is required');
             }
-            if (!Db::name('theater')->where('theater_code', $theaterId)->find()) {
-                return $this->fail('Theater not found', 404);
-            }
 
             Db::startTrans();
             try {
+                if (!Db::name('theater')->where('theater_code', $theaterId)->find()) {
+                    Db::rollback();
+                    return $this->fail('Theater not found', 404);
+                }
+
                 Db::table('theater_movie')->where('theater_code', $theaterId)->delete();
                 Db::name('seat')->where('theater_code', $theaterId)->delete();
                 Db::name('theater')->where('theater_code', $theaterId)->delete();
+
                 Db::commit();
+                return $this->ok(['theater_code' => $theaterId], 'Theater deleted successfully');
             } catch (\Throwable $txErr) {
                 Db::rollback();
                 throw $txErr;
             }
-
-            return $this->ok(['theater_code' => $theaterId], 'Theater deleted successfully');
         } catch (\Throwable $e) {
             return $this->serverError('Failed to delete theater', $e);
         }
+    }
+
+    private function syncTheaterMovies($theaterId, array $movieCodes)
+    {
+        Db::table('theater_movie')->where('theater_code', $theaterId)->delete();
+        if (empty($movieCodes)) {
+            return;
+        }
+
+        $now  = date('Y-m-d H:i:s');
+        $rows = [];
+        foreach ($movieCodes as $mid) {
+            $rows[] = [
+                'theater_code'    => (int) $theaterId,
+                'movie_code'      => (int) $mid,
+                'start_date'      => '2026-01-01',
+                'end_date'        => '2027-12-31',
+                'daily_showtimes' => 4,
+                'created_time'    => $now,
+            ];
+        }
+        Db::table('theater_movie')->insertAll($rows);
+    }
+
+    private function resolveValidMovieIds($raw)
+    {
+        $ids = $this->normalizeIdArray($raw);
+        if (empty($ids)) {
+            return [];
+        }
+        $valid = Db::name('movies')->where('movie_code', 'in', $ids)->order('movie_code', 'asc')->column('movie_code');
+        return array_map('intval', $valid ?: []);
     }
 
     private function prepareTheaterData(array $payload)
@@ -151,27 +231,37 @@ class Theater extends BaseAdmin
         $data = $this->pickAllowed($payload, self::ALLOWED_FIELDS);
 
         if (empty($data['theater_name']) || $this->textLen($data['theater_name']) > 200) {
-            return [null, 'Theater name is required (1-200 characters)'];
+            return [null, 'Theater name (1-200 characters) is required'];
         }
         if (empty($data['address']) || $this->textLen($data['address']) > 500) {
-            return [null, 'Theater address is required (1-500 characters)'];
+            return [null, 'Theater address (1-500 characters) is required'];
         }
-        if (empty($data['img']) || !$this->isSafeAssetUrl($data['img'])) {
-            return [null, 'A valid theater image path or URL is required'];
+        if (empty($data['img']) || $this->textLen($data['img']) > 500) {
+            return [null, 'Theater image path or URL (1-500 characters) is required'];
         }
-        if (array_key_exists('star', $payload) && is_bool($payload['star'])) {
-            return [null, 'Rating must be between 0.0 and 5.0'];
+        if (isset($data['amenity']) && $this->textLen($data['amenity']) > 500) {
+            return [null, 'Amenities list must be 500 characters or fewer'];
         }
+        if (isset($data['reviews']) && $this->textLen($data['reviews']) > 50) {
+            return [null, 'Reviews label must be 50 characters or fewer'];
+        }
+        if (isset($data['distance']) && $this->textLen($data['distance']) > 50) {
+            return [null, 'Distance label must be 50 characters or fewer'];
+        }
+        if (isset($data['theater_id']) && $this->textLen($data['theater_id']) > 100) {
+            return [null, 'Theater code label must be 100 characters or fewer'];
+        }
+
         $star = isset($data['star']) && $data['star'] !== '' ? $data['star'] : 4.8;
         if (!is_numeric($star) || (float) $star < 0 || (float) $star > 5) {
             return [null, 'Rating must be between 0.0 and 5.0'];
         }
 
         $data['star']       = round((float) $star, 1);
-        $data['amenity']    = !empty($data['amenity']) ? $this->textSlice($data['amenity'], 500) : null;
-        $data['reviews']    = !empty($data['reviews']) ? $this->textSlice($data['reviews'], 50) : null;
-        $data['distance']   = !empty($data['distance']) ? $this->textSlice($data['distance'], 50) : null;
-        $data['theater_id'] = !empty($data['theater_id']) ? $this->textSlice($data['theater_id'], 100) : null;
+        $data['amenity']    = isset($data['amenity']) && $data['amenity'] !== '' ? $data['amenity'] : null;
+        $data['reviews']    = isset($data['reviews']) && $data['reviews'] !== '' ? $data['reviews'] : null;
+        $data['distance']   = isset($data['distance']) && $data['distance'] !== '' ? $data['distance'] : null;
+        $data['theater_id'] = isset($data['theater_id']) && $data['theater_id'] !== '' ? $data['theater_id'] : null;
 
         return [$data, null];
     }

@@ -7,9 +7,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   const searchInput = document.querySelector('.search-input');
   const searchBtn = document.querySelector('.search-btn');
-  const viewAllBtn = document.getElementById('view-all-movies-btn');
   const filterButtons = document.querySelectorAll('.btn-filter');
-  let requestSeq = 0;
 
   fetchMovies('all');
 
@@ -22,8 +20,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
-  viewAllBtn?.addEventListener('click', fetchAllMovies);
-
   async function triggerSearch() {
     const keyword = searchInput ? searchInput.value.trim() : '';
     resetGenreSelection();
@@ -32,79 +28,19 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
-    const seq = ++requestSeq;
-    const CT = window.CineTicket;
-    CT.renderStateBlock(movieGrid, 'loading', 'Searching movies...', 'Matching titles, genres, and highlight badges.');
-
     try {
-      const payload = await CT.fetchJson(
+      const payload = await window.CineTicket.fetchJson(
         '/index.php/movie/movies/searchMovies?keyword=' + encodeURIComponent(keyword)
       );
-      if (seq !== requestSeq) return;
       if (payload.success) {
         renderMovies(payload.data || []);
       } else {
-        CT.renderStateBlock(
-          movieGrid,
-          'error',
-          'Movie search failed',
-          payload.message || 'Could not complete your search request.',
-          triggerSearch
-        );
+        window.showToast(payload.message || 'Search failed', 'error');
       }
     } catch (_) {
-      if (seq !== requestSeq) return;
-      CT.renderStateBlock(
-        movieGrid,
-        'error',
-        'Unable to search movies right now',
-        'Please check your connection and try again.',
-        triggerSearch
-      );
+      window.showToast('Unable to search movies right now', 'error');
     }
   }
-
-  async function fetchMovies(genre) {
-    const seq = ++requestSeq;
-    const CT = window.CineTicket;
-    const targetGenre = genre || 'all';
-    CT.renderStateBlock(movieGrid, 'loading', 'Loading movie catalog...', 'Fetching current feature screenings.');
-
-    try {
-      const payload = await CT.fetchJson(
-        '/index.php/movie/movies/getMovieList?genre=' + encodeURIComponent(targetGenre)
-      );
-      if (seq !== requestSeq) return;
-      if (payload.success) {
-        renderMovies(payload.data || []);
-      } else {
-        CT.renderStateBlock(
-          movieGrid,
-          'error',
-          'Failed to load movie catalog',
-          payload.message || 'The movie catalog service returned an error.',
-          function () { fetchMovies(targetGenre); }
-        );
-      }
-    } catch (_) {
-      if (seq !== requestSeq) return;
-      CT.renderStateBlock(
-        movieGrid,
-        'error',
-        'Unable to connect to movie service',
-        'Could not retrieve the screening catalog. Click Retry to try again.',
-        function () { fetchMovies(targetGenre); }
-      );
-    }
-  }
-
-  function fetchAllMovies() {
-    if (searchInput) searchInput.value = '';
-    resetGenreSelection();
-    fetchMovies('all');
-  }
-
-  window.fetchAllMovies = fetchAllMovies;
 
   searchBtn?.addEventListener('click', triggerSearch);
   searchInput?.addEventListener('keydown', function (e) {
@@ -121,6 +57,28 @@ function resetGenreSelection() {
   });
 }
 
+function fetchAllMovies() {
+  const searchInput = document.querySelector('.search-input');
+  if (searchInput) searchInput.value = '';
+  resetGenreSelection();
+  fetchMovies('all');
+}
+
+async function fetchMovies(genre) {
+  try {
+    const payload = await window.CineTicket.fetchJson(
+      '/index.php/movie/movies/getMovieList?genre=' + encodeURIComponent(genre || 'all')
+    );
+    if (payload.success) {
+      renderMovies(payload.data || []);
+    } else {
+      window.showToast(payload.message || 'Failed to load movies', 'error');
+    }
+  } catch (_) {
+    window.showToast('Unable to connect to movie service', 'error');
+  }
+}
+
 function renderMovies(movies) {
   const movieGrid = document.querySelector('.movie-grid');
   if (!movieGrid) return;
@@ -129,16 +87,14 @@ function renderMovies(movies) {
   const esc = CT.escapeHtml;
 
   if (!Array.isArray(movies) || movies.length === 0) {
-    CT.renderStateBlock(
-      movieGrid,
-      'empty',
-      'No matching movies found',
-      'Try another search term or browse all genres.'
-    );
+    movieGrid.innerHTML =
+      '<div class="grid-empty-state">' +
+      '<h3>No matching movies found</h3>' +
+      '<p>Try another search term or browse all genres.</p>' +
+      '</div>';
     return;
   }
 
-  const fallbackImg = CT.resolveAssetUrl('img/logo.jpg');
   movieGrid.innerHTML = '';
   movies.forEach(function (movie) {
     const ratingVal = (parseFloat(movie.star) || 5.0).toFixed(1);
@@ -163,11 +119,6 @@ function renderMovies(movies) {
       '<i class="fas fa-ticket-alt"></i> Book Now' +
       '</button>' +
       '</div>';
-
-    const imgEl = card.querySelector('.movie-poster');
-    imgEl.addEventListener('error', function () {
-      if (imgEl.src !== fallbackImg) imgEl.src = fallbackImg;
-    });
 
     card.querySelector('.btn-book').addEventListener('click', function () {
       window.location.href = CT.pageUrl('booking3.html?movie_code=' + encodeURIComponent(movie.movie_code));

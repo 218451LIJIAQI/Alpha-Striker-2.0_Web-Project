@@ -4,17 +4,19 @@ namespace app\common\controller;
 use think\Db;
 use think\facade\Log;
 use think\facade\Request;
+use think\facade\Session;
 
 /**
  * Shared JSON API base controller.
- * Centralizes type-safe parameter parsing, asset/date validation, promo verification,
- * checkout pricing calculation, and uniform JSON responses.
+ * Centralizes payload parsing, mbstring-free UTF-8 string helpers, session rotation/destruction,
+ * authoritative promo verification, checkout pricing calculation, and SQL conflict detection.
  */
 abstract class ApiController
 {
-    public const SERVICE_FEE = 2.50;
+    public const SERVICE_FEE              = 2.50;
     public const GROUP_DISCOUNT_MIN_SEATS = 5;
-    public const GROUP_DISCOUNT_RATE = 0.30;
+    public const GROUP_DISCOUNT_RATE      = 0.30;
+    public const MAX_SEATS_PER_ORDER      = 10;
 
     /** @var array|null */
     private $cachedPayload = null;
@@ -41,104 +43,75 @@ abstract class ApiController
         return $this->cachedPayload = $params;
     }
 
-    protected function hasParam($key)
-    {
-        $payload = $this->payload();
-        return array_key_exists($key, $payload);
-    }
-
     protected function idParam($key, $direct = '')
     {
-        $candidate = ($direct !== '' && $direct !== null) ? $direct : ($this->payload()[$key] ?? null);
-        if (!is_scalar($candidate) || is_bool($candidate)) {
-            return 0;
+        if ($direct !== '' && $direct !== null) {
+            return (int) $direct;
         }
-        $str = trim((string) $candidate);
-        if (!preg_match('/^-?\d+$/', $str)) {
-            return 0;
-        }
-        return (int) $str;
+        $payload = $this->payload();
+        return isset($payload[$key]) && is_numeric($payload[$key]) ? (int) $payload[$key] : 0;
     }
 
     protected function strParam($key, $default = '')
     {
         $payload = $this->payload();
-        if (!isset($payload[$key]) || !is_scalar($payload[$key]) || is_bool($payload[$key])) {
+        if (!isset($payload[$key]) || is_array($payload[$key]) || is_object($payload[$key])) {
             return $default;
         }
-        $clean = str_replace("\0", '', (string) $payload[$key]);
-        return trim($clean);
+        return trim((string) $payload[$key]);
     }
 
-    protected function rawPasswordParam($key)
-    {
-        $payload = $this->payload();
-        if (!isset($payload[$key]) || !is_scalar($payload[$key]) || is_bool($payload[$key])) {
-            return '';
-        }
-        return str_replace("\0", '', (string) $payload[$key]);
-    }
-
-    protected function intListParam($key)
-    {
-        $payload = $this->payload();
-        if (!array_key_exists($key, $payload)) {
-            return null;
-        }
-        $raw = $payload[$key];
-        $items = is_array($raw) ? $raw : ((is_scalar($raw) && !is_bool($raw)) ? explode(',', (string) $raw) : []);
-        $ids = [];
-        foreach ($items as $item) {
-            if (!is_scalar($item) || is_bool($item)) {
-                continue;
-            }
-            $trimmed = trim((string) $item);
-            if ($trimmed === '') {
-                continue;
-            }
-            if (!preg_match('/^\d+$/', $trimmed) || (int) $trimmed <= 0) {
-                return false;
-            }
-            $id = (int) $trimmed;
-            $ids[$id] = $id;
-        }
-        return array_values($ids);
-    }
-
+    /**
+     * Exact UTF-8 character count without requiring ext-mbstring.
+     */
     protected function textLen($value)
     {
         $str = (string) $value;
-        return function_exists('mb_strlen') ? mb_strlen($str, 'UTF-8') : strlen($str);
+        if ($str === '') {
+            return 0;
+        }
+        if (function_exists('mb_strlen')) {
+            return (int) call_user_func('mb_strlen', $str, 'UTF-8');
+        }
+        $matched = preg_match_all('/./us', $str, $m);
+        if ($matched !== false) {
+            return (int) $matched;
+        }
+        return strlen((string) preg_replace('/[\x80-\xBF]/', '', $str));
     }
 
-    protected function textSlice($value, $maxLen)
+    /**
+     * Safe UTF-8 substring helper without requiring ext-mbstring.
+     */
+    protected function textSub($value, $start, $length = null)
     {
         $str = (string) $value;
-        return function_exists('mb_substr') ? mb_substr($str, 0, (int) $maxLen, 'UTF-8') : substr($str, 0, (int) $maxLen);
+        if (function_exists('mb_substr')) {
+            return $length === null
+                ? (string) call_user_func('mb_substr', $str, (int) $start, null, 'UTF-8')
+                : (string) call_user_func('mb_substr', $str, (int) $start, (int) $length, 'UTF-8');
+        }
+        $chars = preg_split('//u', $str, -1, PREG_SPLIT_NO_EMPTY);
+        if (!is_array($chars)) {
+            return $length === null ? substr($str, (int) $start) : (string) substr($str, (int) $start, (int) $length);
+        }
+        $slice = $length === null
+            ? array_slice($chars, (int) $start)
+            : array_slice($chars, (int) $start, (int) $length);
+        return implode('', $slice);
     }
 
-    protected function isValidDate($value)
+    protected function rotateSession()
     {
-        $str = trim((string) $value);
-        if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $str, $m)) {
-            return false;
-        }
-        return checkdate((int) $m[2], (int) $m[3], (int) $m[1]);
+        Session::init();
+        Session::regenerate(true);
     }
 
-    protected function isSafeAssetUrl($value)
+    protected function destroySession()
     {
-        if (!is_string($value)) {
-            return false;
-        }
-        $trimmed = trim($value);
-        if ($trimmed === '' || $this->textLen($trimmed) > 500 || preg_match('/[\x00-\x1F\x7F]/', $trimmed)) {
-            return false;
-        }
-        if (preg_match('/^[a-zA-Z][a-zA-Z0-9+.-]*:/', $trimmed)) {
-            return (bool) preg_match('/^(https?:\/\/|data:image\/[a-zA-Z0-9.+-]+;base64,)/i', $trimmed);
-        }
-        return true;
+        Session::init();
+        Session::clear();
+        Session::destroy();
     }
 
     protected function pickAllowed(array $source, array $allowedFields)
@@ -146,16 +119,29 @@ abstract class ApiController
         $allowed  = array_flip($allowedFields);
         $filtered = [];
         foreach ($source as $key => $value) {
-            if (!isset($allowed[$key])) {
-                continue;
-            }
-            if ($value === null) {
-                $filtered[$key] = null;
-            } elseif (is_scalar($value) && !is_bool($value)) {
-                $filtered[$key] = is_string($value) ? trim(str_replace("\0", '', $value)) : $value;
+            if (isset($allowed[$key])) {
+                $filtered[$key] = is_string($value) ? trim($value) : $value;
             }
         }
         return $filtered;
+    }
+
+    protected function normalizeIdArray($raw)
+    {
+        if (is_string($raw)) {
+            $raw = trim($raw) === '' ? [] : explode(',', $raw);
+        }
+        if (!is_array($raw)) {
+            return [];
+        }
+        $ids = [];
+        foreach ($raw as $item) {
+            if (is_numeric($item) && (int) $item > 0) {
+                $id = (int) $item;
+                $ids[$id] = $id;
+            }
+        }
+        return array_values($ids);
     }
 
     protected function escapeLike($keyword)
@@ -163,86 +149,159 @@ abstract class ApiController
         return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], trim((string) $keyword));
     }
 
-    protected function calculateCheckoutPricing($unitPrice, $seatCount, $promoDiscount = 0.0)
+    /**
+     * Authoritative checkout pricing calculation shared across Offer preview and Seat transaction.
+     */
+    protected function calculatePricing($unitPrice, $seatCount, $promoMoney = 0.0)
     {
-        $unit     = round(max(0.0, (float) $unitPrice), 2);
-        $count    = max(0, (int) $seatCount);
-        $subtotal = round($unit * $count, 2);
-        $groupOff = $count >= self::GROUP_DISCOUNT_MIN_SEATS
+        $count         = max(0, (int) $seatCount);
+        $unit          = round(max(0.0, (float) $unitPrice), 2);
+        $subtotal      = round($unit * $count, 2);
+        $groupDiscount = $count >= self::GROUP_DISCOUNT_MIN_SEATS
             ? round($subtotal * self::GROUP_DISCOUNT_RATE, 2)
             : 0.00;
-        $promoOff = round(max(0.0, (float) $promoDiscount), 2);
-        $fee      = $count > 0 ? self::SERVICE_FEE : 0.00;
-        $total    = max(0.00, round($subtotal - ($groupOff + $promoOff) + $fee, 2));
+        $promoDiscount = round(max(0.0, (float) $promoMoney), 2);
+        $totalDiscount = round($groupDiscount + $promoDiscount, 2);
+        $serviceFee    = $count > 0 ? self::SERVICE_FEE : 0.00;
+        $totalAmount   = max(0.00, round($subtotal - $totalDiscount + $serviceFee, 2));
 
         return [
             'unit_price'     => $unit,
             'seat_count'     => $count,
             'subtotal'       => $subtotal,
-            'group_discount' => $groupOff,
-            'promo_discount' => $promoOff,
-            'service_fee'    => $fee,
-            'total_paid'     => $total,
+            'group_discount' => $groupDiscount,
+            'promo_discount' => $promoDiscount,
+            'total_discount' => $totalDiscount,
+            'service_fee'    => $serviceFee,
+            'total_amount'   => $totalAmount,
         ];
     }
 
-    protected function validateOfferForBooking($rawCode, $movieCode = 0, $screeningDate = '', $sessionUserId = 0)
+    /**
+     * Validates a promo code against existence, expiry date, user ownership, and movie_offer applicability.
+     */
+    protected function validatePromoForContext($rawCode, $movieCode = 0, $sessionUserId = 0, $screeningDate = '')
     {
         $code = strtoupper(trim((string) $rawCode));
         if ($code === '') {
-            return [null, 'Promo code is required'];
+            return [
+                'valid'   => false,
+                'status'  => 200,
+                'message' => 'Promo code is required',
+                'offer'   => null,
+            ];
         }
 
         $offer = Db::name('offer')
-            ->field('offer_code, offer_title, promo_code, offer_validity, badge, money, user_code')
+            ->field('offer_code, offer_title, offer_type, promo_code, offer_validity, badge, money, user_code')
             ->where('promo_code', $code)
             ->find();
 
         if (!$offer) {
-            return [null, 'Invalid promo code'];
+            return [
+                'valid'   => false,
+                'status'  => 200,
+                'message' => 'Invalid promo code',
+                'offer'   => null,
+            ];
         }
 
         $today    = date('Y-m-d');
         $validity = trim((string) ($offer['offer_validity'] ?? ''));
-        if ($this->isValidDate($validity)) {
-            if ($validity < $today) {
-                return [null, 'This promo code has expired'];
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $validity) && $validity < $today) {
+            return [
+                'valid'   => false,
+                'status'  => 200,
+                'message' => 'This promo code has expired',
+                'offer'   => null,
+            ];
+        }
+
+        $ownerUserId = isset($offer['user_code']) && $offer['user_code'] !== null ? (int) $offer['user_code'] : 0;
+        $callerId    = (int) $sessionUserId;
+        if ($ownerUserId > 0) {
+            if ($callerId <= 0) {
+                return [
+                    'valid'   => false,
+                    'status'  => 401,
+                    'message' => 'Please sign in to redeem this member-exclusive promo code',
+                    'offer'   => null,
+                ];
             }
-            if ($this->isValidDate($screeningDate) && $screeningDate > $validity) {
-                return [null, 'This promo code expires before the selected screening date'];
+            if ($callerId !== $ownerUserId) {
+                return [
+                    'valid'   => false,
+                    'status'  => 403,
+                    'message' => 'This promo code belongs to another member account',
+                    'offer'   => null,
+                ];
             }
         }
 
-        $exclusiveOwner = isset($offer['user_code']) ? (int) $offer['user_code'] : 0;
-        if ($exclusiveOwner > 0 && (int) $sessionUserId !== $exclusiveOwner) {
-            return [null, 'This promo code is exclusive to another member account'];
-        }
-
-        if ((int) $movieCode > 0) {
+        $targetMovieId = (int) $movieCode;
+        if ($targetMovieId > 0) {
             $link = Db::table('movie_offer')
+                ->where('movie_code', $targetMovieId)
                 ->where('offer_code', (int) $offer['offer_code'])
-                ->where('movie_code', (int) $movieCode)
                 ->find();
 
             if (!$link) {
-                return [null, 'This promo code is not valid for the selected movie'];
+                return [
+                    'valid'   => false,
+                    'status'  => 200,
+                    'message' => 'This promo code is not applicable to the selected movie',
+                    'offer'   => null,
+                ];
             }
 
-            $refDate   = $this->isValidDate($screeningDate) ? $screeningDate : $today;
-            $validFrom = trim((string) ($link['valid_from'] ?? ''));
-            $validTo   = trim((string) ($link['valid_to'] ?? ''));
-
-            if ($this->isValidDate($validFrom) && $refDate < $validFrom) {
-                return [null, 'This promo code is not yet active for this movie'];
+            $checkDate = ($screeningDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $screeningDate))
+                ? $screeningDate
+                : $today;
+            if (!empty($link['valid_from']) && $checkDate < $link['valid_from']) {
+                return [
+                    'valid'   => false,
+                    'status'  => 200,
+                    'message' => 'This promo code is not yet active for the selected date',
+                    'offer'   => null,
+                ];
             }
-            if ($this->isValidDate($validTo) && $refDate > $validTo) {
-                return [null, 'This promo code has expired for this movie'];
+            if (!empty($link['valid_to']) && $checkDate > $link['valid_to']) {
+                return [
+                    'valid'   => false,
+                    'status'  => 200,
+                    'message' => 'This promo code is not valid for the selected screening date',
+                    'offer'   => null,
+                ];
             }
         }
 
-        unset($offer['user_code']);
-        $offer['money'] = round((float) $offer['money'], 2);
-        return [$offer, null];
+        $safeOffer = [
+            'offer_code'     => (int) $offer['offer_code'],
+            'offer_title'    => $offer['offer_title'],
+            'offer_type'     => $offer['offer_type'],
+            'promo_code'     => $offer['promo_code'],
+            'offer_validity' => $offer['offer_validity'],
+            'badge'          => $offer['badge'],
+            'money'          => round((float) $offer['money'], 2),
+            'user_code'      => $ownerUserId > 0 ? $ownerUserId : null,
+        ];
+
+        return [
+            'valid'   => true,
+            'status'  => 200,
+            'message' => 'Promo code applied',
+            'offer'   => $safeOffer,
+        ];
+    }
+
+    protected function isUniqueConflict($exception)
+    {
+        $code = (string) $exception->getCode();
+        $msg  = $exception->getMessage();
+        if (in_array($code, ['23000', '40001', '1062', '1213'], true)) {
+            return true;
+        }
+        return (bool) preg_match('/duplicate entry|unique constraint|uk_seat_booking|uk_user_email|uk_offer_promo|deadlock/i', $msg);
     }
 
     protected function ok($data = null, $message = 'OK', array $extra = [], $httpCode = 200)

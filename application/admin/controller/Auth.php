@@ -10,8 +10,9 @@ class Auth extends ApiController
     public function login()
     {
         try {
+            $data     = $this->payload();
             $username = $this->strParam('username');
-            $password = $this->rawPasswordParam('password');
+            $password = isset($data['password']) ? (string) $data['password'] : '';
 
             if ($username === '' || $password === '') {
                 return $this->fail('Username and password are required');
@@ -30,7 +31,7 @@ class Auth extends ApiController
                 return $this->fail('Invalid username or password', 401);
             }
 
-            Session::regenerate(true);
+            $this->rotateSession();
             $token = bin2hex(random_bytes(32));
             Session::set('admin_auth', true);
             Session::set('admin_token', $token);
@@ -50,17 +51,25 @@ class Auth extends ApiController
 
     public function logout()
     {
-        Session::delete('admin_auth');
-        Session::delete('admin_token');
-        Session::delete('admin_user');
-        return $this->ok(null, 'Logout successful');
+        try {
+            if (BaseAdmin::hasAdminSession() && !BaseAdmin::checkSession()) {
+                return $this->fail('Forbidden: valid X-Admin-Token header is required', 403);
+            }
+            $this->destroySession();
+            return $this->ok(null, 'Logout successful');
+        } catch (\Throwable $e) {
+            return $this->serverError('Admin logout failed', $e);
+        }
     }
 
     public function checkAuth()
     {
         try {
-            if (!BaseAdmin::checkSession($this->payload())) {
+            if (!BaseAdmin::hasAdminSession()) {
                 return $this->fail('Authentication required', 401);
+            }
+            if (!BaseAdmin::checkSession()) {
+                return $this->fail('Forbidden: valid X-Admin-Token header is required', 403);
             }
 
             return $this->ok([

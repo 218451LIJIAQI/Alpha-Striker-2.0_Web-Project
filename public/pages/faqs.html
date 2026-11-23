@@ -16,105 +16,168 @@
   <main class="info-page card">
     <h1 class="info-page-title center">Frequently Asked Questions (FAQs)</h1>
 
-    <div style="margin: 0 auto 24px; max-width: 540px;">
-      <input type="search" id="faq-search-input" class="search-input" style="width:100%; border:1px solid #cbd5e1; border-radius:999px; padding:12px 18px;" placeholder="Filter FAQs by keyword (e.g. refund, promo, print, VIP)...">
-    </div>
-
-    <div id="faq-list" class="faq-accordion" style="max-width:100%;">
-      <div class="faq-item">
-        <div class="faq-question active">1. How do I register a new account?</div>
-        <div class="faq-answer">
-          Click <strong>Sign In</strong> in the top-right corner and choose <strong>Create Account</strong>. Enter your Full Name, Email, and Password (at least 6 characters), accept the Terms &amp; Privacy Policy, and submit to sign in automatically.
-        </div>
+    <div class="faq-toolbar">
+      <div class="faq-search-box">
+        <input type="text" id="faq-search-input" placeholder="Search FAQs by keyword (e.g. refund, promo code, 4DX, password)...">
+        <button type="button" id="faq-clear-btn" class="btn btn-primary">Reset</button>
       </div>
-
-      <div class="faq-item">
-        <div class="faq-question">2. What if I forget my password?</div>
-        <div class="faq-answer">
-          Click <strong>Forgot Password?</strong> on the Sign In page, enter your registered email address, click <strong>Send Code</strong> to receive a one-time 6-digit verification code (valid for 5 minutes), and set your new password. Signed-in users can also update their password directly using their current password.
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <div class="faq-question">3. How do I search for and book a movie?</div>
-        <div class="faq-answer">
-          Browse <strong>Movies</strong> in the top navigation, filter by genre or search by keyword, and click <strong>Book Now</strong>. Choose your Theater, Date, Showtime, and Seats (A1–H12; Rows D &amp; E are Prime VIP), then click <strong>Proceed to Payment</strong>.
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <div class="faq-question">4. How does the 30% Group Discount work?</div>
-        <div class="faq-answer">
-          Selecting <strong>5 or more seats</strong> in a single booking automatically applies a 30% discount to the ticket subtotal on both the seat picker and checkout pages.
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <div class="faq-question">5. How can I redeem a promo code?</div>
-        <div class="faq-answer">
-          Visit the <a class="guide-link" href="offer.html">Offers</a> page and click <strong>Copy</strong> or <strong>Use on Booking</strong>. At checkout, click <strong>Apply</strong> next to the Promo Code box to verify expiration and movie eligibility before paying.
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <div class="faq-question">6. Which payment methods are accepted?</div>
-        <div class="faq-answer">
-          Credit/Debit Cards (Visa, Mastercard, Amex), PayPal, Apple Pay, and Google Pay are supported at checkout, with a flat $2.50 service fee per order.
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <div class="faq-question">7. How do I access, print, or save my e-ticket as PDF?</div>
-        <div class="faq-answer">
-          Open <a class="guide-link" href="generate_ticket.html">Tickets</a> in the top bar to view your digital passes and barcodes, then click <strong>Print / Save PDF</strong> on any ticket.
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <div class="faq-question">8. Can I cancel a reserved seat?</div>
-        <div class="faq-answer">
-          Signed-in members can cancel their own reserved seats directly from the <a class="guide-link" href="generate_ticket.html">Tickets</a> page. Immediately after cancellation, the seat is released back to the auditorium map.
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <div class="faq-question">9. How do I preview auditorium sightlines in 3D?</div>
-        <div class="faq-answer">
-          Click <strong>3D Auditorium View</strong> on the Seat Selection page or Theater Details page to inspect viewing angles across Rows A–H.
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <div class="faq-question">10. How do I contact customer support?</div>
-        <div class="faq-answer">
-          Use Live Chat on the <a class="guide-link" href="about.html">About</a> page, call <strong>+60 17-607 3401</strong> (9:00 AM – 6:00 PM), or email <a class="guide-link" href="mailto:lijiaqi0807@gmail.com">lijiaqi0807@gmail.com</a>.
-        </div>
+      <div class="filters" id="faq-category-filters">
+        <button type="button" class="btn-filter active" data-cat="all">All</button>
+        <button type="button" class="btn-filter" data-cat="account">Account</button>
+        <button type="button" class="btn-filter" data-cat="booking">Booking</button>
+        <button type="button" class="btn-filter" data-cat="payment">Offers &amp; Payment</button>
+        <button type="button" class="btn-filter" data-cat="tickets">Tickets &amp; Support</button>
       </div>
     </div>
-    <p id="faq-empty-msg" style="display:none; text-align:center; padding:24px; opacity:0.75;">No FAQ items matched your filter.</p>
+
+    <div id="faq-list">
+      <div class="faq-section" data-cat="account">
+        <div class="question"><span>1. How do I register a new account?</span><span>▾</span></div>
+        <div class="answer">
+          - Click <strong>Sign In</strong> in the top-right corner and choose <strong>Create Account</strong>.<br>
+          - Fill in your Full Name, Email, and Password, then agree to the <strong>Terms of Service</strong> and <strong>Privacy Policy</strong>.<br>
+          - Click <strong>Create Account</strong>. You’ll be automatically logged in and redirected to the Movies page.
+        </div>
+      </div>
+
+      <div class="faq-section" data-cat="account">
+        <div class="question"><span>2. What if I forget or want to change my password?</span><span>▾</span></div>
+        <div class="answer">
+          - On the Sign In page, click <strong>Forgot Password?</strong> and request a 6-digit verification code for your registered email.<br>
+          - Signed-in members can also switch to the <strong>Current Password</strong> tab to update their password directly.
+        </div>
+      </div>
+
+      <div class="faq-section" data-cat="booking">
+        <div class="question"><span>3. How do I search for and book a movie?</span><span>▾</span></div>
+        <div class="answer">
+          - Click <strong>Movies</strong> in the top navigation.<br>
+          - Use the search bar or genre filters to find your desired film and click <strong>Book Now</strong>.<br>
+          - Select your Theater, Date, Showtime, and Seats (up to 10 seats per order), then click <strong>Proceed to Payment</strong>.
+        </div>
+      </div>
+
+      <div class="faq-section" data-cat="booking">
+        <div class="question"><span>4. How do I find 4DX, IMAX, or VIP theaters near me?</span><span>▾</span></div>
+        <div class="answer">
+          - Click <strong>Theaters</strong> in the top menu.<br>
+          - Search by theater name or street, or filter by format (IMAX, 4DX, VIP, Dolby Atmos, RPX).<br>
+          - Click <strong>View Theater Details</strong> to inspect the address, amenities, 3D sightlines, and live showtimes.
+        </div>
+      </div>
+
+      <div class="faq-section" data-cat="payment">
+        <div class="question"><span>5. How can I use a promo code or group discount?</span><span>▾</span></div>
+        <div class="answer">
+          - Go to the <strong>Offers</strong> page to copy or claim an active promo code.<br>
+          - On checkout, enter the promo code in the <strong>Promo Code</strong> box and click <strong>Apply</strong>.<br>
+          - Booking 5 or more seats automatically unlocks a <strong>30% group discount</strong> on the ticket subtotal!
+        </div>
+      </div>
+
+      <div class="faq-section" data-cat="account">
+        <div class="question"><span>6. What is the membership program and how does it work?</span><span>▾</span></div>
+        <div class="answer">
+          <strong>Member Perks:</strong> Registered members can receive member-exclusive promo codes, save digital tickets in their wallet, and cancel seats online anytime before the screening.
+        </div>
+      </div>
+
+      <div class="faq-section" data-cat="payment">
+        <div class="question"><span>7. Which payment methods are accepted?</span><span>▾</span></div>
+        <div class="answer">
+          - Major credit/debit cards (Visa, Mastercard, Amex with valid future MM/YY expiry)<br>
+          - PayPal, Apple Pay, and Google Pay<br>
+          Your authoritative booking receipt and digital e-ticket are generated immediately upon confirmation.
+        </div>
+      </div>
+
+      <div class="faq-section" data-cat="tickets">
+        <div class="question"><span>8. How do I access or print my e-ticket?</span><span>▾</span></div>
+        <div class="answer">
+          - Click <strong>Tickets</strong> in the upper-right header bar.<br>
+          - View your reserved row, seat, zone, and barcode, or click <strong>Print / Save PDF</strong>.
+        </div>
+      </div>
+
+      <div class="faq-section" data-cat="tickets">
+        <div class="question"><span>9. Can I cancel or refund my booking?</span><span>▾</span></div>
+        <div class="answer">
+          <strong>Cancellations &amp; Refunds:</strong> Signed-in members can cancel reserved seats directly on the <strong>Tickets</strong> page.<br>
+          <strong>Rescheduling:</strong> Cancel the existing seat reservation and book your preferred new showtime.
+        </div>
+      </div>
+
+      <div class="faq-section" data-cat="tickets">
+        <div class="question"><span>10. How do I get help or contact customer support?</span><span>▾</span></div>
+        <div class="answer">
+          - <strong>Live Chat:</strong> Click Live Chat at the bottom of the <a class="guide-link" href="about.html#contact-section">About</a> page.<br>
+          - <strong>Phone:</strong> Call +60 17-607 3401 (9:00 AM – 6:00 PM).<br>
+          - <strong>Email:</strong> <a class="guide-link" href="mailto:lijiaqi0807@gmail.com">lijiaqi0807@gmail.com</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="faq-empty" class="grid-empty-state is-hidden">
+      <h3>No matching FAQ entries</h3>
+      <p>Try clearing the filter or searching another keyword.</p>
+    </div>
   </main>
 
   <div id="bottom-container"></div>
 
   <script>
     document.addEventListener('DOMContentLoaded', function () {
-      const input = document.getElementById('faq-search-input');
-      const items = document.querySelectorAll('#faq-list .faq-item');
-      const emptyMsg = document.getElementById('faq-empty-msg');
+      const searchInput = document.getElementById('faq-search-input');
+      const clearBtn = document.getElementById('faq-clear-btn');
+      const catButtons = document.querySelectorAll('#faq-category-filters .btn-filter');
+      const sections = Array.from(document.querySelectorAll('#faq-list .faq-section'));
+      const emptyEl = document.getElementById('faq-empty');
+      let activeCat = 'all';
 
-      input?.addEventListener('input', function () {
-        const q = input.value.trim().toLowerCase();
+      function applyFilter() {
+        const kw = (searchInput.value || '').trim().toLowerCase();
         let visible = 0;
-        items.forEach(function (item) {
-          const match = !q || item.textContent.toLowerCase().includes(q);
-          item.style.display = match ? '' : 'none';
-          if (match) {
-            visible++;
-            if (q) item.querySelector('.faq-question')?.classList.add('active');
-          }
+        sections.forEach(function (sec) {
+          const catMatch = activeCat === 'all' || sec.dataset.cat === activeCat;
+          const txtMatch = !kw || sec.textContent.toLowerCase().includes(kw);
+          const show = catMatch && txtMatch;
+          sec.classList.toggle('is-hidden', !show);
+          if (show) visible += 1;
         });
-        if (emptyMsg) emptyMsg.style.display = visible === 0 ? 'block' : 'none';
+        emptyEl.classList.toggle('is-hidden', visible > 0);
+      }
+
+      sections.forEach(function (sec) {
+        const q = sec.querySelector('.question');
+        const a = sec.querySelector('.answer');
+        q?.addEventListener('click', function () {
+          a?.classList.toggle('is-hidden');
+        });
       });
+
+      catButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          catButtons.forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          activeCat = btn.dataset.cat || 'all';
+          applyFilter();
+        });
+      });
+
+      searchInput.addEventListener('input', applyFilter);
+      clearBtn.addEventListener('click', function () {
+        searchInput.value = '';
+        activeCat = 'all';
+        catButtons.forEach(function (b) { b.classList.toggle('active', b.dataset.cat === 'all'); });
+        sections.forEach(function (sec) { sec.querySelector('.answer')?.classList.remove('is-hidden'); });
+        applyFilter();
+      });
+
+      const initialQuery = new URLSearchParams(window.location.search).get('q');
+      if (initialQuery) {
+        searchInput.value = initialQuery;
+        applyFilter();
+      }
     });
   </script>
 </body>

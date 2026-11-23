@@ -6,6 +6,12 @@
   margin-top: 56px;
 }
 
+.footer-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
 .footer-grid {
   display: flex;
   justify-content: space-between;

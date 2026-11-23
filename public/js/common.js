@@ -1,11 +1,14 @@
 /**
  * CineTicket (Alpha Striker 2.0) — Shared Frontend Runtime
- * Centralizes path resolution, XSS-safe escaping, safe redirects, JSON API requests,
- * session-backed user state, theme switching, pricing/rating helpers, state blocks,
- * keyboard accessibility, toast notifications, and shared header/footer/FAQ UI.
+ * Centralizes path resolution, XSS-safe escaping, JSON API requests, server-synced user session state,
+ * theme switching, authoritative pricing/expiry helpers, toast notifications, and shared header/footer/FAQ UI.
  */
 (function () {
   'use strict';
+
+  const SERVICE_FEE = 2.50;
+  const GROUP_DISCOUNT_MIN_SEATS = 5;
+  const GROUP_DISCOUNT_RATE = 0.30;
 
   function currentDepthPrefix() {
     const path = window.location.pathname || '';
@@ -28,43 +31,19 @@
   }
 
   function resolveAssetUrl(rawPath) {
-    const fallback = currentDepthPrefix() + 'img/logo.jpg';
     if (!rawPath || typeof rawPath !== 'string') {
-      return fallback;
+      return currentDepthPrefix() + 'img/logo.jpg';
     }
     const trimmed = rawPath.trim();
-    if (!trimmed || /[\x00-\x1F\x7F]/.test(trimmed)) {
-      return fallback;
-    }
-    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) {
-      if (/^(https?:\/\/|data:image\/[a-zA-Z0-9.+-]+;base64,)/i.test(trimmed)) {
-        return trimmed;
-      }
-      return fallback;
-    }
-    if (trimmed.startsWith('//')) {
-      return fallback;
-    }
-    if (trimmed.startsWith('/')) {
+    if (
+      trimmed.startsWith('http://') ||
+      trimmed.startsWith('https://') ||
+      trimmed.startsWith('data:') ||
+      trimmed.startsWith('/')
+    ) {
       return trimmed;
     }
     return currentDepthPrefix() + trimmed.replace(/^(\.\.\/|\.\/)+/, '');
-  }
-
-  function safeRedirectUrl(rawTarget, fallbackUrl) {
-    const fallback = fallbackUrl || pageUrl('homepage.html');
-    if (!rawTarget || typeof rawTarget !== 'string') return fallback;
-    const trimmed = rawTarget.trim();
-    if (
-      !trimmed ||
-      trimmed.startsWith('//') ||
-      trimmed.includes('\\') ||
-      /[\x00-\x1F\x7F]/.test(trimmed) ||
-      /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)
-    ) {
-      return fallback;
-    }
-    return trimmed;
   }
 
   function escapeHtml(value) {
@@ -98,26 +77,41 @@
   }
 
   function calcGroupDiscount(subtotal, seatCount) {
-    return seatCount >= 5 ? +(subtotal * 0.30).toFixed(2) : 0;
+    return seatCount >= GROUP_DISCOUNT_MIN_SEATS ? +(subtotal * GROUP_DISCOUNT_RATE).toFixed(2) : 0;
   }
 
-  function calcCheckoutTotals(unitPrice, seatCount, promoDiscount) {
-    const unit = Math.max(0, parseFloat(unitPrice) || 0);
+  function calculateCheckoutPricing(unitPrice, seatCount, promoMoney) {
     const count = Math.max(0, parseInt(seatCount, 10) || 0);
+    const unit = +(Math.max(0, parseFloat(unitPrice) || 0)).toFixed(2);
     const subtotal = +(unit * count).toFixed(2);
     const groupDiscount = calcGroupDiscount(subtotal, count);
-    const promoOff = Math.max(0, +(parseFloat(promoDiscount) || 0).toFixed(2));
-    const serviceFee = count > 0 ? 2.50 : 0;
-    const totalPaid = Math.max(0, +(subtotal - (groupDiscount + promoOff) + serviceFee).toFixed(2));
+    const promoDiscount = +(Math.max(0, parseFloat(promoMoney) || 0)).toFixed(2);
+    const totalDiscount = +(groupDiscount + promoDiscount).toFixed(2);
+    const serviceFee = count > 0 ? SERVICE_FEE : 0;
+    const totalAmount = Math.max(0, +(subtotal - totalDiscount + serviceFee).toFixed(2));
     return {
       unitPrice: unit,
       seatCount: count,
       subtotal: subtotal,
       groupDiscount: groupDiscount,
-      promoDiscount: promoOff,
+      promoDiscount: promoDiscount,
+      totalDiscount: totalDiscount,
       serviceFee: serviceFee,
-      totalPaid: totalPaid,
+      totalAmount: totalAmount,
     };
+  }
+
+  function isCardExpiryValid(expiryStr, referenceDate) {
+    const match = /^(0[1-9]|1[0-2])\/(\d{2})$/.exec(String(expiryStr || '').trim());
+    if (!match) return false;
+    const expMonth = parseInt(match[1], 10);
+    const expYear = 2000 + parseInt(match[2], 10);
+    const now = referenceDate instanceof Date ? referenceDate : new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth() + 1;
+    if (expYear < curYear) return false;
+    if (expYear === curYear && expMonth < curMonth) return false;
+    return true;
   }
 
   async function fetchJson(url, options) {
@@ -129,18 +123,18 @@
     }
     opts.headers = headers;
     const res = await fetch(url, opts);
-    const payload = await res.json();
-    if (payload && typeof payload === 'object' && res.status !== undefined) {
-      Object.defineProperty(payload, '_status', { value: res.status, enumerable: false });
+    const parsed = await res.json();
+    if (parsed && typeof parsed === 'object' && typeof res.status === 'number') {
+      Object.defineProperty(parsed, 'httpStatus', {
+        value: res.status,
+        enumerable: false,
+        configurable: true,
+      });
     }
-    return payload;
+    return parsed;
   }
 
-  function clearUserStorage() {
-    ['userToken', 'userId', 'userName', 'userEmail', 'email', 'pwd'].forEach(function (k) {
-      localStorage.removeItem(k);
-    });
-  }
+  let sessionSyncPromise = null;
 
   const AuthStore = {
     getUser() {
@@ -173,28 +167,37 @@
       localStorage.removeItem('email');
     },
 
-    clearLocal: clearUserStorage,
+    clearLocal() {
+      ['userToken', 'userId', 'userName', 'userEmail', 'email', 'pwd'].forEach(function (k) {
+        localStorage.removeItem(k);
+      });
+    },
 
     async syncSession() {
-      try {
-        const res = await fetchJson('/index.php/user/user/session');
-        if (res && res.success && res.data) {
-          if (res.data.authenticated) {
-            AuthStore.setUser(res.data);
-            return AuthStore.getUser();
+      if (sessionSyncPromise) return sessionSyncPromise;
+      sessionSyncPromise = (async function () {
+        try {
+          const res = await fetchJson('/index.php/user/user/session');
+          if (res && res.success && res.data && typeof res.data.authenticated === 'boolean') {
+            if (res.data.authenticated) {
+              AuthStore.setUser(res.data);
+            } else {
+              AuthStore.clearLocal();
+            }
+            renderHeader();
           }
-          if (AuthStore.getUser().isLoggedIn) {
-            clearUserStorage();
-          }
+        } catch (_) {
+          // Keep current local state if offline
+        } finally {
+          sessionSyncPromise = null;
         }
-      } catch (_) {
-        // Keep existing client state if session check cannot be reached
-      }
-      return AuthStore.getUser();
+        return AuthStore.getUser();
+      })();
+      return sessionSyncPromise;
     },
 
     async logout() {
-      clearUserStorage();
+      AuthStore.clearLocal();
       try {
         await fetch('/index.php/user/user/logout', { method: 'POST', credentials: 'same-origin' });
       } catch (_) {
@@ -213,9 +216,9 @@
   }
 
   function ensureFavicon() {
-    if (!document.head || document.querySelector?.('link[rel="icon"]')) return;
+    if (document.getElementById('cinetix-favicon')) return;
     const icon = document.createElement('link');
-    icon.id = 'site-favicon';
+    icon.id = 'cinetix-favicon';
     icon.rel = 'icon';
     icon.href = currentDepthPrefix() + 'favicon.ico';
     document.head.appendChild(icon);
@@ -229,8 +232,8 @@
   }
 
   function initTheme() {
-    ensureStylesheet('dark-mode-css', 'css/common/dark-mode.css');
     ensureFavicon();
+    ensureStylesheet('dark-mode-css', 'css/common/dark-mode.css');
     applyTheme(localStorage.getItem('darkMode') === 'true');
   }
 
@@ -241,38 +244,6 @@
   }
 
   initTheme();
-
-  function bindActivateKey(el, callback) {
-    if (!el) return;
-    el.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        callback(e);
-      }
-    });
-  }
-
-  function renderStateBlock(container, stateType, title, message, retryFn) {
-    if (!container) return;
-    const iconMap = {
-      loading: '<i class="fas fa-circle-notch fa-spin state-block-icon"></i>',
-      empty: '<i class="fas fa-Inbox state-block-icon"></i>'.replace('fa-Inbox', 'fa-film'),
-      error: '<i class="fas fa-exclamation-triangle state-block-icon error"></i>',
-    };
-    container.innerHTML =
-      '<div class="state-block state-' + escapeHtml(stateType) + '">' +
-      (iconMap[stateType] || '') +
-      '<h3>' + escapeHtml(title) + '</h3>' +
-      (message ? '<p>' + escapeHtml(message) + '</p>' : '') +
-      (typeof retryFn === 'function'
-        ? '<button type="button" class="btn btn-primary state-retry-btn"><i class="fas fa-redo"></i> Retry</button>'
-        : '') +
-      '</div>';
-
-    if (typeof retryFn === 'function') {
-      container.querySelector('.state-retry-btn')?.addEventListener('click', retryFn);
-    }
-  }
 
   const TOAST_ICONS = {
     success: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>',
@@ -294,7 +265,6 @@
 
     const el = document.createElement('div');
     el.className = 'user-notification ' + escapeHtml(resolvedType);
-    el.setAttribute('role', 'status');
     el.innerHTML =
       '<div class="notification-content">' +
       '<div class="notification-icon">' + (TOAST_ICONS[resolvedType] || TOAST_ICONS.info) + '</div>' +
@@ -329,8 +299,6 @@
 
     const popup = document.createElement('div');
     popup.className = 'contact-popup';
-    popup.setAttribute('role', 'dialog');
-    popup.setAttribute('aria-modal', 'true');
     popup.innerHTML =
       '<div class="contact-popup-content">' +
       '<div class="contact-popup-header">' +
@@ -391,6 +359,7 @@
     const logoSrc = resolveAssetUrl('img/logo.jpg');
     const homeHref = pageUrl('homepage.html');
     const ticketsHref = pageUrl('generate_ticket.html');
+    const pwdHref = rootUrl('pwd.html') + (user.isLoggedIn ? '?mode=change' : '');
     const authBtnLabel = user.isLoggedIn ? 'Logout' : 'Sign In';
 
     headerContainer.innerHTML =
@@ -400,7 +369,7 @@
       '<img src="' + escapeHtml(logoSrc) + '" alt="Alpha Striker 2.0" id="logo-image">' +
       '</a>' +
       '</div>' +
-      '<nav class="nav-links" aria-label="Main Navigation">' +
+      '<nav class="nav-links">' +
       '<a href="' + escapeHtml(homeHref) + '" class="nav-link" data-page="homepage.html">Movies</a>' +
       '<a href="' + escapeHtml(pageUrl('theater.html')) + '" class="nav-link" data-page="theater.html">Theaters</a>' +
       '<a href="' + escapeHtml(pageUrl('offer.html')) + '" class="nav-link" data-page="offer.html">Offers</a>' +
@@ -415,7 +384,7 @@
       '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>' +
       '<span class="user-name" id="header-cart">Tickets</span>' +
       '</a>' +
-      '<div class="user-profile" id="user-profile-trigger" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false">' +
+      '<div class="user-profile" id="user-profile-trigger">' +
       '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>' +
       '<span class="user-name" id="header-username">' + escapeHtml(user.userName) + '</span>' +
       '<div class="dropdown-content" id="userDropdown">' +
@@ -437,9 +406,7 @@
       '<a href="' + escapeHtml(pageUrl('theater.html')) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">Find Theaters</span><span class="dropdown-item-desc">View cinema locations &amp; schedules</span></div></a>' +
       '<a href="' + escapeHtml(pageUrl('offer.html')) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">Special Offers</span><span class="dropdown-item-desc">Claim active promo codes</span></div></a>' +
       '<a href="' + escapeHtml(ticketsHref) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">My Tickets</span><span class="dropdown-item-desc">Manage or print bookings</span></div></a>' +
-      (user.isLoggedIn
-        ? '<a href="' + escapeHtml(rootUrl('pwd.html')) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">Change Password</span><span class="dropdown-item-desc">Update your account password</span></div></a>'
-        : '') +
+      '<a href="' + escapeHtml(pwdHref) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">' + (user.isLoggedIn ? 'Change Password' : 'Reset Password') + '</span><span class="dropdown-item-desc">Manage account security</span></div></a>' +
       '<div class="dropdown-separator"></div>' +
       '<a href="' + escapeHtml(pageUrl('help.html')) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">Help Center</span><span class="dropdown-item-desc">FAQs and customer support</span></div></a>' +
       '</div>' +
@@ -463,18 +430,15 @@
     const profileTrigger = document.getElementById('user-profile-trigger');
     const dropdown = document.getElementById('userDropdown');
     if (profileTrigger && dropdown) {
-      const toggleMenu = function (e) {
-        if (e.target && e.target.closest && e.target.closest('.dropdown-item')) return;
+      profileTrigger.addEventListener('click', function (e) {
+        if (e.target.closest('.dropdown-item')) return;
         e.stopPropagation();
-        const open = dropdown.classList.toggle('show');
-        profileTrigger.setAttribute('aria-expanded', String(open));
-      };
-      profileTrigger.addEventListener('click', toggleMenu);
-      bindActivateKey(profileTrigger, toggleMenu);
+        dropdown.classList.toggle('show');
+      });
     }
 
     document.getElementById('header-auth-btn')?.addEventListener('click', async function (e) {
-      if (!AuthStore.getUser().isLoggedIn) return;
+      if (!user.isLoggedIn) return;
       e.preventDefault();
       await AuthStore.logout();
       window.location.href = rootUrl('login.html');
@@ -488,7 +452,7 @@
     ensureStylesheet('common-footer-css', 'css/common/footer.css');
     bottomContainer.innerHTML =
       '<footer class="homepage-footer">' +
-      '<div class="container" style="max-width:1200px; margin:0 auto; padding:0 20px;">' +
+      '<div class="footer-container">' +
       '<div class="footer-grid">' +
       '<div class="footer-column">' +
       '<h3>CineTix</h3>' +
@@ -509,7 +473,7 @@
       '<h3>Support</h3>' +
       '<ul class="footer-links-list">' +
       '<li><a href="' + escapeHtml(pageUrl('faqs.html')) + '">FAQs</a></li>' +
-      '<li><a href="#contact" id="footer-contact-trigger">Contact Us</a></li>' +
+      '<li><a href="' + escapeHtml(pageUrl('about.html#contact-section')) + '" id="footer-contact-trigger">Contact Us</a></li>' +
       '<li><a href="' + escapeHtml(pageUrl('team.html')) + '">Terms of Service</a></li>' +
       '<li><a href="' + escapeHtml(pageUrl('privacy.html')) + '">Privacy Policy</a></li>' +
       '<li><a href="' + escapeHtml(pageUrl('help.html')) + '">Help Center</a></li>' +
@@ -532,74 +496,41 @@
     document.querySelectorAll('.faq-question').forEach(function (questionEl) {
       if (questionEl.dataset.faqBound === 'true') return;
       questionEl.dataset.faqBound = 'true';
-      questionEl.setAttribute('tabindex', '0');
-      questionEl.setAttribute('role', 'button');
-      questionEl.setAttribute('aria-expanded', String(questionEl.classList.contains('active')));
-
-      const toggleFaq = function () {
-        const isActive = questionEl.classList.toggle('active');
-        questionEl.setAttribute('aria-expanded', String(isActive));
-        questionEl.closest('.faq-item')?.classList.toggle('active', isActive);
-      };
-      questionEl.addEventListener('click', toggleFaq);
-      bindActivateKey(questionEl, toggleFaq);
+      questionEl.addEventListener('click', function () {
+        questionEl.classList.toggle('active');
+        questionEl.closest('.faq-item')?.classList.toggle('active');
+      });
     });
   }
 
   document.addEventListener('click', function (event) {
-    if (event.target && event.target.closest && !event.target.closest('#user-profile-trigger')) {
-      const dd = document.getElementById('userDropdown');
-      if (dd && dd.classList.contains('show')) {
-        dd.classList.remove('show');
-        document.getElementById('user-profile-trigger')?.setAttribute('aria-expanded', 'false');
-      }
+    if (!event.target.closest('#user-profile-trigger')) {
+      document.getElementById('userDropdown')?.classList.remove('show');
     }
   });
 
-  document.addEventListener('keydown', function (event) {
-    if (event.key !== 'Escape') return;
-    document.querySelector('.contact-popup')?.remove();
-    document.querySelectorAll('.contact-modal').forEach(function (m) { m.style.display = 'none'; });
-    const chat = document.getElementById('chat-dialog');
-    if (chat) chat.style.display = 'none';
-    const dd = document.getElementById('userDropdown');
-    if (dd && dd.classList.contains('show')) {
-      dd.classList.remove('show');
-      document.getElementById('user-profile-trigger')?.setAttribute('aria-expanded', 'false');
-    }
-  });
-
-  document.addEventListener('DOMContentLoaded', async function () {
+  document.addEventListener('DOMContentLoaded', function () {
     initTheme();
     renderHeader();
     renderFooter();
     initFaqAccordions();
-
-    if (document.getElementById('header-container')) {
-      const before = AuthStore.getUser();
-      const after = await AuthStore.syncSession();
-      if (before.isLoggedIn !== after.isLoggedIn || before.userName !== after.userName) {
-        renderHeader();
-      }
+    if (!(window.location.pathname || '').includes('/admin/')) {
+      AuthStore.syncSession();
     }
   });
 
   window.CineTicket = {
     AuthStore: AuthStore,
-    bindActivateKey: bindActivateKey,
-    calcCheckoutTotals: calcCheckoutTotals,
     calcGroupDiscount: calcGroupDiscount,
+    calculateCheckoutPricing: calculateCheckoutPricing,
     escapeHtml: escapeHtml,
     fetchJson: fetchJson,
     formatStars: formatStars,
-    initFaqAccordions: initFaqAccordions,
+    isCardExpiryValid: isCardExpiryValid,
     pageUrl: pageUrl,
-    renderHeader: renderHeader,
     renderStarIcons: renderStarIcons,
-    renderStateBlock: renderStateBlock,
     resolveAssetUrl: resolveAssetUrl,
     rootUrl: rootUrl,
-    safeRedirectUrl: safeRedirectUrl,
     showToast: showToast,
     toggleDarkMode: toggleDarkMode,
   };

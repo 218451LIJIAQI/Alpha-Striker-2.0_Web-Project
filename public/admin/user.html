@@ -44,46 +44,36 @@
   <script>
     async function loadUsers() {
       const tbody = document.getElementById('users-tbody');
-      AdminApp.renderTableState(tbody, 6, 'loading', 'Loading users...');
-
-      try {
-        const res = await AdminApp.apiFetch('/index.php/admin/user/index');
-        if (!res.success) {
-          AdminApp.renderTableState(tbody, 6, 'error', res.message || 'Failed to load users.', loadUsers);
-          return;
-        }
-        if (!Array.isArray(res.data) || res.data.length === 0) {
-          AdminApp.renderTableState(tbody, 6, 'empty', 'No registered users found.');
-          return;
-        }
-
-        const esc = AdminApp.escapeHtml;
-        tbody.innerHTML = res.data.map(function (u) {
-          return (
-            '<tr>' +
-            '<td>#' + esc(u.user_code) + '</td>' +
-            '<td><strong>' + esc(u.user_name) + '</strong></td>' +
-            '<td>' + esc(u.email) + '</td>' +
-            '<td>' + esc(u.create_time || '—') + '</td>' +
-            '<td>' + esc(u.update_time || '—') + '</td>' +
-            '<td><div class="action-buttons">' +
-            '<a href="edit-user.html?user_code=' + encodeURIComponent(u.user_code) + '" class="edit-btn"><i class="fas fa-edit"></i> Edit</a>' +
-            '<button type="button" class="delete-btn" data-id="' + esc(u.user_code) + '"><i class="fas fa-trash"></i> Delete</button>' +
-            '</div></td>' +
-            '</tr>'
-          );
-        }).join('');
-
-        AdminApp.bindDeleteActions(tbody, {
-          endpoint: '/index.php/admin/user/delete',
-          idKey: 'user_code',
-          confirmText: function (id) { return 'Delete user #' + id + '? Existing seat bookings will remain preserved as guest seats.'; },
-          successText: 'User deleted',
-          onSuccess: loadUsers,
-        });
-      } catch (_) {
-        AdminApp.renderTableState(tbody, 6, 'error', 'Network error while loading users.', loadUsers);
+      const res = await AdminApp.apiFetch('/index.php/admin/user/index');
+      if (!res.success || !Array.isArray(res.data) || res.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No registered users found.</td></tr>';
+        return;
       }
+
+      const esc = AdminApp.escapeHtml;
+      tbody.innerHTML = res.data.map(function (u) {
+        return (
+          '<tr>' +
+          '<td>#' + esc(u.user_code) + '</td>' +
+          '<td><strong>' + esc(u.user_name) + '</strong></td>' +
+          '<td>' + esc(u.email) + '</td>' +
+          '<td>' + esc(u.create_time || '—') + '</td>' +
+          '<td>' + esc(u.update_time || '—') + '</td>' +
+          '<td><div class="action-buttons">' +
+          '<a href="edit-user.html?user_code=' + encodeURIComponent(u.user_code) + '" class="edit-btn"><i class="fas fa-edit"></i> Edit</a>' +
+          '<button type="button" class="delete-btn" data-id="' + esc(u.user_code) + '"><i class="fas fa-trash"></i> Delete</button>' +
+          '</div></td>' +
+          '</tr>'
+        );
+      }).join('');
+
+      AdminApp.bindDeleteActions(tbody, {
+        endpoint: '/index.php/admin/user/delete',
+        idKey: 'user_code',
+        confirmText: function (id) { return 'Delete user #' + id + '?'; },
+        successText: 'User deleted',
+        onSuccess: loadUsers,
+      });
     }
 
     document.addEventListener('DOMContentLoaded', async function () {

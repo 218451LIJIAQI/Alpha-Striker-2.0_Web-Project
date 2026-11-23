@@ -19,7 +19,7 @@
       <h1>Experience Movies Like Never Before</h1>
       <p>Book tickets for the latest blockbusters and enjoy premium viewing experiences at theaters near you.</p>
       <div class="search-bar">
-        <input type="text" class="search-input" aria-label="Search movies" placeholder="Search movies by title, genre, or tag...">
+        <input type="text" class="search-input" placeholder="Search movies by title, genre, or tag...">
         <button type="button" class="search-btn">Search</button>
       </div>
     </div>
@@ -29,10 +29,10 @@
     <div class="container">
       <div class="section-header">
         <h2 class="section-title">Now Showing</h2>
-        <button type="button" class="btn btn-primary" id="view-all-movies-btn">View All</button>
+        <button type="button" class="btn btn-primary" onclick="fetchAllMovies()">View All</button>
       </div>
 
-      <div class="filters" role="group" aria-label="Filter movies by genre">
+      <div class="filters">
         <button type="button" class="btn-filter active" data-genre="all">All</button>
         <button type="button" class="btn-filter" data-genre="Action">Action</button>
         <button type="button" class="btn-filter" data-genre="Adventure">Adventure</button>
@@ -42,7 +42,7 @@
         <button type="button" class="btn-filter" data-genre="Mystery">Mystery</button>
       </div>
 
-      <div class="movie-grid" aria-live="polite"></div>
+      <div class="movie-grid"></div>
     </div>
   </main>
 

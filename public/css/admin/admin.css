@@ -1,6 +1,6 @@
 /*
  * Shared Admin Console Stylesheet
- * Consolidates styles across all 12 admin pages.
+ * Consolidates styles across all admin pages including Movies, Theaters, Offers, Seats, and Users.
  */
 
 :root {
@@ -124,7 +124,7 @@ body {
 }
 
 .admin-content.narrow {
-  max-width: 820px;
+  max-width: 860px;
 }
 
 .page-header {
@@ -248,7 +248,7 @@ body {
 
 .actions-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 18px;
 }
 
@@ -328,7 +328,8 @@ tbody tr:hover {
 }
 
 .movie-poster,
-.offer-img {
+.offer-img,
+.theater-thumb {
   width: 52px;
   height: 72px;
   object-fit: cover;
@@ -336,9 +337,27 @@ tbody tr:hover {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }
 
-.offer-img {
+.offer-img,
+.theater-thumb {
   width: 68px;
   height: 48px;
+}
+
+.muted-dash {
+  opacity: 0.45;
+}
+
+.sub-meta {
+  opacity: 0.75;
+  font-size: 12px;
+}
+
+.star-amber {
+  color: #f59e0b;
+}
+
+.uppercase-input {
+  text-transform: uppercase;
 }
 
 /* Badges & Pills */
@@ -346,7 +365,8 @@ tbody tr:hover {
 .type-badge,
 .badge-tag,
 .promo-code,
-.seat-number {
+.seat-number,
+.scope-badge {
   display: inline-block;
   padding: 4px 10px;
   border-radius: 999px;
@@ -360,7 +380,8 @@ tbody tr:hover {
   color: #b45309;
 }
 
-.type-badge {
+.type-badge,
+.scope-badge {
   background-color: #e0e7ff;
   color: #3730a3;
 }
@@ -405,17 +426,10 @@ tbody tr:hover {
   color: #ffffff;
 }
 
-.add-btn:hover:not(:disabled),
-.submit-btn:hover:not(:disabled) {
+.add-btn:hover,
+.submit-btn:hover {
   background: var(--admin-primary-dark);
   transform: translateY(-1px);
-}
-
-.submit-btn:disabled,
-.delete-btn:disabled,
-.refund-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .edit-btn {
@@ -435,8 +449,8 @@ tbody tr:hover {
   padding: 7px 13px;
 }
 
-.delete-btn:hover:not(:disabled),
-.refund-btn:hover:not(:disabled) {
+.delete-btn:hover,
+.refund-btn:hover {
   background-color: #fee2e2;
 }
 
@@ -462,6 +476,7 @@ tbody tr:hover {
   border-radius: 16px;
   box-shadow: var(--admin-shadow);
   border: 1px solid var(--admin-border);
+  margin-bottom: 28px;
 }
 
 .form-grid {
@@ -480,9 +495,64 @@ tbody tr:hover {
   grid-column: 1 / -1;
 }
 
+.form-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .form-label {
   font-weight: 600;
   font-size: 14px;
+}
+
+.mini-link-group {
+  display: flex;
+  gap: 10px;
+}
+
+.mini-link-btn {
+  background: none;
+  border: none;
+  color: var(--admin-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mini-link-btn:hover {
+  text-decoration: underline;
+}
+
+.relation-check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--admin-border);
+  border-radius: 12px;
+  background-color: #f8fafc;
+}
+
+.relation-check-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid var(--admin-border);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.relation-check-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  flex-shrink: 0;
 }
 
 .form-input,
@@ -509,48 +579,6 @@ tbody tr:hover {
   outline: none;
   border-color: var(--admin-primary);
   box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.14);
-}
-
-.checklist-toolbar {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.checklist-toggle-btn {
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  border-radius: 6px;
-  border: 1px solid var(--admin-border);
-  background: #f8fafc;
-  color: var(--admin-text);
-  cursor: pointer;
-}
-
-.relation-checklist {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 10px;
-}
-
-.relation-chip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 12px;
-  border: 1px solid var(--admin-border);
-  border-radius: 10px;
-  background: #f8fafc;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.relation-chip input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--admin-primary);
 }
 
 .form-hint {
@@ -584,11 +612,6 @@ tbody tr:hover {
   text-align: center;
   padding: 40px 20px;
   color: var(--admin-muted);
-}
-
-.empty-state.error-state {
-  color: var(--admin-danger-dark);
-  font-weight: 500;
 }
 
 @media (max-width: 900px) {

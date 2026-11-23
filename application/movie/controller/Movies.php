@@ -58,7 +58,25 @@ class Movies extends ApiController
                 ->where('movie_code', $movieId)
                 ->find();
 
-            return $movie ? $this->ok($movie) : $this->fail('Movie not found', 404);
+            if (!$movie) {
+                return $this->fail('Movie not found', 404);
+            }
+
+            $today = date('Y-m-d');
+            $theaterCodes = Db::table('theater_movie')
+                ->where('movie_code', $movieId)
+                ->where(function ($q) use ($today) {
+                    $q->whereNull('start_date')->whereOr('start_date', '<=', $today);
+                })
+                ->where(function ($q) use ($today) {
+                    $q->whereNull('end_date')->whereOr('end_date', '>=', $today);
+                })
+                ->order('theater_code', 'asc')
+                ->column('theater_code');
+
+            $movie['theater_codes'] = array_map('intval', $theaterCodes ?: []);
+
+            return $this->ok($movie);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to load movie details', $e);
         }

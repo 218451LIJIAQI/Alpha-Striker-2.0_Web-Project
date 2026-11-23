@@ -4,22 +4,26 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>3D Auditorium Preview | Alpha Striker 2.0</title>
-  <meta name="description" content="Preview the cinema auditorium interior and row sightlines in 3D before booking your seats.">
+  <meta name="description" content="Interactive 3D cinema auditorium sightline and seating simulator.">
   <link rel="icon" href="../favicon.ico">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #0b0e14; color: #f8fafc; }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: radial-gradient(circle at 50% 25%, #162038 0%, #080b12 100%);
+      color: #f1f5f9;
+      user-select: none;
+    }
 
     #viewer {
       width: 100%;
       height: 100%;
       position: relative;
-      background: radial-gradient(circle at 50% 35%, #19243b 0%, #090c12 85%);
       display: flex;
       align-items: center;
       justify-content: center;
-      perspective: 1100px;
-      user-select: none;
     }
 
     .top-bar {
@@ -31,82 +35,119 @@
       justify-content: space-between;
       align-items: center;
       gap: 12px;
+      flex-wrap: wrap;
       z-index: 30;
       pointer-events: none;
     }
 
-    .top-bar > * { pointer-events: auto; }
+    .top-bar > * {
+      pointer-events: auto;
+    }
 
-    #backBtn, .mode-btn {
+    .hud-btn {
       padding: 10px 18px;
-      background: rgba(15, 23, 42, 0.84);
-      color: #fff;
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(15, 23, 42, 0.85);
+      color: #ffffff;
+      border: 1px solid rgba(148, 163, 184, 0.3);
       border-radius: 999px;
       cursor: pointer;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       transition: background 0.2s ease, border-color 0.2s ease;
     }
 
-    #backBtn:hover, .mode-btn:hover, .mode-btn.active {
+    .hud-btn:hover,
+    .hud-btn.active {
       background: #4361ee;
       border-color: #6ea8fe;
     }
 
-    .mode-switcher { display: flex; gap: 8px; }
-
-    /* Interactive 3D Stage */
-    #hallStage {
-      width: 740px;
-      height: 480px;
-      transform-style: preserve-3d;
-      transform: rotateX(54deg) rotateZ(0deg);
-      transition: transform 0.15s ease-out;
-      position: relative;
+    .hud-btn.primary-cta {
+      background: #16a34a;
+      border-color: #22c55e;
     }
 
-    .hall-floor {
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(180deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.98));
-      border: 2px solid rgba(99, 102, 241, 0.35);
-      border-radius: 24px;
-      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.75);
-      pointer-events: none;
+    .hud-btn.primary-cta:hover {
+      background: #15803d;
     }
 
-    .cinema-screen-3d {
-      position: absolute;
-      top: 26px;
-      left: 80px;
-      right: 80px;
-      height: 92px;
-      background: linear-gradient(180deg, #e0e7ff 0%, #60a5fa 45%, #1d4ed8 100%);
-      border-radius: 10px;
-      transform: translateZ(68px) rotateX(-72deg);
-      transform-origin: bottom center;
-      box-shadow: 0 18px 55px rgba(96, 165, 250, 0.52);
+    .preset-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* CSS-3D Auditorium Stage */
+    #auditorium-3d-stage {
+      width: 100%;
+      height: 100%;
+      perspective: 1100px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: 700;
-      letter-spacing: 4px;
-      color: #0f172a;
-      font-size: 15px;
-      pointer-events: none;
+      cursor: grab;
+      overflow: hidden;
     }
 
-    .rows-3d {
+    #auditorium-3d-stage:active {
+      cursor: grabbing;
+    }
+
+    #auditorium-3d-room {
+      position: relative;
+      width: 680px;
+      height: 540px;
+      transform-style: preserve-3d;
+      transition: transform 0.14s ease-out;
+    }
+
+    .screen-3d {
       position: absolute;
-      top: 112px;
-      left: 70px;
-      right: 70px;
-      bottom: 34px;
+      top: 10px;
+      left: 50%;
+      width: 560px;
+      height: 130px;
+      transform: translateX(-50%) translateZ(-170px) rotateX(-8deg);
+      background: linear-gradient(180deg, #e0f2fe 0%, #93c5fd 45%, #3b82f6 100%);
+      border-radius: 14px 14px 44% 44% / 10px 10px 22px 22px;
+      box-shadow: 0 0 65px rgba(96, 165, 250, 0.55), 0 28px 60px rgba(59, 130, 246, 0.35);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #0f172a;
+      border: 2px solid rgba(255, 255, 255, 0.8);
+    }
+
+    .screen-3d-title {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 3px;
+    }
+
+    .screen-3d-sub {
+      font-size: 12px;
+      font-weight: 600;
+      opacity: 0.82;
+      margin-top: 4px;
+    }
+
+    .floor-3d {
+      position: absolute;
+      top: 120px;
+      left: 50%;
+      width: 660px;
+      height: 430px;
+      transform: translateX(-50%) rotateX(68deg);
+      transform-style: preserve-3d;
+      background: linear-gradient(180deg, rgba(30, 41, 59, 0.88) 0%, rgba(15, 23, 42, 0.96) 100%);
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      border-radius: 18px;
+      padding: 26px 28px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      transform-style: preserve-3d;
+      box-shadow: 0 30px 70px rgba(0, 0, 0, 0.65);
     }
 
     .row-3d {
@@ -114,250 +155,384 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
-      padding: 5px 10px;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background 0.18s ease, transform 0.18s ease;
-    }
-
-    .row-3d:hover, .row-3d.active-row {
-      background: rgba(67, 97, 238, 0.32);
+      transform-style: preserve-3d;
     }
 
     .row-tag-3d {
-      width: 22px;
-      font-size: 12px;
+      width: 20px;
+      font-size: 11px;
       font-weight: 700;
       color: #94a3b8;
+      text-align: center;
     }
 
     .seat-3d {
-      width: 28px;
-      height: 20px;
-      border-radius: 5px 5px 8px 8px;
-      background: #3b82f6;
-      box-shadow: 0 4px 0 #1e3a8a;
+      width: 34px;
+      height: 28px;
+      border-radius: 6px 6px 10px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: #334155;
+      color: #e2e8f0;
+      font-size: 9px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transform: translateZ(10px);
+      transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
     }
 
-    .row-3d.vip-row .seat-3d {
-      background: #f59e0b;
-      box-shadow: 0 4px 0 #92400e;
+    .seat-3d.vip-3d {
+      background: #78350f;
+      border-color: #f59e0b;
+      color: #fef3c7;
     }
 
-    .row-3d.active-row .seat-3d {
+    .seat-3d:hover {
+      transform: translateZ(20px) scale(1.12);
+      background: #60a5fa;
+      color: #0f172a;
+    }
+
+    .seat-3d.active-pov {
       background: #22c55e;
-      box-shadow: 0 4px 0 #14532d;
+      border-color: #bbf7d0;
+      color: #052e16;
+      transform: translateZ(24px) scale(1.16);
+      box-shadow: 0 0 18px rgba(34, 197, 94, 0.75);
+    }
+
+    .aisle-gap {
+      margin-right: 14px;
+    }
+
+    /* Bottom Telemetry & Controls */
+    .bottom-hud {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      flex-wrap: wrap;
+      z-index: 30;
+      pointer-events: none;
+    }
+
+    .bottom-hud > * {
+      pointer-events: auto;
     }
 
     #infoBox {
-      position: absolute;
-      bottom: 24px;
-      left: 24px;
       background: rgba(15, 23, 42, 0.86);
-      border: 1px solid rgba(255, 255, 255, 0.16);
+      border: 1px solid rgba(148, 163, 184, 0.24);
       color: #e2e8f0;
       padding: 16px 20px;
       border-radius: 14px;
-      max-width: 380px;
-      font-size: 14px;
-      z-index: 30;
+      max-width: 390px;
+      font-size: 13px;
       line-height: 1.55;
       backdrop-filter: blur(8px);
     }
 
-    .camera-controls {
-      position: absolute;
-      bottom: 24px;
-      right: 24px;
+    .info-heading {
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .telemetry-badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .telemetry-pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(67, 97, 238, 0.25);
+      border: 1px solid rgba(110, 168, 254, 0.35);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .controls-panel {
       background: rgba(15, 23, 42, 0.86);
-      border: 1px solid rgba(255, 255, 255, 0.16);
+      border: 1px solid rgba(148, 163, 184, 0.24);
       padding: 14px 18px;
       border-radius: 14px;
-      z-index: 30;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+      backdrop-filter: blur(8px);
+    }
+
+    .slider-group {
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      font-size: 13px;
-      min-width: 240px;
+      gap: 4px;
+      font-size: 12px;
+      color: #cbd5e1;
     }
 
-    .camera-controls label {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
+    .slider-group input[type="range"] {
+      width: 110px;
+      accent-color: #4361ee;
     }
 
-    .camera-controls input[type="range"] { width: 130px; accent-color: #4361ee; }
-
-    #modelFrame {
+    #external-frame-wrap {
       position: absolute;
       inset: 0;
+      z-index: 25;
+      background: #090c12;
+      display: none;
+    }
+
+    #external-frame-wrap.active {
+      display: block;
+    }
+
+    #external-frame-wrap iframe {
       width: 100%;
       height: 100%;
       border: none;
-      display: none;
-      z-index: 20;
     }
   </style>
 </head>
 <body>
   <div id="viewer">
     <div class="top-bar">
-      <button type="button" id="backBtn" aria-label="Return to seat booking">&larr; Back to Booking</button>
-      <div class="mode-switcher">
-        <button type="button" class="mode-btn active" id="btn-sim-mode">Interactive 3D Sightlines</button>
-        <button type="button" class="mode-btn" id="btn-cloud-mode">Sketchfab Cloud Mesh</button>
+      <div class="preset-group">
+        <button type="button" id="backBtn" class="hud-btn" aria-label="Return to previous page">&larr; Back to Booking</button>
+        <button type="button" id="book-pov-seat-btn" class="hud-btn primary-cta">Reserve Seat D6</button>
+      </div>
+      <div class="preset-group">
+        <button type="button" class="hud-btn cam-preset active" data-seat="D6" data-yaw="0" data-pitch="24" data-zoom="100">Prime VIP (D6)</button>
+        <button type="button" class="hud-btn cam-preset" data-seat="A6" data-yaw="0" data-pitch="12" data-zoom="112">Front Row (A6)</button>
+        <button type="button" class="hud-btn cam-preset" data-seat="H6" data-yaw="0" data-pitch="34" data-zoom="92">Balcony (H6)</button>
+        <button type="button" class="hud-btn cam-preset" data-seat="E7" data-yaw="-22" data-pitch="42" data-zoom="90">Isometric Overview</button>
+        <button type="button" id="toggle-sketchfab-btn" class="hud-btn">External 3D Mesh</button>
       </div>
     </div>
 
-    <div id="hallStage" aria-label="3D Auditorium Seat Sightline Simulator">
-      <div class="hall-floor"></div>
-      <div class="cinema-screen-3d">4K LASER SCREEN</div>
-      <div class="rows-3d" id="rows3dMount"></div>
+    <div id="auditorium-3d-stage" aria-label="Interactive CSS 3D Auditorium">
+      <div id="auditorium-3d-room">
+        <div class="screen-3d">
+          <div class="screen-3d-title">4K RGB LASER • DOLBY ATMOS</div>
+          <div class="screen-3d-sub" id="screen-sightline-caption">Viewing from D6 — 36° THX Prime Sightline</div>
+        </div>
+        <div class="floor-3d" id="seats-3d-floor"></div>
+      </div>
     </div>
 
-    <div id="infoBox">
-      <strong style="color:#fff; font-size:15px;" id="sightline-title">Auditorium Hall A — Row D (Prime VIP)</strong><br>
-      <span id="sightline-metrics">Viewing Distance: 14.2m &bull; Vertical Angle: 15° (THX Optimal) &bull; Dolby Atmos Sweet Spot</span><br>
-      <span style="font-size:12px; color:#94a3b8;">Click any row (A–H) or drag the stage to inspect sightlines.</span>
-    </div>
+    <div id="external-frame-wrap"></div>
 
-    <div class="camera-controls" id="camControls">
-      <label><span>Tilt Angle</span><input type="range" id="tiltSlider" min="25" max="72" value="54"></label>
-      <label><span>Horizontal Pan</span><input type="range" id="yawSlider" min="-45" max="45" value="0"></label>
-    </div>
+    <div class="bottom-hud">
+      <div id="infoBox">
+        <div class="info-heading">Auditorium Hall A — Interactive 3D Sightline Simulator</div>
+        <div>Drag anywhere to rotate the hall or click any seat (A1–H12) to inspect its screen elevation and acoustic balance offline or online.</div>
+        <div class="telemetry-badges">
+          <span class="telemetry-pill" id="pov-seat-label">Seat: D6</span>
+          <span class="telemetry-pill" id="pov-angle-label">Angle: 36° THX Optimal</span>
+          <span class="telemetry-pill" id="pov-zone-label">Zone: Prime VIP</span>
+        </div>
+      </div>
 
-    <iframe
-      id="modelFrame"
-      title="3D Cinema Auditorium Interior Preview"
-      data-src="https://sketchfab.com/models/dcaf6cdebcad4f03879c24186da257ee/embed?autostart=1&ui_infos=0&ui_controls=1&ui_hint=0"
-      allow="autoplay; fullscreen; xr-spatial-tracking"
-      allowfullscreen>
-    </iframe>
+      <div class="controls-panel">
+        <label class="slider-group">
+          <span>Pan (Yaw)</span>
+          <input type="range" id="yaw-slider" min="-45" max="45" value="0">
+        </label>
+        <label class="slider-group">
+          <span>Tilt (Pitch)</span>
+          <input type="range" id="pitch-slider" min="8" max="52" value="24">
+        </label>
+        <label class="slider-group">
+          <span>Zoom</span>
+          <input type="range" id="zoom-slider" min="75" max="125" value="100">
+        </label>
+      </div>
+    </div>
   </div>
 
   <script>
     (function () {
+      'use strict';
+
+      const ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+      const VIP_ROWS = new Set(['D', 'E']);
+      const ROW_ANGLES = { A: '54° Close', B: '47° Immersive', C: '41° Wide', D: '36° THX Optimal', E: '34° THX Optimal', F: '30° Balanced', G: '27° Elevated', H: '24° Panoramic' };
+
       const params = new URLSearchParams(window.location.search);
-      const movieCode = params.get('movie_code');
-      const theaterCode = params.get('theater_code');
+      const movieCode = params.get('movie_code') || '1';
+      const theaterCode = params.get('theater_code') || '1';
+      let activeSeat = (params.get('seat') || 'D6').toUpperCase();
+      if (!/^[A-H](?:[1-9]|1[0-2])$/.test(activeSeat)) activeSeat = 'D6';
 
-      const backBtn = document.getElementById('backBtn');
-      const stage = document.getElementById('hallStage');
-      const rowsMount = document.getElementById('rows3dMount');
-      const tiltSlider = document.getElementById('tiltSlider');
-      const yawSlider = document.getElementById('yawSlider');
-      const titleEl = document.getElementById('sightline-title');
-      const metricsEl = document.getElementById('sightline-metrics');
-      const frame = document.getElementById('modelFrame');
-      const simBtn = document.getElementById('btn-sim-mode');
-      const cloudBtn = document.getElementById('btn-cloud-mode');
-      const camControls = document.getElementById('camControls');
+      let yaw = 0;
+      let pitch = 24;
+      let zoom = 100;
+      let dragging = false;
+      let lastX = 0;
+      let lastY = 0;
+      let externalActive = false;
 
-      const rowSpecs = {
-        A: { dist: '6.8m', angle: '34° Upward', note: 'Front immersive close-up view' },
-        B: { dist: '9.2m', angle: '26° Upward', note: 'Wide peripheral field of view' },
-        C: { dist: '11.6m', angle: '20° Balanced', note: 'Clear mid-front sightline' },
-        D: { dist: '14.2m', angle: '15° THX Prime', note: 'Prime VIP acoustic & visual sweet spot' },
-        E: { dist: '16.5m', angle: '13° THX Prime', note: 'Prime VIP elevated center perspective' },
-        F: { dist: '18.9m', angle: '10° Eye-Level', note: 'Relaxed full-frame stadium elevation' },
-        G: { dist: '21.3m', angle: '8° Stadium', note: 'High stadium overview with easy aisle access' },
-        H: { dist: '23.8m', angle: '6° Rear Deck', note: 'Panoramic rear auditorium perspective' },
-      };
+      const room = document.getElementById('auditorium-3d-room');
+      const stage = document.getElementById('auditorium-3d-stage');
+      const floor = document.getElementById('seats-3d-floor');
+      const yawSlider = document.getElementById('yaw-slider');
+      const pitchSlider = document.getElementById('pitch-slider');
+      const zoomSlider = document.getElementById('zoom-slider');
+      const bookBtn = document.getElementById('book-pov-seat-btn');
+      const captionEl = document.getElementById('screen-sightline-caption');
+      const seatLabel = document.getElementById('pov-seat-label');
+      const angleLabel = document.getElementById('pov-angle-label');
+      const zoneLabel = document.getElementById('pov-zone-label');
+      const extWrap = document.getElementById('external-frame-wrap');
+      const toggleExtBtn = document.getElementById('toggle-sketchfab-btn');
 
-      Object.keys(rowSpecs).forEach(function (letter, idx) {
-        const row = document.createElement('div');
-        const isVip = letter === 'D' || letter === 'E';
-        row.className = 'row-3d' + (isVip ? ' vip-row' : '') + (letter === 'D' ? ' active-row' : '');
-        row.style.transform = 'translateZ(' + ((idx + 1) * 8) + 'px)';
-        row.setAttribute('tabindex', '0');
-        row.setAttribute('role', 'button');
-        row.setAttribute('aria-label', 'Inspect sightline for Row ' + letter);
+      ROWS.forEach(function (r, rowIdx) {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'row-3d';
+        rowEl.style.transform = 'translateZ(' + (rowIdx * 6) + 'px)';
 
-        let html = '<span class="row-tag-3d">' + letter + '</span>';
-        for (let s = 1; s <= 12; s++) {
-          html += '<span class="seat-3d"></span>';
+        const tag = document.createElement('span');
+        tag.className = 'row-tag-3d';
+        tag.textContent = r;
+        rowEl.appendChild(tag);
+
+        for (let n = 1; n <= 12; n++) {
+          const code = r + n;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'seat-3d' +
+            (VIP_ROWS.has(r) ? ' vip-3d' : '') +
+            (n === 3 || n === 9 ? ' aisle-gap' : '') +
+            (code === activeSeat ? ' active-pov' : '');
+          btn.dataset.seat = code;
+          btn.textContent = code;
+          btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            selectPovSeat(code);
+          });
+          rowEl.appendChild(btn);
         }
-        row.innerHTML = html;
-
-        const selectRow = function () {
-          rowsMount.querySelectorAll('.row-3d').forEach(function (r) { r.classList.remove('active-row'); });
-          row.classList.add('active-row');
-          const spec = rowSpecs[letter];
-          titleEl.textContent = 'Auditorium Hall A — Row ' + letter + (isVip ? ' (Prime VIP)' : ' (Standard)');
-          metricsEl.textContent = 'Distance: ' + spec.dist + ' • Sightline: ' + spec.angle + ' • ' + spec.note;
-        };
-        row.addEventListener('click', selectRow);
-        row.addEventListener('keydown', function (e) {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            selectRow();
-          }
-        });
-        rowsMount.appendChild(row);
+        floor.appendChild(rowEl);
       });
 
-      function updateTransform() {
-        stage.style.transform = 'rotateX(' + tiltSlider.value + 'deg) rotateZ(' + yawSlider.value + 'deg)';
+      function applyTransform() {
+        const scale = (zoom / 100).toFixed(2);
+        room.style.transform = 'scale(' + scale + ') rotateX(' + pitch + 'deg) rotateY(' + yaw + 'deg)';
+        yawSlider.value = String(Math.round(yaw));
+        pitchSlider.value = String(Math.round(pitch));
+        zoomSlider.value = String(Math.round(zoom));
       }
 
-      tiltSlider.addEventListener('input', updateTransform);
-      yawSlider.addEventListener('input', updateTransform);
+      function selectPovSeat(code) {
+        activeSeat = code;
+        const row = code.charAt(0);
+        const col = parseInt(code.slice(1), 10);
+        const rowIndex = ROWS.indexOf(row);
 
-      let dragging = false;
-      let startX = 0;
-      let startY = 0;
-      document.getElementById('viewer').addEventListener('mousedown', function (e) {
-        if (e.target.closest('button, input, #infoBox, .camera-controls')) return;
+        floor.querySelectorAll('.seat-3d').forEach(function (el) {
+          el.classList.toggle('active-pov', el.dataset.seat === code);
+        });
+
+        yaw = Math.round((6.5 - col) * 2.8);
+        pitch = 12 + rowIndex * 4;
+        zoom = 112 - rowIndex * 3;
+        applyTransform();
+
+        const angleDesc = ROW_ANGLES[row] || '35° Balanced';
+        const zoneDesc = VIP_ROWS.has(row) ? 'Prime VIP Acoustic' : 'Standard Stadium';
+        captionEl.textContent = 'Viewing from ' + code + ' — ' + angleDesc;
+        seatLabel.textContent = 'Seat: ' + code;
+        angleLabel.textContent = 'Angle: ' + angleDesc;
+        zoneLabel.textContent = 'Zone: ' + zoneDesc;
+        bookBtn.textContent = 'Reserve Seat ' + code;
+      }
+
+      stage.addEventListener('pointerdown', function (e) {
+        if (e.target.closest('.seat-3d')) return;
         dragging = true;
-        startX = e.clientX;
-        startY = e.clientY;
+        lastX = e.clientX;
+        lastY = e.clientY;
       });
-      window.addEventListener('mousemove', function (e) {
+      window.addEventListener('pointermove', function (e) {
         if (!dragging) return;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        startX = e.clientX;
-        startY = e.clientY;
-        yawSlider.value = String(Math.max(-45, Math.min(45, Number(yawSlider.value) + dx * 0.25)));
-        tiltSlider.value = String(Math.max(25, Math.min(72, Number(tiltSlider.value) - dy * 0.2)));
-        updateTransform();
+        const dx = e.clientX - lastX;
+        const dy = e.clientY - lastY;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        yaw = Math.max(-45, Math.min(45, yaw + dx * 0.25));
+        pitch = Math.max(8, Math.min(52, pitch - dy * 0.2));
+        applyTransform();
       });
-      window.addEventListener('mouseup', function () { dragging = false; });
-
-      simBtn.addEventListener('click', function () {
-        simBtn.classList.add('active');
-        cloudBtn.classList.remove('active');
-        frame.style.display = 'none';
-        stage.style.display = 'block';
-        camControls.style.display = 'flex';
+      window.addEventListener('pointerup', function () {
+        dragging = false;
       });
 
-      cloudBtn.addEventListener('click', function () {
-        cloudBtn.classList.add('active');
-        simBtn.classList.remove('active');
-        stage.style.display = 'none';
-        camControls.style.display = 'none';
-        if (!frame.getAttribute('src')) {
-          frame.setAttribute('src', frame.getAttribute('data-src'));
+      yawSlider.addEventListener('input', function () { yaw = Number(yawSlider.value); applyTransform(); });
+      pitchSlider.addEventListener('input', function () { pitch = Number(pitchSlider.value); applyTransform(); });
+      zoomSlider.addEventListener('input', function () { zoom = Number(zoomSlider.value); applyTransform(); });
+
+      document.querySelectorAll('.cam-preset').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          document.querySelectorAll('.cam-preset').forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          if (externalActive) {
+            externalActive = false;
+            extWrap.classList.remove('active');
+            extWrap.innerHTML = '';
+            toggleExtBtn.textContent = 'External 3D Mesh';
+          }
+          selectPovSeat(btn.dataset.seat || 'D6');
+          yaw = Number(btn.dataset.yaw || 0);
+          pitch = Number(btn.dataset.pitch || 24);
+          zoom = Number(btn.dataset.zoom || 100);
+          applyTransform();
+        });
+      });
+
+      toggleExtBtn.addEventListener('click', function () {
+        if (externalActive) {
+          externalActive = false;
+          extWrap.classList.remove('active');
+          extWrap.innerHTML = '';
+          toggleExtBtn.textContent = 'External 3D Mesh';
+          return;
         }
-        frame.style.display = 'block';
+        if (!navigator.onLine) {
+          captionEl.textContent = 'Offline mode active — using built-in interactive CSS-3D Auditorium';
+          return;
+        }
+        externalActive = true;
+        extWrap.classList.add('active');
+        extWrap.innerHTML = '<iframe title="External Sketchfab Auditorium" src="https://sketchfab.com/models/dcaf6cdebcad4f03879c24186da257ee/embed?autostart=1&ui_infos=0&ui_controls=1&ui_hint=0" allow="autoplay; fullscreen; xr-spatial-tracking" allowfullscreen></iframe>';
+        toggleExtBtn.textContent = 'Built-In 3D View';
       });
 
-      backBtn.addEventListener('click', function () {
-        if (movieCode) {
-          const q = new URLSearchParams({ movie_code: movieCode });
-          if (theaterCode) q.set('theater_code', theaterCode);
-          window.location.href = 'booking3.html?' + q.toString();
-        } else if (theaterCode) {
-          window.location.href = 'theater-details.html?theater_code=' + encodeURIComponent(theaterCode);
-        } else if (window.history.length > 1) {
-          window.history.back();
-        } else {
-          window.location.href = 'homepage.html';
-        }
+      document.getElementById('backBtn').addEventListener('click', function () {
+        const dest = new URLSearchParams({ movie_code: movieCode, theater_code: theaterCode });
+        window.location.href = 'booking3.html?' + dest.toString();
       });
+
+      bookBtn.addEventListener('click', function () {
+        const dest = new URLSearchParams({
+          movie_code: movieCode,
+          theater_code: theaterCode,
+          seats: activeSeat,
+        });
+        window.location.href = 'booking3.html?' + dest.toString();
+      });
+
+      selectPovSeat(activeSeat);
     })();
   </script>
 </body>

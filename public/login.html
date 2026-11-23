@@ -11,7 +11,7 @@
 </head>
 <body>
   <!-- Sign In View -->
-  <div id="login-page" style="display:block;">
+  <div id="login-page">
     <div class="container">
       <div class="logo-section">
         <a href="pages/homepage.html"><img src="img/logo.jpg" alt="CineTix Logo"></a>
@@ -47,7 +47,7 @@
         </form>
 
         <div class="auth-footer">
-          <p>Don't have an account? <a href="#" class="auth-link" onclick="showPage('register-page'); return false;">Create Account</a></p>
+          <p>Don't have an account? <a href="login.html?mode=register" class="auth-link" onclick="showPage('register-page'); return false;">Create Account</a></p>
           <p>Browse without signing in: <a href="pages/homepage.html" class="auth-link">Continue as Guest</a></p>
           <p>Administrator access: <a href="admin/login.html" class="auth-link">Admin Console</a></p>
         </div>
@@ -55,13 +55,13 @@
         <div class="social-buttons">
           <p>Or continue with</p>
           <div class="social-icons">
-            <button type="button" class="social-icon" onclick="showToast('Please use email & password login in this demo environment.', 'info')" aria-label="Google">
+            <button type="button" class="social-icon" onclick="showToast('Please use email &amp; password login in this demo environment.', 'info')" aria-label="Google">
               <img src="img/google.png" alt="Google">
             </button>
-            <button type="button" class="social-icon" onclick="showToast('Please use email & password login in this demo environment.', 'info')" aria-label="GitHub">
+            <button type="button" class="social-icon" onclick="showToast('Please use email &amp; password login in this demo environment.', 'info')" aria-label="GitHub">
               <img src="img/github.png" alt="GitHub">
             </button>
-            <button type="button" class="social-icon" onclick="showToast('Please use email & password login in this demo environment.', 'info')" aria-label="Apple">
+            <button type="button" class="social-icon" onclick="showToast('Please use email &amp; password login in this demo environment.', 'info')" aria-label="Apple">
               <img src="img/apple.png" alt="Apple">
             </button>
           </div>
@@ -75,10 +75,10 @@
   </div>
 
   <!-- Create Account View -->
-  <div id="register-page" style="display:none;">
+  <div id="register-page" class="is-hidden">
     <div class="container">
       <div class="logo-section">
-        <a href="pages/homepage.html" style="text-decoration:none;color:inherit;"><h1>CineTix</h1></a>
+        <a href="pages/homepage.html" class="logo-brand-link"><h1>CineTix</h1></a>
         <p>Your Ultimate Movie Experience</p>
       </div>
 
@@ -118,7 +118,7 @@
         </form>
 
         <div class="auth-footer">
-          <p>Already have an account? <a href="#" class="auth-link" onclick="showPage('login-page'); return false;">Sign In</a></p>
+          <p>Already have an account? <a href="login.html?mode=login" class="auth-link" onclick="showPage('login-page'); return false;">Sign In</a></p>
         </div>
       </div>
 

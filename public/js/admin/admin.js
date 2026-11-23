@@ -1,8 +1,7 @@
 /**
  * Shared Admin Console Runtime
  * Reuses CineTicket core utilities (escaping, asset paths, dark mode) and centralizes
- * authenticated API calls (X-Admin-Token), navigation, relation checklists, table states,
- * duplicate-submit guards, and Canvas charts.
+ * authenticated API calls (X-Admin-Token), navigation, relation checklists, CRUD helpers, and Canvas charts.
  */
 (function () {
   'use strict';
@@ -44,7 +43,7 @@
       payload = { success: false, message: 'Invalid server response' };
     }
 
-    if (response.status === 401) {
+    if (response.status === 401 || response.status === 403) {
       clearAdminSession();
       if (!(window.location.pathname || '').endsWith('/login.html')) {
         window.location.href = 'login.html';
@@ -93,13 +92,14 @@
     const items = [
       { key: 'dashboard', href: 'dashboard.html', icon: 'fas fa-chart-pie', label: 'Dashboard' },
       { key: 'movies', href: 'movies.html', icon: 'fas fa-film', label: 'Movies' },
+      { key: 'theaters', href: 'theaters.html', icon: 'fas fa-building', label: 'Theaters' },
       { key: 'offers', href: 'offers.html', icon: 'fas fa-tags', label: 'Offers' },
       { key: 'seats', href: 'seat.html', icon: 'fas fa-chair', label: 'Seat Bookings' },
       { key: 'users', href: 'user.html', icon: 'fas fa-users', label: 'Users' },
     ];
 
     mount.innerHTML =
-      '<nav class="admin-nav" aria-label="Admin Navigation">' +
+      '<nav class="admin-nav">' +
       '<div class="nav-left">' +
       '<a href="dashboard.html" class="admin-logo"><i class="fas fa-shield-alt"></i><span>CineTix Admin</span></a>' +
       '<div class="nav-links">' +
@@ -107,7 +107,6 @@
         const cls = item.key === activeKey ? 'active' : '';
         return '<a href="' + item.href + '" class="' + cls + '"><i class="' + item.icon + '"></i> ' + item.label + '</a>';
       }).join('') +
-      '<a href="../pages/homepage.html" title="Open Customer Box Office"><i class="fas fa-external-link-alt"></i> Storefront</a>' +
       '</div>' +
       '</div>' +
       '<div class="admin-nav-right">' +
@@ -127,65 +126,33 @@
     document.getElementById('admin-logout-btn')?.addEventListener('click', logoutAdmin);
   }
 
-  function renderTableState(tbody, colSpan, stateType, message, retryFn) {
-    if (!tbody) return;
-    const esc = CT.escapeHtml;
-    const cls = stateType === 'error' ? 'empty-state error-state' : 'empty-state';
-    tbody.innerHTML =
-      '<tr><td colspan="' + Number(colSpan) + '" class="' + cls + '">' +
-      '<div>' + esc(message) + '</div>' +
-      (typeof retryFn === 'function'
-        ? '<button type="button" class="edit-btn table-retry-btn" style="margin-top:10px;"><i class="fas fa-redo"></i> Retry</button>'
-        : '') +
-      '</td></tr>';
-
-    if (typeof retryFn === 'function') {
-      tbody.querySelector('.table-retry-btn')?.addEventListener('click', retryFn);
-    }
-  }
-
-  function renderRelationChecklist(container, items, idKey, labelKey, selectedIds, inputName) {
+  function renderCheckList(container, items, idKey, labelFn, checkedIds) {
     if (!container) return;
-    const esc = CT.escapeHtml;
-    const selectedSet = new Set((selectedIds || []).map(function (v) { return Number(v); }));
-
-    if (!Array.isArray(items) || !items.length) {
-      container.innerHTML = '<span class="form-hint">No records available to link.</span>';
+    if (!Array.isArray(items) || items.length === 0) {
+      container.innerHTML = '<span class="form-hint">No items available.</span>';
       return;
     }
 
-    container.innerHTML =
-      '<div class="checklist-toolbar">' +
-      '<button type="button" class="checklist-toggle-btn" data-action="all">Select All</button>' +
-      '<button type="button" class="checklist-toggle-btn" data-action="none">Clear</button>' +
-      '</div>' +
-      '<div class="relation-checklist">' +
-      items.map(function (item) {
-        const id = Number(item[idKey]);
-        const checked = selectedSet.has(id) ? ' checked' : '';
-        return (
-          '<label class="relation-chip">' +
-          '<input type="checkbox" name="' + esc(inputName) + '" value="' + esc(id) + '"' + checked + '>' +
-          '<span>' + esc(item[labelKey]) + '</span>' +
-          '</label>'
-        );
-      }).join('') +
-      '</div>';
+    const checkedSet = checkedIds === null || checkedIds === undefined
+      ? null
+      : new Set(checkedIds.map(function (v) { return Number(v); }));
 
-    container.querySelectorAll('.checklist-toggle-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        const checkAll = btn.getAttribute('data-action') === 'all';
-        container.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
-          cb.checked = checkAll;
-        });
-      });
-    });
+    container.innerHTML = items.map(function (item) {
+      const id = Number(item[idKey]);
+      const isChecked = checkedSet === null ? true : checkedSet.has(id);
+      return (
+        '<label class="relation-check-item">' +
+        '<input type="checkbox" value="' + id + '"' + (isChecked ? ' checked' : '') + '>' +
+        '<span>' + CT.escapeHtml(labelFn(item)) + '</span>' +
+        '</label>'
+      );
+    }).join('');
   }
 
-  function getCheckedIds(container, inputName) {
+  function getCheckedIds(container) {
     if (!container) return [];
-    return Array.from(container.querySelectorAll('input[name="' + inputName + '"]:checked'))
-      .map(function (cb) { return parseInt(cb.value, 10); })
+    return Array.from(container.querySelectorAll('input[type="checkbox"]:checked'))
+      .map(function (el) { return parseInt(el.value, 10); })
       .filter(function (n) { return n > 0; });
   }
 
@@ -194,34 +161,23 @@
       btn.addEventListener('click', async function () {
         const id = btn.getAttribute('data-id');
         if (!window.confirm(opts.confirmText(id))) return;
-        btn.disabled = true;
         const body = {};
         body[opts.idKey] = id;
-        try {
-          const res = await apiFetch(opts.endpoint, { method: 'POST', body: body });
-          if (res.success) {
-            window.showToast(typeof opts.successText === 'function' ? opts.successText(id) : opts.successText, 'success');
-            opts.onSuccess();
-          } else {
-            btn.disabled = false;
-            window.showToast(res.message || 'Operation failed', 'error');
-          }
-        } catch (_) {
-          btn.disabled = false;
-          window.showToast('Network error while performing action', 'error');
+        const res = await apiFetch(opts.endpoint, { method: 'POST', body: body });
+        if (res.success) {
+          window.showToast(typeof opts.successText === 'function' ? opts.successText(id) : opts.successText, 'success');
+          opts.onSuccess();
+        } else {
+          window.showToast(res.message || 'Operation failed', 'error');
         }
       });
     });
   }
 
   function bindImagePreview(inputEl, previewEl) {
-    if (!inputEl || !previewEl) return function () {};
-    previewEl.addEventListener('error', function () {
-      previewEl.style.display = 'none';
-    });
     function sync() {
       const val = inputEl.value.trim();
-      if (/\.(jpe?g|png|webp|gif|svg)(\?.*)?$/i.test(val) || /^data:image\//i.test(val)) {
+      if (/\.(jpe?g|png|webp|gif|svg)(\?.*)?$/i.test(val) || val.startsWith('data:')) {
         previewEl.src = CT.resolveAssetUrl(val);
         previewEl.style.display = 'block';
       } else {
@@ -234,20 +190,12 @@
   }
 
   async function submitForm(endpoint, payload, redirectUrl, successMsg, fallbackErr) {
-    const submitBtn = document.querySelector('.submit-btn');
-    if (submitBtn) submitBtn.disabled = true;
-    try {
-      const res = await apiFetch(endpoint, { method: 'POST', body: payload });
-      if (res.success) {
-        window.showToast(successMsg, 'success');
-        setTimeout(function () { window.location.href = redirectUrl; }, 450);
-        return;
-      }
-      if (submitBtn) submitBtn.disabled = false;
+    const res = await apiFetch(endpoint, { method: 'POST', body: payload });
+    if (res.success) {
+      window.showToast(successMsg, 'success');
+      setTimeout(function () { window.location.href = redirectUrl; }, 500);
+    } else {
       window.showToast(res.message || fallbackErr, 'error');
-    } catch (_) {
-      if (submitBtn) submitBtn.disabled = false;
-      window.showToast('Network error — please try again', 'error');
     }
   }
 
@@ -332,8 +280,7 @@
     escapeHtml: CT.escapeHtml,
     getCheckedIds: getCheckedIds,
     renderAdminNav: renderAdminNav,
-    renderRelationChecklist: renderRelationChecklist,
-    renderTableState: renderTableState,
+    renderCheckList: renderCheckList,
     resolveAdminAsset: CT.resolveAssetUrl,
     submitForm: submitForm,
   };

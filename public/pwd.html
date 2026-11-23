@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reset Password | Alpha Striker 2.0</title>
+  <title>Account Password | Alpha Striker 2.0</title>
   <link rel="stylesheet" href="css/common/header.css">
   <link rel="stylesheet" href="css/login/login.css">
   <script src="js/common.js"></script>
   <script src="js/login/pwd.js" defer></script>
 </head>
 <body>
-  <div id="login-page" style="display:block;">
+  <div id="login-page">
     <div class="container">
       <div class="logo-section">
         <a href="pages/homepage.html"><img src="img/logo.jpg" alt="CineTix Logo"></a>
@@ -19,43 +19,54 @@
 
       <div class="auth-container card">
         <div class="auth-header">
-          <h1 id="pwd-heading">Reset Password</h1>
-          <p id="pwd-subheading">Request a one-time verification code for your registered email</p>
+          <h1>Password Security</h1>
+          <p>Reset via email verification code or update using your current password</p>
         </div>
 
-        <div id="pwd-mode-switch" style="display:none; margin-bottom:16px; text-align:center;">
-          <button type="button" id="toggle-pwd-mode" class="auth-link" style="background:none; border:none; cursor:pointer; font-size:14px;">
-            Switch to Current-Password Verification
-          </button>
+        <div class="auth-tabs" role="tablist">
+          <button type="button" id="tab-reset-code" class="auth-tab-btn active">Email Verification</button>
+          <button type="button" id="tab-old-pwd" class="auth-tab-btn">Current Password</button>
         </div>
-
-        <div id="demo-otp-banner" role="status" style="display:none; margin-bottom:15px; padding:10px 14px; border-radius:8px; background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; font-size:13px;"></div>
 
         <form id="reset-form" onsubmit="resetPwd(event)">
           <div class="form-group">
             <label for="email" class="form-label">Email</label>
-            <input type="email" id="email" class="form-input" placeholder="Enter your registered email" required autocomplete="email">
+            <input type="email" id="email" class="form-input" placeholder="Enter your registered email" required maxlength="100">
           </div>
 
-          <div class="form-group" id="otp-group">
-            <label for="Verification" class="form-label">One-Time Verification Code</label>
+          <div class="form-group">
+            <label for="Verification" class="form-label">6-Digit Verification Code</label>
             <div class="verification-input">
-              <input type="text" id="Verification" class="form-input" placeholder="6-digit code" inputmode="numeric" maxlength="10">
+              <input type="text" id="Verification" class="form-input" placeholder="Enter 6-digit code" required maxlength="6" inputmode="numeric" pattern="\d{6}">
               <button type="button" id="send-code" class="send-code-btn">Send Code</button>
             </div>
           </div>
 
-          <div class="form-group" id="current-pwd-group" style="display:none;">
-            <label for="current-password" class="form-label">Current Password</label>
-            <input type="password" id="current-password" class="form-input" placeholder="Enter your current password" autocomplete="current-password">
+          <div class="form-group">
+            <label for="password" class="form-label">New Password</label>
+            <input type="password" id="password" class="form-input" placeholder="At least 6 characters" required minlength="6">
+          </div>
+
+          <button type="submit" class="btn btn-primary">Reset Password</button>
+        </form>
+
+        <form id="change-pwd-form" class="is-hidden" onsubmit="changeSignedInPwd(event)">
+          <div class="form-group">
+            <label for="old-password" class="form-label">Current Password</label>
+            <input type="password" id="old-password" class="form-input" placeholder="Enter your current password" required autocomplete="current-password">
           </div>
 
           <div class="form-group">
-            <label for="password" class="form-label">New Password</label>
-            <input type="password" id="password" class="form-input" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password">
+            <label for="new-password-auth" class="form-label">New Password</label>
+            <input type="password" id="new-password-auth" class="form-input" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password">
           </div>
 
-          <button type="submit" class="btn btn-primary" id="pwd-submit-btn">Reset Password</button>
+          <div class="form-group">
+            <label for="confirm-password-auth" class="form-label">Confirm New Password</label>
+            <input type="password" id="confirm-password-auth" class="form-input" placeholder="Re-enter new password" required minlength="6" autocomplete="new-password">
+          </div>
+
+          <button type="submit" class="btn btn-primary">Update Password</button>
         </form>
 
         <div class="auth-footer">

@@ -21,8 +21,6 @@
       </div>
     </div>
 
-    <div id="dashboard-error" style="display:none; margin-bottom:20px;" class="page-header"></div>
-
     <section class="stats-container">
       <div class="stat-card">
         <div class="stat-icon"><i class="fas fa-film"></i></div>
@@ -86,12 +84,17 @@
         <a href="add-movie.html" class="action-card">
           <i class="fas fa-plus-circle"></i>
           <h3>Add New Movie</h3>
-          <p>Publish a new feature film with pricing and theater schedule.</p>
+          <p>Publish a new feature film and assign screening theaters.</p>
+        </a>
+        <a href="theaters.html" class="action-card">
+          <i class="fas fa-building"></i>
+          <h3>Manage Theaters</h3>
+          <p>Add, edit, or remove partner cinemas and film schedules.</p>
         </a>
         <a href="add-offer.html" class="action-card">
           <i class="fas fa-percentage"></i>
           <h3>Create Promo Offer</h3>
-          <p>Configure discount codes, eligible movies, and expiration dates.</p>
+          <p>Configure discount codes, eligible movies, and member scope.</p>
         </a>
         <a href="seat.html" class="action-card">
           <i class="fas fa-clipboard-list"></i>
@@ -113,76 +116,51 @@
       if (!(await AdminApp.ensureAuthenticated())) return;
 
       const palette = ['#4361ee', '#3a0ca3', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
-      const errBanner = document.getElementById('dashboard-error');
 
-      async function loadMetrics() {
-        if (errBanner) errBanner.style.display = 'none';
-        try {
-          const results = await Promise.all([
-            AdminApp.apiFetch('/index.php/admin/movie/index'),
-            AdminApp.apiFetch('/index.php/admin/offer/index'),
-            AdminApp.apiFetch('/index.php/admin/seat/index'),
-            AdminApp.apiFetch('/index.php/admin/user/index'),
-            AdminApp.apiFetch('/index.php/admin/theater/index'),
-          ]);
+      try {
+        const [moviesRes, offersRes, seatsRes, usersRes, theatersRes] = await Promise.all([
+          AdminApp.apiFetch('/index.php/admin/movie/index'),
+          AdminApp.apiFetch('/index.php/admin/offer/index'),
+          AdminApp.apiFetch('/index.php/admin/seat/index'),
+          AdminApp.apiFetch('/index.php/admin/user/index'),
+          AdminApp.apiFetch('/index.php/admin/theater/index'),
+        ]);
 
-          if (results.some(function (r) { return !r || !r.success; })) {
-            if (errBanner) {
-              errBanner.style.display = 'flex';
-              errBanner.innerHTML =
-                '<span style="color:#dc2626; font-weight:600;"><i class="fas fa-exclamation-triangle"></i> One or more dashboard metrics could not be loaded.</span>' +
-                '<button type="button" class="edit-btn" id="retry-dash-btn"><i class="fas fa-redo"></i> Retry</button>';
-              document.getElementById('retry-dash-btn')?.addEventListener('click', loadMetrics);
-            }
-          }
+        const list = function (res) { return res.success && Array.isArray(res.data) ? res.data : []; };
+        const movies = list(moviesRes);
+        const seats = list(seatsRes);
 
-          const list = function (res) { return res && res.success && Array.isArray(res.data) ? res.data : null; };
-          const movies = list(results[0]);
-          const offers = list(results[1]);
-          const seats = list(results[2]);
-          const users = list(results[3]);
-          const theaters = list(results[4]);
+        document.getElementById('stat-movies').textContent = String(movies.length);
+        document.getElementById('stat-offers').textContent = String(list(offersRes).length);
+        document.getElementById('stat-seats').textContent = String(seats.length);
+        document.getElementById('stat-users').textContent = String(list(usersRes).length);
+        document.getElementById('stat-theaters').textContent = String(list(theatersRes).length);
 
-          document.getElementById('stat-movies').textContent = movies ? String(movies.length) : 'Err';
-          document.getElementById('stat-offers').textContent = offers ? String(offers.length) : 'Err';
-          document.getElementById('stat-seats').textContent = seats ? String(seats.length) : 'Err';
-          document.getElementById('stat-users').textContent = users ? String(users.length) : 'Err';
-          document.getElementById('stat-theaters').textContent = theaters ? String(theaters.length) : 'Err';
+        const genreCounts = {};
+        movies.forEach(function (m) {
+          const g = m.movie_type || 'Other';
+          genreCounts[g] = (genreCounts[g] || 0) + 1;
+        });
 
-          const genreCounts = {};
-          (movies || []).forEach(function (m) {
-            const g = m.movie_type || 'Other';
-            genreCounts[g] = (genreCounts[g] || 0) + 1;
-          });
+        const bookingCounts = {};
+        seats.forEach(function (s) {
+          const title = (s.movie && s.movie.movie_name) ? s.movie.movie_name : ('Movie #' + s.movie_code);
+          bookingCounts[title] = (bookingCounts[title] || 0) + 1;
+        });
 
-          const bookingCounts = {};
-          (seats || []).forEach(function (s) {
-            const title = (s.movie && s.movie.movie_name) ? s.movie.movie_name : ('Movie #' + s.movie_code);
-            bookingCounts[title] = (bookingCounts[title] || 0) + 1;
-          });
-
-          function renderCharts() {
-            AdminApp.drawBarChart(document.getElementById('genre-chart'), Object.keys(genreCounts), Object.values(genreCounts), palette);
-            AdminApp.drawBarChart(document.getElementById('booking-chart'), Object.keys(bookingCounts), Object.values(bookingCounts), palette);
-          }
-
-          renderCharts();
-          window.onresize = renderCharts;
-          document.getElementById('admin-theme-toggle')?.addEventListener('click', function () {
-            setTimeout(renderCharts, 20);
-          });
-        } catch (_) {
-          if (errBanner) {
-            errBanner.style.display = 'flex';
-            errBanner.innerHTML =
-              '<span style="color:#dc2626; font-weight:600;">Failed to load dashboard metrics.</span>' +
-              '<button type="button" class="edit-btn" id="retry-dash-btn"><i class="fas fa-redo"></i> Retry</button>';
-            document.getElementById('retry-dash-btn')?.addEventListener('click', loadMetrics);
-          }
+        function renderCharts() {
+          AdminApp.drawBarChart(document.getElementById('genre-chart'), Object.keys(genreCounts), Object.values(genreCounts), palette);
+          AdminApp.drawBarChart(document.getElementById('booking-chart'), Object.keys(bookingCounts), Object.values(bookingCounts), palette);
         }
-      }
 
-      loadMetrics();
+        renderCharts();
+        window.addEventListener('resize', renderCharts);
+        document.getElementById('admin-theme-toggle')?.addEventListener('click', function () {
+          setTimeout(renderCharts, 20);
+        });
+      } catch (_) {
+        window.showToast('Failed to load dashboard metrics', 'error');
+      }
     });
   </script>
 </body>

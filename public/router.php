@@ -6,10 +6,16 @@ if ($requestPath === '/') {
     return true;
 }
 
+$publicRoot = realpath(__DIR__);
+$candidate  = $publicRoot !== false ? realpath(__DIR__ . $requestPath) : false;
+
 if (
     $requestPath !== '/index.php' &&
+    $requestPath !== '/router.php' &&
     strpos($requestPath, '/index.php/') !== 0 &&
-    is_file(__DIR__ . $requestPath)
+    $candidate !== false &&
+    strpos($candidate, $publicRoot . DIRECTORY_SEPARATOR) === 0 &&
+    is_file($candidate)
 ) {
     return false;
 }

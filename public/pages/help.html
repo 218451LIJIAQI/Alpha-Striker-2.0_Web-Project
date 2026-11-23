@@ -15,76 +15,59 @@
 
   <main class="info-page card">
     <h1 class="info-page-title">Welcome to the CineTix Help Center</h1>
-    <p>Your one-stop resource for booking, managing, and enjoying your cinema experience. Select a quick topic below or browse our step-by-step walkthroughs.</p>
+    <p>Your one-stop resource for booking, managing, and enjoying your cinema experience. Select a quick topic or explore interactive step-by-step walkthroughs below.</p>
 
     <h2 class="info-section-heading">🔍 Quick Topics</h2>
-    <div class="filters" id="help-topic-pills" style="margin-bottom:18px;">
-      <button type="button" class="btn-filter active" data-topic="all">All Topics</button>
-      <button type="button" class="btn-filter" data-topic="account">Account &amp; Password</button>
-      <button type="button" class="btn-filter" data-topic="booking">Seat Selection &amp; 3D</button>
-      <button type="button" class="btn-filter" data-topic="promo">Promo &amp; Group Savings</button>
-      <button type="button" class="btn-filter" data-topic="refund">Tickets &amp; Cancellations</button>
-    </div>
-
-    <div id="help-guides-container">
-      <div class="info-callout help-card-item" data-topics="account">
-        <h3>1. Account Registration &amp; Password Security</h3>
-        <ul class="topic-list">
-          <li>Create an account or sign in from the <a class="guide-link" href="../login.html">Sign In</a> portal.</li>
-          <li>Reset a forgotten password with a 5-minute one-time verification code on the <a class="guide-link" href="../pwd.html">Password Reset</a> page.</li>
-        </ul>
-      </div>
-
-      <div class="info-callout help-card-item" data-topics="booking">
-        <h3>2. Theater Formats, 3D Sightlines &amp; Seat Selection</h3>
-        <ul class="topic-list">
-          <li>Compare IMAX, 4DX, Dolby Atmos, and VIP amenities in the <a class="guide-link" href="theater.html">Theaters Directory</a>.</li>
-          <li>Inspect row angles in the <a class="guide-link" href="3d-model.html">Interactive 3D Auditorium Preview</a> before selecting seats A1–H12 on <a class="guide-link" href="booking3.html">Seat Selection</a>.</li>
-        </ul>
-      </div>
-
-      <div class="info-callout help-card-item" data-topics="promo">
-        <h3>3. Promo Codes &amp; 30% Group Discount</h3>
-        <ul class="topic-list">
-          <li>Reserve 5+ seats in a single order to unlock an automatic 30% group discount.</li>
-          <li>Claim active promo codes on the <a class="guide-link" href="offer.html">Offers</a> page and verify movie eligibility at checkout.</li>
-        </ul>
-      </div>
-
-      <div class="info-callout help-card-item" data-topics="refund">
-        <h3>4. Digital E-Tickets, PDF Export &amp; Cancellations</h3>
-        <ul class="topic-list">
-          <li>Open your <a class="guide-link" href="generate_ticket.html">Tickets Wallet</a> to print passes or export PDFs via your browser print dialog.</li>
-          <li>Signed-in members can cancel their own reserved seats anytime before showtime; see <a class="guide-link" href="faqs.html">FAQs</a> for full details.</li>
-        </ul>
+    <div class="info-callout">
+      <div>Jump directly to matching FAQ answers:</div>
+      <div class="topic-chips-row">
+        <a class="topic-chip" href="faqs.html?q=refund">Refund &amp; Cancellation</a>
+        <a class="topic-chip" href="faqs.html?q=promo">Promo Codes</a>
+        <a class="topic-chip" href="faqs.html?q=4DX">4DX &amp; IMAX</a>
+        <a class="topic-chip" href="faqs.html?q=book">Seat Selection</a>
+        <a class="topic-chip" href="faqs.html?q=password">Password Reset</a>
       </div>
     </div>
+
+    <h2 class="info-section-heading">📚 Interactive Walkthroughs</h2>
+    <div class="faq-accordion">
+      <div class="faq-question active">1. Booking Your First Ticket &amp; Previewing 3D Sightlines</div>
+      <div class="faq-answer">
+        Open <a class="guide-link" href="homepage.html">Movies</a>, choose a film, select your preferred theater, date, and showtime, and click <strong>3D Auditorium View</strong> to inspect sightlines from Rows A–H before reserving up to 10 seats.
+      </div>
+
+      <div class="faq-question">2. Viewing, Printing &amp; Exporting Digital E-Tickets</div>
+      <div class="faq-answer">
+        Sign in to your account and open <a class="guide-link" href="generate_ticket.html">My Tickets</a>. Click <strong>Print / Save PDF</strong> on any ticket card to print a clean single-ticket pass with barcode.
+      </div>
+
+      <div class="faq-question">3. Redeeming Promo Codes &amp; 30% Group Savings</div>
+      <div class="faq-answer">
+        Claim an offer on <a class="guide-link" href="offer.html">Offers</a> (such as <strong>STUDENT30</strong>) to auto-fill it at checkout, or select 5+ seats on <a class="guide-link" href="booking3.html">Seat Selection</a> to trigger an automatic 30% group discount.
+      </div>
+
+      <div class="faq-question">4. Managing Reservations &amp; Password Security</div>
+      <div class="faq-answer">
+        Cancel individual seats anytime from <a class="guide-link" href="generate_ticket.html">My Tickets</a>, or update your password from <a class="guide-link" href="../pwd.html">Password Security</a> using either email verification or your current password.
+      </div>
+    </div>
+
+    <h2 class="info-section-heading">📝 Quick Action Links</h2>
+    <ul class="topic-list">
+      <li><a class="guide-link" href="faqs.html">Browse All Frequently Asked Questions</a></li>
+      <li><a class="guide-link" href="booking3.html">Reserve Seats with 30% Group Discount (5+ Tickets)</a></li>
+      <li><a class="guide-link" href="generate_ticket.html">Open Digital Ticket Wallet &amp; PDF Print View</a></li>
+      <li><a class="guide-link" href="giftcards.html">Configure a Digital CineTix Gift Card</a></li>
+    </ul>
 
     <h2 class="info-section-heading">📞 Need Personalized Help?</h2>
     <div class="info-contact-footer">
-      <p><strong>Live Chat:</strong> Open the interactive Live Chat assistant on the <a class="guide-link" href="about.html">About</a> page.</p>
+      <p><strong>Live Chat:</strong> Available via the Live Chat dialog on the <a class="guide-link" href="about.html#contact-section">About</a> page.</p>
       <p><strong>Phone Support:</strong> +60 17-607 3401 (9:00 AM – 6:00 PM).</p>
       <p><strong>Email:</strong> <a class="guide-link" href="mailto:lijiaqi0807@gmail.com">lijiaqi0807@gmail.com</a> (response within 24 hrs).</p>
     </div>
   </main>
 
   <div id="bottom-container"></div>
-
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      const pills = document.querySelectorAll('#help-topic-pills .btn-filter');
-      const cards = document.querySelectorAll('.help-card-item');
-      pills.forEach(function (pill) {
-        pill.addEventListener('click', function () {
-          pills.forEach(function (p) { p.classList.remove('active'); });
-          pill.classList.add('active');
-          const topic = pill.dataset.topic || 'all';
-          cards.forEach(function (card) {
-            card.style.display = (topic === 'all' || (card.dataset.topics || '').includes(topic)) ? '' : 'none';
-          });
-        });
-      });
-    });
-  </script>
 </body>
 </html>
