@@ -2,25 +2,21 @@
 namespace app\user\controller;
 
 use app\common\controller\ApiController;
-use app\user\model\User as UserModel;
 use think\Db;
 use think\facade\Env;
 use think\facade\Session;
 
 class User extends ApiController
 {
-    /**
-     * Register a new user account with bcrypt password hashing and immediate session login.
-     */
     public function reg()
     {
         try {
             $data     = $this->payload();
-            $name     = isset($data['name']) ? trim((string) $data['name']) : '';
-            $email    = isset($data['email']) ? strtolower(trim((string) $data['email'])) : '';
+            $name     = $this->strParam('name');
+            $email    = strtolower($this->strParam('email'));
             $password = isset($data['password']) ? (string) $data['password'] : '';
 
-            if ($name === '' || mb_strlen($name) > 50) {
+            if ($name === '' || $this->textLen($name) > 50) {
                 return $this->fail('Please enter a valid name (1-50 characters)');
             }
             if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100) {
@@ -29,43 +25,31 @@ class User extends ApiController
             if (strlen($password) < 6) {
                 return $this->fail('Password must be at least 6 characters');
             }
-
             if (Db::name('user')->where('email', $email)->find()) {
                 return $this->fail('This email has already been registered');
             }
 
-            $userModel              = new UserModel();
-            $userModel->user_name   = $name;
-            $userModel->email       = $email;
-            $userModel->login_pwd   = password_hash($password, PASSWORD_BCRYPT);
-            $userModel->create_time = date('Y-m-d H:i:s');
-
-            if (!$userModel->save()) {
+            $userId = (int) Db::name('user')->insertGetId([
+                'user_name'   => $name,
+                'email'       => $email,
+                'login_pwd'   => password_hash($password, PASSWORD_BCRYPT),
+                'create_time' => date('Y-m-d H:i:s'),
+            ]);
+            if ($userId <= 0) {
                 return $this->fail('Registration failed');
             }
 
-            $userId = (int) $userModel->user_code;
-            Session::set('user_id', $userId);
-            Session::set('user_email', $email);
-
-            return $this->ok([
-                'user_id'   => $userId,
-                'user_name' => $name,
-                'email'     => $email,
-            ], 'Registration successful');
+            return $this->issueUserSession($userId, $name, $email, 'Registration successful');
         } catch (\Throwable $e) {
             return $this->serverError('Registration failed', $e);
         }
     }
 
-    /**
-     * Authenticate user credentials using bcrypt verification (with transparent upgrade for legacy rows).
-     */
     public function login()
     {
         try {
             $data     = $this->payload();
-            $email    = isset($data['email']) ? strtolower(trim((string) $data['email'])) : '';
+            $email    = strtolower($this->strParam('email'));
             $password = isset($data['password']) ? (string) $data['password'] : '';
 
             if ($email === '' || $password === '') {
@@ -78,9 +62,7 @@ class User extends ApiController
             }
 
             $storedHash = (string) ($user['login_pwd'] ?? '');
-            $isBcrypt   = strpos($storedHash, '$2y$') === 0 || strpos($storedHash, '$2b$') === 0 || strpos($storedHash, '$2a$') === 0;
-
-            if ($isBcrypt) {
+            if (preg_match('/^\$2[ayb]\$/', $storedHash)) {
                 $authenticated = password_verify($password, $storedHash);
             } else {
                 $authenticated = $storedHash !== '' && hash_equals($storedHash, $password);
@@ -98,23 +80,17 @@ class User extends ApiController
                 return $this->fail('Invalid email or password');
             }
 
-            $userId = (int) $user['user_code'];
-            Session::set('user_id', $userId);
-            Session::set('user_email', $user['email']);
-
-            return $this->ok([
-                'user_id'   => $userId,
-                'user_name' => $user['user_name'],
-                'email'     => $user['email'],
-            ], 'Login successful');
+            return $this->issueUserSession(
+                (int) $user['user_code'],
+                $user['user_name'],
+                $user['email'],
+                'Login successful'
+            );
         } catch (\Throwable $e) {
             return $this->serverError('Login failed', $e);
         }
     }
 
-    /**
-     * Clear current user session.
-     */
     public function logout()
     {
         Session::delete('user_id');
@@ -122,16 +98,13 @@ class User extends ApiController
         return $this->ok(null, 'Logout successful');
     }
 
-    /**
-     * Reset user password after verifying email and reset verification code.
-     */
     public function changePassword()
     {
         try {
             $data             = $this->payload();
-            $email            = isset($data['email']) ? strtolower(trim((string) $data['email'])) : '';
+            $email            = strtolower($this->strParam('email'));
             $newPassword      = isset($data['pwd']) ? (string) $data['pwd'] : '';
-            $verificationCode = isset($data['verification_code']) ? trim((string) $data['verification_code']) : '';
+            $verificationCode = $this->strParam('verification_code');
 
             if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 return $this->fail('Please enter a valid email address');
@@ -165,5 +138,17 @@ class User extends ApiController
         } catch (\Throwable $e) {
             return $this->serverError('Password change failed', $e);
         }
+    }
+
+    private function issueUserSession($userId, $name, $email, $message)
+    {
+        Session::set('user_id', $userId);
+        Session::set('user_email', $email);
+
+        return $this->ok([
+            'user_id'   => $userId,
+            'user_name' => $name,
+            'email'     => $email,
+        ], $message);
     }
 }

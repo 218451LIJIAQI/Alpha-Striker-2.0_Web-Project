@@ -5,22 +5,17 @@ function showPage(pageId) {
   const loginView = document.getElementById('login-page');
   const registerView = document.getElementById('register-page');
 
-  if (pageId === 'login-page' && loginView && registerView) {
-    loginView.style.display = 'block';
-    registerView.style.display = 'none';
-  } else if (pageId === 'register-page' && loginView && registerView) {
-    loginView.style.display = 'none';
-    registerView.style.display = 'block';
+  if ((pageId === 'login-page' || pageId === 'register-page') && loginView && registerView) {
+    loginView.style.display = pageId === 'login-page' ? 'block' : 'none';
+    registerView.style.display = pageId === 'register-page' ? 'block' : 'none';
   } else {
-    window.location.href = window.CineTicket
-      ? window.CineTicket.pageUrl('homepage.html')
-      : 'pages/homepage.html';
+    window.location.href = window.CineTicket.pageUrl('homepage.html');
   }
 }
 
 async function loginUser(event) {
   event.preventDefault();
-
+  const CT = window.CineTicket;
   const email = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value;
 
@@ -30,17 +25,14 @@ async function loginUser(event) {
   }
 
   try {
-    const response = await fetch('/index.php/user/user/login', {
+    const result = await CT.fetchJson('/index.php/user/user/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email, password: password }),
+      body: { email: email, password: password },
     });
-    const result = await response.json();
-
     if (result.success && result.data) {
-      window.CineTicket.AuthStore.setUser(result.data);
+      CT.AuthStore.setUser(result.data);
       const redirectTarget = new URLSearchParams(window.location.search).get('redirect');
-      window.location.href = redirectTarget || window.CineTicket.pageUrl('homepage.html');
+      window.location.href = redirectTarget || CT.pageUrl('homepage.html');
     } else {
       window.showToast(result.message || 'Invalid email or password', 'error');
     }
@@ -51,7 +43,7 @@ async function loginUser(event) {
 
 async function registerUser(event) {
   event.preventDefault();
-
+  const CT = window.CineTicket;
   const name = document.getElementById('name').value.trim();
   const email = document.getElementById('reg-email').value.trim();
   const password = document.getElementById('reg-password').value;
@@ -71,16 +63,13 @@ async function registerUser(event) {
   }
 
   try {
-    const response = await fetch('/index.php/user/user/reg', {
+    const result = await CT.fetchJson('/index.php/user/user/reg', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name, email: email, password: password }),
+      body: { name: name, email: email, password: password },
     });
-    const result = await response.json();
-
     if (result.success && result.data) {
-      window.CineTicket.AuthStore.setUser(result.data);
-      window.location.href = window.CineTicket.pageUrl('homepage.html');
+      CT.AuthStore.setUser(result.data);
+      window.location.href = CT.pageUrl('homepage.html');
     } else {
       window.showToast(result.message || 'Registration failed', 'error');
     }

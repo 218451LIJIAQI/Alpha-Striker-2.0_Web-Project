@@ -7,24 +7,8 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/login/login.css">
-  <link rel="stylesheet" href="../css/common/dark-mode.css">
   <script src="../js/common.js"></script>
   <script src="../js/admin/admin.js"></script>
-  <style>
-    .admin-logo-section img {
-      width: 84px;
-      height: 84px;
-      object-fit: cover;
-      border-radius: 12px;
-      margin-bottom: 10px;
-    }
-    .admin-branding h1 {
-      font-size: 28px;
-      font-weight: 700;
-      color: #4361ee;
-      margin-bottom: 4px;
-    }
-  </style>
 </head>
 <body>
   <div id="admin-login-page">
@@ -38,7 +22,7 @@
       </div>
 
       <div class="auth-container card admin-container">
-        <div class="auth-header admin-header">
+        <div class="auth-header">
           <h1>Administrator Sign In</h1>
           <p>Enter your administrator credentials to manage catalog &amp; bookings</p>
         </div>
@@ -80,14 +64,10 @@
       btn.textContent = 'Signing in...';
 
       try {
-        const res = await fetch('/index.php/admin/auth/login', {
+        const payload = await AdminApp.apiFetch('/index.php/admin/auth/login', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({ username: username, password: password }),
+          body: { username: username, password: password },
         });
-        const payload = await res.json();
-
         if (payload.success && payload.token) {
           localStorage.setItem('adminToken', payload.token);
           localStorage.setItem('adminUser', (payload.data && payload.data.username) || username);

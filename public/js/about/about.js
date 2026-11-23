@@ -61,20 +61,16 @@ function initEmailSupportForms() {
       document.querySelectorAll('.email-tab').forEach(function (t) { t.classList.remove('active'); });
       document.querySelectorAll('.email-tab-content').forEach(function (c) { c.classList.remove('active'); });
       tab.classList.add('active');
-      const panel = document.getElementById(targetId);
-      if (panel) panel.classList.add('active');
+      document.getElementById(targetId)?.classList.add('active');
     });
   });
 
-  const sendBtn = document.querySelector('.send-email-btn');
-  if (!sendBtn) return;
-
-  sendBtn.addEventListener('click', function () {
+  document.querySelector('.send-email-btn')?.addEventListener('click', function () {
     const category = document.querySelector('.support-category')?.value || '';
     const nameInput = document.querySelector('input[placeholder="Enter your full name"]');
     const emailInput = document.querySelector('input[placeholder="your.email@example.com"]');
     const subjectInput = document.querySelector('input[placeholder="Brief description of your inquiry"]');
-    const messageInput = document.querySelector('#quick-form textarea') || document.querySelector('textarea');
+    const messageInput = document.querySelector('#quick-contact textarea');
 
     const name = nameInput ? nameInput.value.trim() : '';
     const email = emailInput ? emailInput.value.trim() : '';
@@ -95,22 +91,19 @@ function initEmailSupportForms() {
     }
 
     window.showToast('Support ticket submitted! We will reply within 24 hours.', 'success');
-    if (nameInput) nameInput.value = '';
-    if (emailInput) emailInput.value = '';
-    if (subjectInput) subjectInput.value = '';
-    if (messageInput) messageInput.value = '';
+    nameInput.value = '';
+    emailInput.value = '';
+    subjectInput.value = '';
+    messageInput.value = '';
     const modal = document.getElementById('email-modal');
     if (modal) modal.style.display = 'none';
   });
 }
 
 function selectCategory(category, triggerEl) {
-  document.querySelectorAll('.category-card').forEach(function (card) {
-    card.classList.remove('active');
-  });
+  document.querySelectorAll('.category-card').forEach(function (card) { card.classList.remove('active'); });
   const activeTarget = triggerEl || (typeof event !== 'undefined' ? event.currentTarget || event.target : null);
-  const card = activeTarget && activeTarget.closest ? activeTarget.closest('.category-card') : null;
-  if (card) card.classList.add('active');
+  activeTarget?.closest?.('.category-card')?.classList.add('active');
 
   const container = document.getElementById('category-form');
   if (!container) return;
@@ -121,14 +114,13 @@ function selectCategory(category, triggerEl) {
     account: 'Account Assistance',
     feedback: 'Guest Experience Feedback',
   };
-  const heading = titles[category] || 'Support Inquiry';
 
   container.style.display = 'block';
   container.innerHTML =
-    '<h4>' + window.CineTicket.escapeHtml(heading) + '</h4>' +
+    '<h4>' + window.CineTicket.escapeHtml(titles[category] || 'Support Inquiry') + '</h4>' +
     '<div class="form-group"><label>Contact Email</label><input type="email" class="cat-email" placeholder="your.email@example.com"></div>' +
     '<div class="form-group"><label>Details</label><textarea class="cat-details" rows="3" placeholder="Share relevant booking ID or details..."></textarea></div>' +
-    '<button type="button" class="submit-category-form">Submit Request</button>';
+    '<button type="button" class="send-email-btn submit-category-form">Submit Request</button>';
 
   container.querySelector('.submit-category-form').addEventListener('click', function () {
     const email = container.querySelector('.cat-email').value.trim();
@@ -165,26 +157,16 @@ function initLiveChat() {
   const chatDialog = document.getElementById('chat-dialog');
   if (!chatDialog) return;
 
-  const closeBtn = chatDialog.querySelector('.close-chat');
-  const sendBtn = chatDialog.querySelector('.send-message');
-  const input = document.getElementById('chat-input-field');
-
-  if (closeBtn) {
-    closeBtn.addEventListener('click', function () {
-      chatDialog.style.display = 'none';
-    });
-  }
-  if (sendBtn) {
-    sendBtn.addEventListener('click', sendChatMessage);
-  }
-  if (input) {
-    input.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        sendChatMessage();
-      }
-    });
-  }
+  chatDialog.querySelector('.close-chat')?.addEventListener('click', function () {
+    chatDialog.style.display = 'none';
+  });
+  chatDialog.querySelector('.send-message')?.addEventListener('click', sendChatMessage);
+  document.getElementById('chat-input-field')?.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  });
 }
 
 function sendChatMessage() {
@@ -199,18 +181,22 @@ function sendChatMessage() {
   input.value = '';
 
   setTimeout(function () {
-    appendChatBubble(messagesBox, buildSupportReply(text), 'agent');
+    appendChatBubble(messagesBox, buildSupportReply(text), 'bot');
   }, 450);
 }
 
 function appendChatBubble(container, message, role) {
   const esc = window.CineTicket.escapeHtml;
   const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const isUser = role === 'user';
   const div = document.createElement('div');
-  div.className = role === 'user' ? 'message user-message' : 'message agent-message';
+  div.className = 'chat-message ' + (isUser ? 'user-message' : 'bot-message');
   div.innerHTML =
-    '<div class="message-content">' + esc(message) + '</div>' +
-    '<div class="message-time">' + esc(now) + '</div>';
+    '<div class="message-avatar"><i class="fas ' + (isUser ? 'fa-user' : 'fa-robot') + '"></i></div>' +
+    '<div class="message-content">' +
+    '<div class="message-text">' + esc(message) + '</div>' +
+    '<div class="message-time">' + esc(now) + '</div>' +
+    '</div>';
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
 }
@@ -227,7 +213,7 @@ function buildSupportReply(query) {
     return 'Visit the Theaters tab to explore all 6 partner locations, amenities, and daily screening schedules.';
   }
   if (q.includes('booking') || q.includes('ticket')) {
-    return 'Open the Tickets tab in the header to view your digital tickets, row/seat details, and PDF export.';
+    return 'Open the Tickets tab in the header to view your digital tickets, row/seat details, and print/PDF export.';
   }
   return 'Thanks for reaching out! For urgent booking inquiries, email lijiaqi0807@gmail.com or visit our Help Center.';
 }

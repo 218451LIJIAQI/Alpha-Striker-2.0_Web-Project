@@ -6,17 +6,19 @@ use think\facade\Request;
 
 /**
  * Shared JSON API base controller.
- * Unifies form/JSON payload parsing, response envelopes, field whitelisting, and safe error logging.
+ * Unifies form/JSON payload parsing, parameter extraction, field whitelisting, and safe responses.
  */
 abstract class ApiController
 {
-    /**
-     * Merge query/form parameters with raw JSON request body when present.
-     *
-     * @return array
-     */
+    /** @var array|null */
+    private $cachedPayload = null;
+
     protected function payload()
     {
+        if ($this->cachedPayload !== null) {
+            return $this->cachedPayload;
+        }
+
         $params = Request::param();
         if (!is_array($params)) {
             $params = [];
@@ -30,19 +32,33 @@ abstract class ApiController
             }
         }
 
-        return $params;
+        return $this->cachedPayload = $params;
     }
 
-    /**
-     * Keep only whitelisted database columns so strict field mode remains safe.
-     *
-     * @param array $source
-     * @param array $allowedFields
-     * @return array
-     */
+    protected function idParam($key, $direct = '')
+    {
+        if ($direct !== '' && $direct !== null) {
+            return (int) $direct;
+        }
+        $payload = $this->payload();
+        return isset($payload[$key]) ? (int) $payload[$key] : 0;
+    }
+
+    protected function strParam($key, $default = '')
+    {
+        $payload = $this->payload();
+        return isset($payload[$key]) ? trim((string) $payload[$key]) : $default;
+    }
+
+    protected function textLen($value)
+    {
+        $str = (string) $value;
+        return function_exists('mb_strlen') ? mb_strlen($str, 'UTF-8') : strlen($str);
+    }
+
     protected function pickAllowed(array $source, array $allowedFields)
     {
-        $allowed = array_flip($allowedFields);
+        $allowed  = array_flip($allowedFields);
         $filtered = [];
         foreach ($source as $key => $value) {
             if (isset($allowed[$key])) {
@@ -52,45 +68,20 @@ abstract class ApiController
         return $filtered;
     }
 
-    /**
-     * Escape SQL LIKE wildcards (% and _) in user search terms.
-     *
-     * @param string $keyword
-     * @return string
-     */
     protected function escapeLike($keyword)
     {
         return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], trim((string) $keyword));
     }
 
-    /**
-     * Build a standard successful JSON response.
-     *
-     * @param mixed  $data
-     * @param string $message
-     * @param array  $extra
-     * @param int    $httpCode
-     * @return \think\response\Json
-     */
     protected function ok($data = null, $message = 'OK', array $extra = [], $httpCode = 200)
     {
-        $body = array_merge([
+        return json(array_merge([
             'success' => true,
             'message' => $message,
             'data'    => $data,
-        ], $extra);
-
-        return json($body, $httpCode);
+        ], $extra), $httpCode);
     }
 
-    /**
-     * Build a standard error JSON response without leaking internal stack traces.
-     *
-     * @param string $message
-     * @param int    $httpCode
-     * @param mixed  $data
-     * @return \think\response\Json
-     */
     protected function fail($message, $httpCode = 200, $data = null)
     {
         $body = [
@@ -103,14 +94,6 @@ abstract class ApiController
         return json($body, $httpCode);
     }
 
-    /**
-     * Record internal exception details in application logs and return a safe error message.
-     *
-     * @param string     $userMessage
-     * @param \Throwable $exception
-     * @param int        $httpCode
-     * @return \think\response\Json
-     */
     protected function serverError($userMessage, $exception, $httpCode = 500)
     {
         Log::error($userMessage . ' | ' . $exception->getMessage());

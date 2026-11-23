@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const email = emailInput ? emailInput.value.trim() : '';
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       window.showToast('Please enter a valid email address first', 'warning');
-      if (emailInput) emailInput.focus();
+      emailInput?.focus();
       return;
     }
 
@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 async function resetPwd(event) {
   event.preventDefault();
-
+  const CT = window.CineTicket;
   const email = document.getElementById('email').value.trim();
   const verificationCode = document.getElementById('Verification').value.trim();
   const password = document.getElementById('password').value;
@@ -52,24 +52,13 @@ async function resetPwd(event) {
   }
 
   try {
-    const response = await fetch('/index.php/user/user/changePassword', {
+    const data = await CT.fetchJson('/index.php/user/user/changePassword', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: email,
-        pwd: password,
-        verification_code: verificationCode,
-      }),
+      body: { email: email, pwd: password, verification_code: verificationCode },
     });
-    const data = await response.json();
-
     if (data.success) {
       window.showToast('Password updated! Redirecting to login...', 'success');
-      setTimeout(function () {
-        window.location.href = window.CineTicket
-          ? window.CineTicket.rootUrl('login.html')
-          : 'login.html';
-      }, 900);
+      setTimeout(function () { window.location.href = CT.rootUrl('login.html'); }, 900);
     } else {
       window.showToast(data.message || 'Password reset failed', 'error');
     }

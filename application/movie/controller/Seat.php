@@ -7,17 +7,13 @@ use think\facade\Session;
 
 class Seat extends ApiController
 {
-    /**
-     * Query occupied seats for a specific screening (movie, theater, date, time).
-     */
     public function getSeatList()
     {
         try {
-            $params      = $this->payload();
-            $movieCode   = isset($params['movie_code']) ? (int) $params['movie_code'] : 0;
-            $theaterCode = !empty($params['theater_code']) ? (int) $params['theater_code'] : 1;
-            $date        = isset($params['date']) ? trim((string) $params['date']) : '';
-            $time        = isset($params['time']) ? trim((string) $params['time']) : '';
+            $movieCode   = $this->idParam('movie_code');
+            $theaterCode = $this->idParam('theater_code') ?: 1;
+            $date        = $this->strParam('date');
+            $time        = $this->strParam('time');
 
             if ($movieCode <= 0 || $date === '' || $time === '') {
                 return $this->fail('movie_code, date, and time are required');
@@ -38,24 +34,21 @@ class Seat extends ApiController
         }
     }
 
-    /**
-     * Atomically reserve one or more seats with row-level conflict detection and nullable guest user_code.
-     */
     public function saveSeats()
     {
         try {
             $data        = $this->payload();
-            $movieCode   = isset($data['movie_code']) ? (int) $data['movie_code'] : 0;
-            $theaterCode = !empty($data['theater_code']) ? (int) $data['theater_code'] : 1;
-            $date        = isset($data['date']) ? trim((string) $data['date']) : '';
-            $time        = isset($data['time']) ? trim((string) $data['time']) : '';
+            $movieCode   = $this->idParam('movie_code');
+            $theaterCode = $this->idParam('theater_code') ?: 1;
+            $date        = $this->strParam('date');
+            $time        = $this->strParam('time');
             $rawSeats    = $data['seat_nums'] ?? [];
 
             if ($movieCode <= 0 || $theaterCode <= 0 || $date === '' || $time === '' || empty($rawSeats)) {
                 return $this->fail('Complete screening and seat parameters are required');
             }
 
-            $seatList = is_array($rawSeats) ? $rawSeats : explode(',', (string) $rawSeats);
+            $seatList        = is_array($rawSeats) ? $rawSeats : explode(',', (string) $rawSeats);
             $normalizedSeats = [];
             foreach ($seatList as $seat) {
                 $code = strtoupper(trim((string) $seat));
@@ -80,12 +73,8 @@ class Seat extends ApiController
                 return $this->fail('Selected theater does not exist', 404);
             }
 
-            // Resolve optional authenticated user_code; store NULL for guest checkouts to satisfy fk_seat_user
-            $sessionUserId = (int) Session::get('user_id', 0);
-            $requestedId   = isset($data['user_code']) ? (int) $data['user_code'] : 0;
-            $resolvedUser  = $sessionUserId > 0 ? $sessionUserId : $requestedId;
-            $userCode      = null;
-
+            $resolvedUser = (int) Session::get('user_id', 0) ?: $this->idParam('user_code');
+            $userCode     = null;
             if ($resolvedUser > 0) {
                 $exists = Db::name('user')->where('user_code', $resolvedUser)->value('user_code');
                 if ($exists) {
@@ -93,11 +82,9 @@ class Seat extends ApiController
                 }
             }
 
-            $now = date('Y-m-d H:i:s');
+            $now          = date('Y-m-d H:i:s');
             $rowsToInsert = [];
             foreach ($seatNums as $seatNum) {
-                $rowLetter = substr($seatNum, 0, 1);
-                $zone      = in_array($rowLetter, ['D', 'E'], true) ? 2 : 1;
                 $rowsToInsert[] = [
                     'movie_code'   => $movieCode,
                     'theater_code' => $theaterCode,
@@ -105,7 +92,7 @@ class Seat extends ApiController
                     'date'         => $date,
                     'time'         => $time,
                     'seat_num'     => $seatNum,
-                    'seat_zone'    => $zone,
+                    'seat_zone'    => in_array($seatNum[0], ['D', 'E'], true) ? 2 : 1,
                     'create_time'  => $now,
                 ];
             }
@@ -123,10 +110,7 @@ class Seat extends ApiController
 
                 if (!empty($conflicts)) {
                     Db::rollback();
-                    return $this->fail(
-                        'Seats already booked: ' . implode(', ', $conflicts),
-                        409
-                    );
+                    return $this->fail('Seats already booked: ' . implode(', ', $conflicts), 409);
                 }
 
                 $insertedCount = Db::name('seat')->insertAll($rowsToInsert);
@@ -148,15 +132,10 @@ class Seat extends ApiController
         }
     }
 
-    /**
-     * List all booked seats belonging to a user with joined movie and theater details.
-     */
     public function getSeatListByUserCode()
     {
         try {
-            $params   = $this->payload();
-            $userCode = isset($params['user_code']) ? (int) $params['user_code'] : (int) Session::get('user_id', 0);
-
+            $userCode = $this->idParam('user_code') ?: (int) Session::get('user_id', 0);
             if ($userCode <= 0) {
                 return $this->fail('Valid user_code parameter is required');
             }
@@ -179,7 +158,6 @@ class Seat extends ApiController
                     ->where('movie_code', 'in', $movieCodes)
                     ->column('movie_code, movie_name, star, tag, money, movie_type, img, times', 'movie_code')
                 : [];
-
             $theaters = !empty($theaterCodes)
                 ? Db::name('theater')
                     ->where('theater_code', 'in', $theaterCodes)
@@ -187,9 +165,8 @@ class Seat extends ApiController
                 : [];
 
             foreach ($seats as &$seat) {
-                $mCode = $seat['movie_code'];
-                $tCode = $seat['theater_code'] ?? 1;
-                $seat['movie_info']   = $movies[$mCode] ?? null;
+                $tCode                = $seat['theater_code'] ?? 1;
+                $seat['movie_info']   = $movies[$seat['movie_code']] ?? null;
                 $seat['theater_info'] = $theaters[$tCode] ?? null;
             }
             unset($seat);
@@ -200,17 +177,10 @@ class Seat extends ApiController
         }
     }
 
-    /**
-     * Cancel a booked seat owned by the requesting user (or administrator).
-     *
-     * @param string $seat_code
-     */
     public function delete($seat_code = '')
     {
         try {
-            $params   = $this->payload();
-            $seatId   = (int) ($seat_code !== '' ? $seat_code : ($params['seat_code'] ?? 0));
-
+            $seatId = $this->idParam('seat_code', $seat_code);
             if ($seatId <= 0) {
                 return $this->fail('Valid seat_code is required');
             }
@@ -220,10 +190,9 @@ class Seat extends ApiController
                 return $this->fail('Ticket record not found', 404);
             }
 
-            $isAdmin       = Session::get('admin_auth') === true;
-            $sessionUserId = (int) Session::get('user_id', 0);
-            $callerUserId  = $sessionUserId > 0 ? $sessionUserId : (int) ($params['user_code'] ?? 0);
-            $ownerUserId   = isset($seat['user_code']) ? (int) $seat['user_code'] : 0;
+            $isAdmin      = Session::get('admin_auth') === true;
+            $callerUserId = (int) Session::get('user_id', 0) ?: $this->idParam('user_code');
+            $ownerUserId  = isset($seat['user_code']) ? (int) $seat['user_code'] : 0;
 
             if (!$isAdmin && ($ownerUserId <= 0 || $callerUserId !== $ownerUserId)) {
                 return $this->fail('Not authorized to cancel this booking', 403);

@@ -1,7 +1,7 @@
 <?php
 namespace app\admin\controller;
 
-use app\movie\model\Movies as MovieModel;
+use think\Db;
 
 class Movie extends BaseAdmin
 {
@@ -18,8 +18,7 @@ class Movie extends BaseAdmin
     public function index()
     {
         try {
-            $model  = new MovieModel();
-            $movies = $model->order('movie_code', 'asc')->select();
+            $movies = Db::name('movies')->order('movie_code', 'asc')->select();
             return $this->ok($movies);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to query movies', $e);
@@ -29,20 +28,13 @@ class Movie extends BaseAdmin
     public function getMovieByCode($movie_code = '')
     {
         try {
-            $payload = $this->payload();
-            $movieId = (int) ($movie_code !== '' ? $movie_code : ($payload['movie_code'] ?? 0));
-
+            $movieId = $this->idParam('movie_code', $movie_code);
             if ($movieId <= 0) {
                 return $this->fail('Valid movie_code is required');
             }
 
-            $model = new MovieModel();
-            $movie = $model->where('movie_code', $movieId)->find();
-            if (!$movie) {
-                return $this->fail('Movie not found', 404);
-            }
-
-            return $this->ok($movie);
+            $movie = Db::name('movies')->where('movie_code', $movieId)->find();
+            return $movie ? $this->ok($movie) : $this->fail('Movie not found', 404);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to query movie details', $e);
         }
@@ -51,24 +43,18 @@ class Movie extends BaseAdmin
     public function create()
     {
         try {
-            $data = $this->pickAllowed($this->payload(), self::ALLOWED_FIELDS);
-
-            $validationError = $this->validateMoviePayload($data);
-            if ($validationError !== null) {
-                return $this->fail($validationError);
+            [$data, $error] = $this->prepareMovieData($this->payload());
+            if ($error !== null) {
+                return $this->fail($error);
             }
 
-            $data['tag']         = isset($data['tag']) && $data['tag'] !== '' ? $data['tag'] : null;
-            $data['star']        = round((float) $data['star'], 1);
-            $data['money']       = round((float) $data['money'], 2);
             $data['create_time'] = date('Y-m-d H:i:s');
-
-            $model = new MovieModel();
-            if (!$model->save($data)) {
+            $movieId = (int) Db::name('movies')->insertGetId($data);
+            if ($movieId <= 0) {
                 return $this->fail('Failed to create movie');
             }
 
-            return $this->ok(['movie_code' => (int) $model->movie_code], 'Movie created successfully');
+            return $this->ok(['movie_code' => $movieId], 'Movie created successfully');
         } catch (\Throwable $e) {
             return $this->serverError('Failed to create movie', $e);
         }
@@ -77,31 +63,22 @@ class Movie extends BaseAdmin
     public function update($movie_code = '')
     {
         try {
-            $payload = $this->payload();
-            $movieId = (int) ($movie_code !== '' ? $movie_code : ($payload['movie_code'] ?? 0));
-
+            $movieId = $this->idParam('movie_code', $movie_code);
             if ($movieId <= 0) {
                 return $this->fail('Valid movie_code is required');
             }
 
-            $model = new MovieModel();
-            if (!$model->where('movie_code', $movieId)->find()) {
+            if (!Db::name('movies')->where('movie_code', $movieId)->find()) {
                 return $this->fail('Movie not found', 404);
             }
 
-            $data = $this->pickAllowed($payload, self::ALLOWED_FIELDS);
-            $validationError = $this->validateMoviePayload($data);
-            if ($validationError !== null) {
-                return $this->fail($validationError);
+            [$data, $error] = $this->prepareMovieData($this->payload());
+            if ($error !== null) {
+                return $this->fail($error);
             }
 
-            $data['tag']         = isset($data['tag']) && $data['tag'] !== '' ? $data['tag'] : null;
-            $data['star']        = round((float) $data['star'], 1);
-            $data['money']       = round((float) $data['money'], 2);
             $data['update_time'] = date('Y-m-d H:i:s');
-
-            $saved = $model->save($data, ['movie_code' => $movieId]);
-            if ($saved === false) {
+            if (Db::name('movies')->where('movie_code', $movieId)->update($data) === false) {
                 return $this->fail('Failed to update movie');
             }
 
@@ -114,16 +91,12 @@ class Movie extends BaseAdmin
     public function delete($movie_code = '')
     {
         try {
-            $payload = $this->payload();
-            $movieId = (int) ($movie_code !== '' ? $movie_code : ($payload['movie_code'] ?? 0));
-
+            $movieId = $this->idParam('movie_code', $movie_code);
             if ($movieId <= 0) {
                 return $this->fail('Valid movie_code is required');
             }
 
-            $model   = new MovieModel();
-            $deleted = $model->where('movie_code', $movieId)->delete();
-            if (!$deleted) {
+            if (!Db::name('movies')->where('movie_code', $movieId)->delete()) {
                 return $this->fail('Movie not found', 404);
             }
 
@@ -133,26 +106,33 @@ class Movie extends BaseAdmin
         }
     }
 
-    private function validateMoviePayload(array $data)
+    private function prepareMovieData(array $payload)
     {
+        $data = $this->pickAllowed($payload, self::ALLOWED_FIELDS);
+
         if (empty($data['movie_name'])) {
-            return 'Movie title is required';
+            return [null, 'Movie title is required'];
         }
         if (empty($data['movie_type'])) {
-            return 'Movie genre is required';
+            return [null, 'Movie genre is required'];
         }
         if (empty($data['img'])) {
-            return 'Poster image path or URL is required';
+            return [null, 'Poster image path or URL is required'];
         }
         if (empty($data['times'])) {
-            return 'Movie duration is required';
+            return [null, 'Movie duration is required'];
         }
         if (!isset($data['star']) || !is_numeric($data['star']) || (float) $data['star'] < 0 || (float) $data['star'] > 5) {
-            return 'Rating must be between 0.0 and 5.0';
+            return [null, 'Rating must be between 0.0 and 5.0'];
         }
         if (!isset($data['money']) || !is_numeric($data['money']) || (float) $data['money'] < 0) {
-            return 'Ticket price must be a non-negative number';
+            return [null, 'Ticket price must be a non-negative number'];
         }
-        return null;
+
+        $data['tag']   = isset($data['tag']) && $data['tag'] !== '' ? $data['tag'] : null;
+        $data['star']  = round((float) $data['star'], 1);
+        $data['money'] = round((float) $data['money'], 2);
+
+        return [$data, null];
     }
 }

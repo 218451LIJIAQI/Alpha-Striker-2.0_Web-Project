@@ -7,7 +7,6 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/admin/admin.css">
-  <link rel="stylesheet" href="../css/common/dark-mode.css">
   <script src="../js/common.js"></script>
   <script src="../js/admin/admin.js"></script>
 </head>
@@ -105,9 +104,9 @@
       document.getElementById('img').value = o.img || '';
       document.getElementById('offer_description').value = o.offer_description || '';
 
-      document.getElementById('edit-offer-form').addEventListener('submit', async function (e) {
+      document.getElementById('edit-offer-form').addEventListener('submit', function (e) {
         e.preventDefault();
-        const payload = {
+        AdminApp.submitForm('/index.php/admin/offer/update', {
           offer_code: offerCode,
           offer_title: document.getElementById('offer_title').value.trim(),
           offer_type: document.getElementById('offer_type').value,
@@ -117,18 +116,7 @@
           badge: document.getElementById('badge').value.trim(),
           img: document.getElementById('img').value.trim(),
           offer_description: document.getElementById('offer_description').value.trim(),
-        };
-
-        const res = await AdminApp.apiFetch('/index.php/admin/offer/update?offer_code=' + encodeURIComponent(offerCode), {
-          method: 'POST',
-          body: payload,
-        });
-        if (res.success) {
-          window.showToast('Offer updated successfully', 'success');
-          setTimeout(function () { window.location.href = 'offers.html'; }, 500);
-        } else {
-          window.showToast(res.message || 'Failed to update offer', 'error');
-        }
+        }, 'offers.html', 'Offer updated successfully', 'Failed to update offer');
       });
     });
   </script>

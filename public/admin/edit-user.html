@@ -7,7 +7,6 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/admin/admin.css">
-  <link rel="stylesheet" href="../css/common/dark-mode.css">
   <script src="../js/common.js"></script>
   <script src="../js/admin/admin.js"></script>
 </head>
@@ -69,25 +68,14 @@
       document.getElementById('user_name').value = detailRes.data.user_name || '';
       document.getElementById('email').value = detailRes.data.email || '';
 
-      document.getElementById('edit-user-form').addEventListener('submit', async function (e) {
+      document.getElementById('edit-user-form').addEventListener('submit', function (e) {
         e.preventDefault();
-        const payload = {
+        AdminApp.submitForm('/index.php/admin/user/update', {
           user_code: userCode,
           user_name: document.getElementById('user_name').value.trim(),
           email: document.getElementById('email').value.trim(),
           login_pwd: document.getElementById('login_pwd').value,
-        };
-
-        const res = await AdminApp.apiFetch('/index.php/admin/user/update?user_code=' + encodeURIComponent(userCode), {
-          method: 'POST',
-          body: payload,
-        });
-        if (res.success) {
-          window.showToast('User updated successfully', 'success');
-          setTimeout(function () { window.location.href = 'user.html'; }, 500);
-        } else {
-          window.showToast(res.message || 'Failed to update user', 'error');
-        }
+        }, 'user.html', 'User updated successfully', 'Failed to update user');
       });
     });
   </script>

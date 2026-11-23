@@ -1,18 +1,19 @@
 # CineTix — Online Movie Ticket Booking System (Alpha Striker 2.0)
 
-CineTix is a full-stack web application for browsing movie screenings, exploring partner theaters and auditorium sightlines, redeeming promotional codes, reserving seats with transactional conflict protection, managing digital tickets, and administering catalog operations.
+CineTix is a desktop web application for browsing movie screenings, exploring partner theaters and 3D auditorium sightlines, redeeming promotional codes, reserving seats with transactional conflict protection, printing or saving digital tickets, and administering catalog operations.
 
 ## Architecture Overview
 
 - **Backend**: PHP 7.1+ / ThinkPHP 5.1 (`application/`, `config/`, `route/`)
-  - `app\common\controller\ApiController`: Unified JSON/form request parsing, column whitelisting (`fields_strict` safe), wildcard-safe `LIKE` escaping, consistent `{ success, message, data }` responses, and server-side error logging without stack-trace leakage.
+  - `app\common\controller\ApiController`: Unified JSON/form request parsing, column whitelisting (`fields_strict` safe), wildcard-safe `LIKE` escaping, string/ID input helpers, consistent `{ success, message, data }` responses, and server-side error logging without stack-trace leakage.
   - `app\admin\controller\BaseAdmin`: Enforces session-backed cryptographic token authentication (`X-Admin-Token` / `Bearer` / session) across all administrative CRUD endpoints (`Movie`, `Offer`, `Seat`, `Theater`, `User`).
-  - Domain modules: `movie` (`Movies`, `Seat`), `theater` (`Theater`), `offer` (`Offer`), `user` (`User`), `seat` (`Seat` model), and `admin`.
+  - Domain controllers: `movie` (`Movies`, `Seat`), `theater` (`Theater`), `offer` (`Offer`), `user` (`User`), `index` (`Index`), and `admin` — accessing MySQL directly through ThinkPHP's query builder (`Db::name` / `Db::table`).
 - **Database**: MySQL 5.7+ / 8.0 (`movies.sql`, `utf8mb4_unicode_ci`)
   - Core tables: `t_movies`, `t_theater`, `t_offer`, `t_user` (salted `$2y$10$` bcrypt hashes, unique email constraint), `t_seat` (composite unique key `uk_seat_booking` preventing double-booked seats, nullable `user_code` supporting both member and guest checkouts), plus junction tables `theater_movie` and `movie_offer`.
 - **Frontend**: Zero-build semantic HTML5, CSS Custom Properties, and modular Vanilla ES6 (`public/`)
-  - `public/js/common.js`: Path resolution across root and subdirectories, XSS-safe HTML escaping, `AuthStore` session synchronization, flash-free light/dark theme switching, shared header/footer rendering, and toast notifications.
-  - `public/js/admin/admin.js`: Admin authentication guard, `X-Admin-Token` API client, shared console navigation, and offline-capable HTML5 Canvas charts.
+  - `public/js/common.js`: Path resolution across root and subdirectories, XSS-safe HTML escaping, JSON API client (`fetchJson`), `AuthStore` session synchronization, flash-free light/dark theme switching, group-discount & star-rating helpers, shared header/footer rendering, FAQ accordions, and toast notifications.
+  - `public/js/admin/admin.js`: Admin authentication guard, `X-Admin-Token` API client, shared console navigation, reusable form submission/delete/preview helpers, and offline-capable HTML5 Canvas charts.
+  - `public/js/ticket/ticket.js` & `public/css/generate_ticket/generate_ticket.css`: Digital ticket wallet with native vector `@media print` / browser Save-as-PDF ticket isolation.
 
 ## Directory Structure
 
@@ -21,12 +22,11 @@ CineTix is a full-stack web application for browsing movie screenings, exploring
 │   ├── admin/controller/     # Auth, BaseAdmin, Movie, Offer, Seat, Theater, User
 │   ├── common/controller/    # Shared ApiController
 │   ├── index/controller/     # Health check endpoint
-│   ├── movie/                # Movies & Seat controllers + Movies model
-│   ├── offer/                # Offer controller & model
-│   ├── seat/model/           # Seat model with movie/user/theater relations
-│   ├── theater/              # Theater controller & model
-│   └── user/                 # User auth/registration/reset controller & model
-├── config/                   # ThinkPHP 5.1 configuration (utf8mb4, HttpOnly cookies)
+│   ├── movie/controller/     # Movies & Seat booking/ticket controllers
+│   ├── offer/controller/     # Promotional Offer controller
+│   ├── theater/controller/   # Partner Theater & schedule controller
+│   └── user/controller/      # Customer auth, registration & password reset controller
+├── config/                   # Streamlined ThinkPHP 5.1 configuration (utf8mb4, HttpOnly cookies)
 ├── public/
 │   ├── admin/                # 12 administrative console pages
 │   ├── css/                  # Semantic stylesheets + dark-mode.css + admin.css

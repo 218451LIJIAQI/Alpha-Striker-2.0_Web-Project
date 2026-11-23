@@ -8,15 +8,10 @@ class Movies extends ApiController
 {
     private const PUBLIC_FIELDS = 'movie_code, movie_name, star, tag, money, movie_type, img, times';
 
-    /**
-     * List movies with optional genre filter.
-     */
     public function getMovieList()
     {
         try {
-            $params = $this->payload();
-            $genre  = isset($params['genre']) ? trim((string) $params['genre']) : 'all';
-
+            $genre = $this->strParam('genre', 'all');
             $query = Db::name('movies')
                 ->field(self::PUBLIC_FIELDS)
                 ->order('movie_code', 'asc');
@@ -31,16 +26,11 @@ class Movies extends ApiController
         }
     }
 
-    /**
-     * Search movies by title, genre, or highlight tag.
-     */
     public function searchMovies()
     {
         try {
-            $params  = $this->payload();
-            $keyword = isset($params['keyword']) ? trim((string) $params['keyword']) : '';
-
-            $query = Db::name('movies')
+            $keyword = $this->strParam('keyword');
+            $query   = Db::name('movies')
                 ->field(self::PUBLIC_FIELDS)
                 ->order('movie_code', 'asc');
 
@@ -55,18 +45,10 @@ class Movies extends ApiController
         }
     }
 
-    /**
-     * Get single movie details by movie_code.
-     *
-     * @param string $movie_code
-     */
     public function getMovieByCode($movie_code = '')
     {
         try {
-            $params    = $this->payload();
-            $movieCode = $movie_code !== '' ? $movie_code : ($params['movie_code'] ?? '');
-            $movieId   = (int) $movieCode;
-
+            $movieId = $this->idParam('movie_code', $movie_code);
             if ($movieId <= 0) {
                 return $this->fail('Valid movie_code parameter is required');
             }
@@ -76,11 +58,7 @@ class Movies extends ApiController
                 ->where('movie_code', $movieId)
                 ->find();
 
-            if (!$movie) {
-                return $this->fail('Movie not found', 404);
-            }
-
-            return $this->ok($movie);
+            return $movie ? $this->ok($movie) : $this->fail('Movie not found', 404);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to load movie details', $e);
         }

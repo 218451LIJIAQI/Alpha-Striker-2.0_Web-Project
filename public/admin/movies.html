@@ -7,7 +7,6 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/admin/admin.css">
-  <link rel="stylesheet" href="../css/common/dark-mode.css">
   <script src="../js/common.js"></script>
   <script src="../js/admin/admin.js"></script>
 </head>
@@ -77,21 +76,12 @@
         );
       }).join('');
 
-      tbody.querySelectorAll('.delete-btn').forEach(function (btn) {
-        btn.addEventListener('click', async function () {
-          const id = btn.getAttribute('data-id');
-          if (!window.confirm('Delete movie #' + id + '? Related seat bookings will also be removed.')) return;
-          const delRes = await AdminApp.apiFetch('/index.php/admin/movie/delete?movie_code=' + encodeURIComponent(id), {
-            method: 'POST',
-            body: { movie_code: id },
-          });
-          if (delRes.success) {
-            window.showToast('Movie deleted', 'success');
-            loadMovies();
-          } else {
-            window.showToast(delRes.message || 'Delete failed', 'error');
-          }
-        });
+      AdminApp.bindDeleteActions(tbody, {
+        endpoint: '/index.php/admin/movie/delete',
+        idKey: 'movie_code',
+        confirmText: function (id) { return 'Delete movie #' + id + '? Related seat bookings will also be removed.'; },
+        successText: 'Movie deleted',
+        onSuccess: loadMovies,
       });
     }
 

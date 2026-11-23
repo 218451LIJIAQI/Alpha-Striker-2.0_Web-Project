@@ -7,7 +7,6 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/admin/admin.css">
-  <link rel="stylesheet" href="../css/common/dark-mode.css">
   <script src="../js/common.js"></script>
   <script src="../js/admin/admin.js"></script>
 </head>
@@ -85,39 +84,19 @@
       if (!(await AdminApp.ensureAuthenticated())) return;
 
       const imgInput = document.getElementById('img');
-      const preview = document.getElementById('poster-preview');
-      imgInput.addEventListener('change', function () {
-        const val = imgInput.value.trim();
-        if (/\.(jpe?g|png|webp|gif|svg)(\?.*)?$/i.test(val) || val.startsWith("data:")) {
-          preview.src = AdminApp.resolveAdminAsset(val);
-          preview.style.display = 'block';
-        } else {
-          preview.style.display = 'none';
-        }
-      });
+      AdminApp.bindImagePreview(imgInput, document.getElementById('poster-preview'));
 
-      document.getElementById('add-movie-form').addEventListener('submit', async function (e) {
+      document.getElementById('add-movie-form').addEventListener('submit', function (e) {
         e.preventDefault();
-        const payload = {
+        AdminApp.submitForm('/index.php/admin/movie/create', {
           movie_name: document.getElementById('movie_name').value.trim(),
           movie_type: document.getElementById('movie_type').value,
           times: document.getElementById('times').value.trim(),
           star: document.getElementById('star').value,
           money: document.getElementById('money').value,
           tag: document.getElementById('tag').value.trim(),
-          img: document.getElementById('img').value.trim(),
-        };
-
-        const res = await AdminApp.apiFetch('/index.php/admin/movie/create', {
-          method: 'POST',
-          body: payload,
-        });
-        if (res.success) {
-          window.showToast('Movie created successfully', 'success');
-          setTimeout(function () { window.location.href = 'movies.html'; }, 500);
-        } else {
-          window.showToast(res.message || 'Failed to create movie', 'error');
-        }
+          img: imgInput.value.trim(),
+        }, 'movies.html', 'Movie created successfully', 'Failed to create movie');
       });
     });
   </script>

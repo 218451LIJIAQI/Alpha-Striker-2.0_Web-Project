@@ -7,7 +7,6 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/admin/admin.css">
-  <link rel="stylesheet" href="../css/common/dark-mode.css">
   <script src="../js/common.js"></script>
   <script src="../js/admin/admin.js"></script>
 </head>
@@ -72,21 +71,13 @@
         );
       }).join('');
 
-      tbody.querySelectorAll('.refund-btn').forEach(function (btn) {
-        btn.addEventListener('click', async function () {
-          const id = btn.getAttribute('data-id');
-          if (!window.confirm('Cancel seat reservation #' + id + '?')) return;
-          const delRes = await AdminApp.apiFetch('/index.php/admin/seat/delete?seat_code=' + encodeURIComponent(id), {
-            method: 'POST',
-            body: { seat_code: id },
-          });
-          if (delRes.success) {
-            window.showToast('Reservation #' + id + ' cancelled', 'success');
-            loadSeats();
-          } else {
-            window.showToast(delRes.message || 'Cancellation failed', 'error');
-          }
-        });
+      AdminApp.bindDeleteActions(tbody, {
+        selector: '.refund-btn',
+        endpoint: '/index.php/admin/seat/delete',
+        idKey: 'seat_code',
+        confirmText: function (id) { return 'Cancel seat reservation #' + id + '?'; },
+        successText: function (id) { return 'Reservation #' + id + ' cancelled'; },
+        onSuccess: loadSeats,
       });
     }
 

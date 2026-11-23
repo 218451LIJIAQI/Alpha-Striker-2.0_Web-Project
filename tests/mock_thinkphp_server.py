@@ -478,10 +478,7 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "Movie deleted successfully", "data": {"movie_code": mid}}, 200, sid)
 
             if route == "admin/offer/index":
-                if p.get("offer_code"):
-                    rows = db.execute("SELECT * FROM t_offer WHERE offer_code = ?", (int(p["offer_code"]),)).fetchall()
-                else:
-                    rows = db.execute("SELECT * FROM t_offer ORDER BY offer_code ASC").fetchall()
+                rows = db.execute("SELECT * FROM t_offer ORDER BY offer_code ASC").fetchall()
                 return self._send_json({"success": True, "message": "OK", "data": rows_to_dicts(rows)}, 200, sid)
 
             if route == "admin/offer/getofferbycode":
@@ -490,7 +487,7 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": bool(row), "data": dict(row) if row else None}, 200 if row else 404, sid)
 
             if route == "admin/offer/create":
-                validity = p.get("offer_validity") or p.get("offer-validity")
+                validity = p.get("offer_validity")
                 cur = db.execute(
                     "INSERT INTO t_offer (offer_title, offer_type, offer_description, promo_code, offer_validity, img, badge, money, create_time) VALUES (?,?,?,?,?,?,?,?,?)",
                     (p["offer_title"], p["offer_type"], p["offer_description"], str(p["promo_code"]).upper(), validity, p["img"], p.get("badge") or None, float(p["money"]), now_str),
@@ -500,7 +497,7 @@ def make_handler(state: ContractState):
 
             if route == "admin/offer/update":
                 oid = int(p.get("offer_code") or 0)
-                validity = p.get("offer_validity") or p.get("offer-validity")
+                validity = p.get("offer_validity")
                 db.execute(
                     "UPDATE t_offer SET offer_title=?, offer_type=?, offer_description=?, promo_code=?, offer_validity=?, img=?, badge=?, money=?, update_time=? WHERE offer_code=?",
                     (p["offer_title"], p["offer_type"], p["offer_description"], str(p["promo_code"]).upper(), validity, p["img"], p.get("badge") or None, float(p["money"]), now_str, oid),

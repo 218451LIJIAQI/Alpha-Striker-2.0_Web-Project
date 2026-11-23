@@ -1,36 +1,36 @@
 /**
- * Digital Tickets Wallet, PDF/Print Export & Ticket Cancellation Controller
+ * Digital Tickets Wallet, Native Print/PDF Export & Ticket Cancellation Controller
  */
-document.addEventListener('DOMContentLoaded', function () {
-  loadUserTickets();
-});
+document.addEventListener('DOMContentLoaded', loadUserTickets);
 
 async function loadUserTickets() {
   const container = document.getElementById('cons');
   if (!container) return;
 
-  const user = window.CineTicket.AuthStore.getUser();
+  const CT = window.CineTicket;
+  const user = CT.AuthStore.getUser();
   if (!user.isLoggedIn || user.userId <= 0) {
     renderTicketEmptyState(
       container,
       'Sign in to view your booked tickets',
-      'Log in to access your digital passes, QR barcodes, and seat cancellation options.',
-      window.CineTicket.rootUrl('login.html'),
+      'Log in to access your digital passes, barcodes, and seat cancellation options.',
+      CT.rootUrl('login.html'),
       'Sign In Now'
     );
     return;
   }
 
   try {
-    const res = await fetch('/index.php/movie/seat/getSeatListByUserCode?user_code=' + encodeURIComponent(user.userId));
-    const payload = await res.json();
+    const payload = await CT.fetchJson(
+      '/index.php/movie/seat/getSeatListByUserCode?user_code=' + encodeURIComponent(user.userId)
+    );
 
     if (!payload.success || !Array.isArray(payload.data) || payload.data.length === 0) {
       renderTicketEmptyState(
         container,
         'No active tickets yet',
         'Reserve seats for any current movie screening and your digital tickets will appear here.',
-        window.CineTicket.pageUrl('homepage.html'),
+        CT.pageUrl('homepage.html'),
         'Browse Movies'
       );
       return;
@@ -48,16 +48,17 @@ async function loadUserTickets() {
 function renderTicketEmptyState(container, heading, message, actionHref, actionLabel) {
   const esc = window.CineTicket.escapeHtml;
   container.innerHTML =
-    '<div class="no-tickets card" style="max-width:480px; margin:40px auto; padding:36px 28px; text-align:center; border-radius:16px; background:#fff; box-shadow:0 8px 24px rgba(0,0,0,0.08);">' +
-    '<i class="fas fa-ticket-alt" style="font-size:42px; color:#4361ee; margin-bottom:16px;"></i>' +
-    '<h2 style="margin-bottom:10px;">' + esc(heading) + '</h2>' +
-    '<p style="margin-bottom:22px; opacity:0.8;">' + esc(message) + '</p>' +
-    '<a href="' + esc(actionHref) + '" style="display:inline-block; padding:11px 24px; border-radius:999px; background:#4361ee; color:#fff; text-decoration:none; font-weight:600;">' + esc(actionLabel) + '</a>' +
+    '<div class="no-tickets card">' +
+    '<i class="fas fa-ticket-alt"></i>' +
+    '<h2>' + esc(heading) + '</h2>' +
+    '<p>' + esc(message) + '</p>' +
+    '<a href="' + esc(actionHref) + '" class="empty-action-btn">' + esc(actionLabel) + '</a>' +
     '</div>';
 }
 
 function createTicketElement(seat) {
-  const esc = window.CineTicket.escapeHtml;
+  const CT = window.CineTicket;
+  const esc = CT.escapeHtml;
   const movie = seat.movie_info || {};
   const theater = seat.theater_info || {};
 
@@ -67,16 +68,13 @@ function createTicketElement(seat) {
     .split(',')
     .map(function (g) { return g.trim(); })
     .filter(Boolean);
-  const stars = window.CineTicket.formatStars(movie.star || 5);
+  const stars = CT.formatStars(movie.star || 5);
   const seatStr = String(seat.seat_num || 'A1');
-  const rowLetter = seatStr.charAt(0);
-  const seatNum = seatStr.slice(1);
   const theaterLabel = theater.theater_name || ('Theater #' + (seat.theater_code || 1));
 
   const wrapper = document.createElement('div');
   wrapper.className = 'ticket';
   wrapper.id = 'ticket' + seat.seat_code;
-  wrapper.style.width = '350px';
 
   wrapper.innerHTML =
     '<div class="movie-banner">' +
@@ -91,19 +89,13 @@ function createTicketElement(seat) {
     '</div>' +
     '<div class="ticket-details">' +
     '<div class="seat-info">' +
-    '<div class="detail-column"><div class="detail-label">ROW</div><div class="detail-value">' + esc(rowLetter) + '</div></div>' +
-    '<div class="detail-column"><div class="detail-label">SEAT</div><div class="detail-value">' + esc(seatNum) + '</div></div>' +
+    '<div class="detail-column"><div class="detail-label">ROW</div><div class="detail-value">' + esc(seatStr.charAt(0)) + '</div></div>' +
+    '<div class="detail-column"><div class="detail-label">SEAT</div><div class="detail-value">' + esc(seatStr.slice(1)) + '</div></div>' +
     '<div class="detail-column"><div class="detail-label">ZONE</div><div class="detail-value">' + (Number(seat.seat_zone) === 2 ? 'VIP' : 'STD') + '</div></div>' +
     '</div>' +
     '<div class="datetime-info">' +
-    '<div class="date-time">' +
-    '<div class="icon"><i class="fas fa-calendar-alt"></i></div>' +
-    '<div class="text-info"><div class="detail-label">DATE</div><div>' + esc(seat.date) + '</div></div>' +
-    '</div>' +
-    '<div class="date-time">' +
-    '<div class="icon"><i class="fas fa-clock"></i></div>' +
-    '<div class="text-info"><div class="detail-label">TIME</div><div>' + esc(seat.time) + '</div></div>' +
-    '</div>' +
+    '<div class="date-time"><div class="icon"><i class="fas fa-calendar-alt"></i></div><div class="text-info"><div class="detail-label">DATE</div><div>' + esc(seat.date) + '</div></div></div>' +
+    '<div class="date-time"><div class="icon"><i class="fas fa-clock"></i></div><div class="text-info"><div class="detail-label">TIME</div><div>' + esc(seat.time) + '</div></div></div>' +
     '</div>' +
     '<div class="barcode-container">' +
     '<div class="barcode-inner">' +
@@ -128,12 +120,12 @@ function createTicketElement(seat) {
     '</div>' +
     '<div class="ticket-id">TKT-' + esc(String(seat.seat_code).padStart(6, '0')) + '</div>' +
     '</div>' +
-    '<button type="button" class="view-details export-ticket-btn" style="border:none; width:100%; cursor:pointer;">Print / Save PDF</button>' +
-    '<button type="button" class="view-details2 cancel-button" style="border:none; width:100%; cursor:pointer;" data-seat-code="' + esc(seat.seat_code) + '">Cancel Booking</button>' +
+    '<button type="button" class="view-details export-ticket-btn">Print / Save PDF</button>' +
+    '<button type="button" class="view-details2 cancel-button" data-seat-code="' + esc(seat.seat_code) + '">Cancel Booking</button>' +
     '</div>';
 
   wrapper.querySelector('.export-ticket-btn').addEventListener('click', function () {
-    exportTicket(seat.seat_code);
+    exportTicket(wrapper);
   });
   wrapper.querySelector('.cancel-button').addEventListener('click', function () {
     cancelTicket(seat.seat_code);
@@ -142,30 +134,12 @@ function createTicketElement(seat) {
   return wrapper;
 }
 
-function exportTicket(seatCode) {
-  const ticketEl = document.getElementById('ticket' + seatCode);
-  if (!ticketEl) {
-    window.showToast('Ticket element not found', 'error');
-    return;
-  }
-
-  if (window.jspdf && window.jspdf.jsPDF && typeof window.html2canvas === 'function') {
-    const jsPDF = window.jspdf.jsPDF;
-    const doc = new jsPDF();
-    doc.html(ticketEl, {
-      callback: function (pdf) {
-        pdf.save('ticket_' + seatCode + '.pdf');
-      },
-      margin: [10, 10, 10, 10],
-      x: 10,
-      y: 10,
-      html2canvas: { scale: 0.32 },
-    });
-    return;
-  }
-
-  // Offline / no-CDN fallback: trigger clean browser print dialog
+function exportTicket(ticketEl) {
+  document.body.classList.add('printing-single-ticket');
+  ticketEl.classList.add('print-target');
   window.print();
+  ticketEl.classList.remove('print-target');
+  document.body.classList.remove('printing-single-ticket');
 }
 
 async function cancelTicket(seatCode) {
@@ -173,17 +147,13 @@ async function cancelTicket(seatCode) {
     return;
   }
 
-  const user = window.CineTicket.AuthStore.getUser();
+  const CT = window.CineTicket;
+  const user = CT.AuthStore.getUser();
   try {
-    const res = await fetch('/index.php/movie/seat/delete', {
+    const payload = await CT.fetchJson('/index.php/movie/seat/delete', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        seat_code: seatCode,
-        user_code: user.userId,
-      }),
+      body: { seat_code: seatCode, user_code: user.userId },
     });
-    const payload = await res.json();
 
     if (payload.success) {
       window.showToast('Seat booking cancelled', 'success');

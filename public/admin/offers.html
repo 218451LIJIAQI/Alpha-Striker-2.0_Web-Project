@@ -7,7 +7,6 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/admin/admin.css">
-  <link rel="stylesheet" href="../css/common/dark-mode.css">
   <script src="../js/common.js"></script>
   <script src="../js/admin/admin.js"></script>
 </head>
@@ -75,21 +74,12 @@
         );
       }).join('');
 
-      tbody.querySelectorAll('.delete-btn').forEach(function (btn) {
-        btn.addEventListener('click', async function () {
-          const id = btn.getAttribute('data-id');
-          if (!window.confirm('Delete offer #' + id + '?')) return;
-          const delRes = await AdminApp.apiFetch('/index.php/admin/offer/delete?offer_code=' + encodeURIComponent(id), {
-            method: 'POST',
-            body: { offer_code: id },
-          });
-          if (delRes.success) {
-            window.showToast('Offer deleted', 'success');
-            loadOffers();
-          } else {
-            window.showToast(delRes.message || 'Delete failed', 'error');
-          }
-        });
+      AdminApp.bindDeleteActions(tbody, {
+        endpoint: '/index.php/admin/offer/delete',
+        idKey: 'offer_code',
+        confirmText: function (id) { return 'Delete offer #' + id + '?'; },
+        successText: 'Offer deleted',
+        onSuccess: loadOffers,
       });
     }
 

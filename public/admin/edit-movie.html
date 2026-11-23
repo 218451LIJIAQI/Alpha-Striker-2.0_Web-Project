@@ -7,7 +7,6 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/admin/admin.css">
-  <link rel="stylesheet" href="../css/common/dark-mode.css">
   <script src="../js/common.js"></script>
   <script src="../js/admin/admin.js"></script>
 </head>
@@ -90,19 +89,8 @@
         return;
       }
 
-      const preview = document.getElementById('poster-preview');
       const imgInput = document.getElementById('img');
-
-      function syncPreview() {
-        const val = imgInput.value.trim();
-        if (/\.(jpe?g|png|webp|gif|svg)(\?.*)?$/i.test(val) || val.startsWith("data:")) {
-          preview.src = AdminApp.resolveAdminAsset(val);
-          preview.style.display = 'block';
-        } else {
-          preview.style.display = 'none';
-        }
-      }
-      imgInput.addEventListener('change', syncPreview);
+      const syncPreview = AdminApp.bindImagePreview(imgInput, document.getElementById('poster-preview'));
 
       const detailRes = await AdminApp.apiFetch('/index.php/admin/movie/getMovieByCode?movie_code=' + encodeURIComponent(movieCode));
       if (!detailRes.success || !detailRes.data) {
@@ -121,9 +109,9 @@
       imgInput.value = m.img || '';
       syncPreview();
 
-      document.getElementById('edit-movie-form').addEventListener('submit', async function (e) {
+      document.getElementById('edit-movie-form').addEventListener('submit', function (e) {
         e.preventDefault();
-        const payload = {
+        AdminApp.submitForm('/index.php/admin/movie/update', {
           movie_code: movieCode,
           movie_name: document.getElementById('movie_name').value.trim(),
           movie_type: document.getElementById('movie_type').value,
@@ -132,18 +120,7 @@
           money: document.getElementById('money').value,
           tag: document.getElementById('tag').value.trim(),
           img: imgInput.value.trim(),
-        };
-
-        const res = await AdminApp.apiFetch('/index.php/admin/movie/update?movie_code=' + encodeURIComponent(movieCode), {
-          method: 'POST',
-          body: payload,
-        });
-        if (res.success) {
-          window.showToast('Movie updated successfully', 'success');
-          setTimeout(function () { window.location.href = 'movies.html'; }, 500);
-        } else {
-          window.showToast(res.message || 'Failed to update movie', 'error');
-        }
+        }, 'movies.html', 'Movie updated successfully', 'Failed to update movie');
       });
     });
   </script>

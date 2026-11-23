@@ -1,7 +1,6 @@
 <?php
 namespace app\admin\controller;
 
-use app\offer\model\Offer as OfferModel;
 use think\Db;
 
 class Offer extends BaseAdmin
@@ -15,21 +14,13 @@ class Offer extends BaseAdmin
         'img',
         'badge',
         'money',
-        'user_code',
     ];
 
     public function index()
     {
         try {
-            $payload = $this->payload();
-            $model   = new OfferModel();
-            $query   = $model->order('offer_code', 'asc');
-
-            if (!empty($payload['offer_code'])) {
-                $query->where('offer_code', (int) $payload['offer_code']);
-            }
-
-            return $this->ok($query->select());
+            $offers = Db::name('offer')->order('offer_code', 'asc')->select();
+            return $this->ok($offers);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to query offers', $e);
         }
@@ -38,20 +29,13 @@ class Offer extends BaseAdmin
     public function getOfferByCode($offer_code = '')
     {
         try {
-            $payload = $this->payload();
-            $offerId = (int) ($offer_code !== '' ? $offer_code : ($payload['offer_code'] ?? 0));
-
+            $offerId = $this->idParam('offer_code', $offer_code);
             if ($offerId <= 0) {
                 return $this->fail('Valid offer_code is required');
             }
 
-            $model = new OfferModel();
-            $offer = $model->where('offer_code', $offerId)->find();
-            if (!$offer) {
-                return $this->fail('Offer not found', 404);
-            }
-
-            return $this->ok($offer);
+            $offer = Db::name('offer')->where('offer_code', $offerId)->find();
+            return $offer ? $this->ok($offer) : $this->fail('Offer not found', 404);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to query offer details', $e);
         }
@@ -60,26 +44,18 @@ class Offer extends BaseAdmin
     public function create()
     {
         try {
-            $raw = $this->normalizeOfferFields($this->payload());
-            $data = $this->pickAllowed($raw, self::ALLOWED_FIELDS);
-
-            $validationError = $this->validateOfferPayload($data, 0);
-            if ($validationError !== null) {
-                return $this->fail($validationError);
+            [$data, $error] = $this->prepareOfferData($this->payload(), 0);
+            if ($error !== null) {
+                return $this->fail($error);
             }
 
-            $data['promo_code']  = strtoupper($data['promo_code']);
-            $data['badge']       = isset($data['badge']) && $data['badge'] !== '' ? $data['badge'] : null;
-            $data['money']       = round((float) $data['money'], 2);
-            $data['user_code']   = !empty($data['user_code']) ? (int) $data['user_code'] : null;
             $data['create_time'] = date('Y-m-d H:i:s');
-
-            $model = new OfferModel();
-            if (!$model->save($data)) {
+            $offerId = (int) Db::name('offer')->insertGetId($data);
+            if ($offerId <= 0) {
                 return $this->fail('Failed to create offer');
             }
 
-            return $this->ok(['offer_code' => (int) $model->offer_code], 'Offer created successfully');
+            return $this->ok(['offer_code' => $offerId], 'Offer created successfully');
         } catch (\Throwable $e) {
             return $this->serverError('Failed to create offer', $e);
         }
@@ -88,32 +64,22 @@ class Offer extends BaseAdmin
     public function update($offer_code = '')
     {
         try {
-            $raw     = $this->normalizeOfferFields($this->payload());
-            $offerId = (int) ($offer_code !== '' ? $offer_code : ($raw['offer_code'] ?? 0));
-
+            $offerId = $this->idParam('offer_code', $offer_code);
             if ($offerId <= 0) {
                 return $this->fail('Valid offer_code is required');
             }
 
-            $model = new OfferModel();
-            if (!$model->where('offer_code', $offerId)->find()) {
+            if (!Db::name('offer')->where('offer_code', $offerId)->find()) {
                 return $this->fail('Offer not found', 404);
             }
 
-            $data = $this->pickAllowed($raw, self::ALLOWED_FIELDS);
-            $validationError = $this->validateOfferPayload($data, $offerId);
-            if ($validationError !== null) {
-                return $this->fail($validationError);
+            [$data, $error] = $this->prepareOfferData($this->payload(), $offerId);
+            if ($error !== null) {
+                return $this->fail($error);
             }
 
-            $data['promo_code']  = strtoupper($data['promo_code']);
-            $data['badge']       = isset($data['badge']) && $data['badge'] !== '' ? $data['badge'] : null;
-            $data['money']       = round((float) $data['money'], 2);
-            $data['user_code']   = !empty($data['user_code']) ? (int) $data['user_code'] : null;
             $data['update_time'] = date('Y-m-d H:i:s');
-
-            $saved = $model->save($data, ['offer_code' => $offerId]);
-            if ($saved === false) {
+            if (Db::name('offer')->where('offer_code', $offerId)->update($data) === false) {
                 return $this->fail('Failed to update offer');
             }
 
@@ -126,16 +92,12 @@ class Offer extends BaseAdmin
     public function delete($offer_code = '')
     {
         try {
-            $payload = $this->payload();
-            $offerId = (int) ($offer_code !== '' ? $offer_code : ($payload['offer_code'] ?? 0));
-
+            $offerId = $this->idParam('offer_code', $offer_code);
             if ($offerId <= 0) {
                 return $this->fail('Valid offer_code is required');
             }
 
-            $model   = new OfferModel();
-            $deleted = $model->where('offer_code', $offerId)->delete();
-            if (!$deleted) {
+            if (!Db::name('offer')->where('offer_code', $offerId)->delete()) {
                 return $this->fail('Offer not found', 404);
             }
 
@@ -145,46 +107,45 @@ class Offer extends BaseAdmin
         }
     }
 
-    private function normalizeOfferFields(array $payload)
+    private function prepareOfferData(array $payload, $excludeOfferId)
     {
-        if (!isset($payload['offer_validity']) && isset($payload['offer-validity'])) {
-            $payload['offer_validity'] = $payload['offer-validity'];
-        }
-        return $payload;
-    }
+        $data = $this->pickAllowed($payload, self::ALLOWED_FIELDS);
 
-    private function validateOfferPayload(array $data, $excludeOfferId)
-    {
         if (empty($data['offer_title'])) {
-            return 'Offer title is required';
+            return [null, 'Offer title is required'];
         }
         if (empty($data['offer_type'])) {
-            return 'Offer category is required';
+            return [null, 'Offer category is required'];
         }
         if (empty($data['offer_description'])) {
-            return 'Offer description is required';
+            return [null, 'Offer description is required'];
         }
         if (empty($data['promo_code'])) {
-            return 'Promo code is required';
+            return [null, 'Promo code is required'];
         }
         if (empty($data['offer_validity']) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $data['offer_validity'])) {
-            return 'Validity date must use YYYY-MM-DD format';
+            return [null, 'Validity date must use YYYY-MM-DD format'];
         }
         if (empty($data['img'])) {
-            return 'Offer image path or URL is required';
+            return [null, 'Offer image path or URL is required'];
         }
         if (!isset($data['money']) || !is_numeric($data['money']) || (float) $data['money'] < 0) {
-            return 'Discount amount must be a non-negative number';
+            return [null, 'Discount amount must be a non-negative number'];
         }
 
-        $promoQuery = Db::name('offer')->where('promo_code', strtoupper($data['promo_code']));
+        $promoCode  = strtoupper($data['promo_code']);
+        $promoQuery = Db::name('offer')->where('promo_code', $promoCode);
         if ($excludeOfferId > 0) {
             $promoQuery->where('offer_code', '<>', $excludeOfferId);
         }
         if ($promoQuery->find()) {
-            return 'Promo code is already in use by another offer';
+            return [null, 'Promo code is already in use by another offer'];
         }
 
-        return null;
+        $data['promo_code'] = $promoCode;
+        $data['badge']      = isset($data['badge']) && $data['badge'] !== '' ? $data['badge'] : null;
+        $data['money']      = round((float) $data['money'], 2);
+
+        return [$data, null];
     }
 }

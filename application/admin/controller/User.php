@@ -1,7 +1,6 @@
 <?php
 namespace app\admin\controller;
 
-use app\user\model\User as UserModel;
 use think\Db;
 
 class User extends BaseAdmin
@@ -25,9 +24,7 @@ class User extends BaseAdmin
     public function getUserByCode($user_code = '')
     {
         try {
-            $payload = $this->payload();
-            $userId  = (int) ($user_code !== '' ? $user_code : ($payload['user_code'] ?? 0));
-
+            $userId = $this->idParam('user_code', $user_code);
             if ($userId <= 0) {
                 return $this->fail('Valid user_code is required');
             }
@@ -37,11 +34,7 @@ class User extends BaseAdmin
                 ->where('user_code', $userId)
                 ->find();
 
-            if (!$user) {
-                return $this->fail('User not found', 404);
-            }
-
-            return $this->ok($user);
+            return $user ? $this->ok($user) : $this->fail('User not found', 404);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to query user details', $e);
         }
@@ -51,34 +44,27 @@ class User extends BaseAdmin
     {
         try {
             $payload  = $this->payload();
-            $name     = isset($payload['user_name']) ? trim((string) $payload['user_name']) : '';
-            $email    = isset($payload['email']) ? strtolower(trim((string) $payload['email'])) : '';
+            $name     = $this->strParam('user_name');
+            $email    = strtolower($this->strParam('email'));
             $password = isset($payload['login_pwd']) ? (string) $payload['login_pwd'] : '';
 
-            if ($name === '' || mb_strlen($name) > 50) {
-                return $this->fail('Valid username (1-50 characters) is required');
-            }
-            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100) {
-                return $this->fail('Valid email address is required');
-            }
-            if (strlen($password) < 6) {
-                return $this->fail('Password must be at least 6 characters');
-            }
-            if (Db::name('user')->where('email', $email)->find()) {
-                return $this->fail('Email is already registered');
+            $error = $this->validateUserInput($name, $email, $password, true, 0);
+            if ($error !== null) {
+                return $this->fail($error);
             }
 
-            $model              = new UserModel();
-            $model->user_name   = $name;
-            $model->email       = $email;
-            $model->login_pwd   = password_hash($password, PASSWORD_BCRYPT);
-            $model->create_time = date('Y-m-d H:i:s');
+            $userId = (int) Db::name('user')->insertGetId([
+                'user_name'   => $name,
+                'email'       => $email,
+                'login_pwd'   => password_hash($password, PASSWORD_BCRYPT),
+                'create_time' => date('Y-m-d H:i:s'),
+            ]);
 
-            if (!$model->save()) {
+            if ($userId <= 0) {
                 return $this->fail('Failed to create user');
             }
 
-            return $this->ok(['user_code' => (int) $model->user_code], 'User created successfully');
+            return $this->ok(['user_code' => $userId], 'User created successfully');
         } catch (\Throwable $e) {
             return $this->serverError('Failed to create user', $e);
         }
@@ -87,35 +73,23 @@ class User extends BaseAdmin
     public function update($user_code = '')
     {
         try {
-            $payload = $this->payload();
-            $userId  = (int) ($user_code !== '' ? $user_code : ($payload['user_code'] ?? 0));
-
+            $userId = $this->idParam('user_code', $user_code);
             if ($userId <= 0) {
                 return $this->fail('Valid user_code is required');
             }
 
-            $existing = Db::name('user')->where('user_code', $userId)->find();
-            if (!$existing) {
+            if (!Db::name('user')->where('user_code', $userId)->find()) {
                 return $this->fail('User not found', 404);
             }
 
-            $name     = isset($payload['user_name']) ? trim((string) $payload['user_name']) : '';
-            $email    = isset($payload['email']) ? strtolower(trim((string) $payload['email'])) : '';
+            $payload  = $this->payload();
+            $name     = $this->strParam('user_name');
+            $email    = strtolower($this->strParam('email'));
             $password = isset($payload['login_pwd']) ? (string) $payload['login_pwd'] : '';
 
-            if ($name === '' || mb_strlen($name) > 50) {
-                return $this->fail('Valid username (1-50 characters) is required');
-            }
-            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100) {
-                return $this->fail('Valid email address is required');
-            }
-
-            $duplicate = Db::name('user')
-                ->where('email', $email)
-                ->where('user_code', '<>', $userId)
-                ->find();
-            if ($duplicate) {
-                return $this->fail('Email is already registered to another user');
+            $error = $this->validateUserInput($name, $email, $password, false, $userId);
+            if ($error !== null) {
+                return $this->fail($error);
             }
 
             $updateData = [
@@ -123,16 +97,11 @@ class User extends BaseAdmin
                 'email'       => $email,
                 'update_time' => date('Y-m-d H:i:s'),
             ];
-
             if ($password !== '') {
-                if (strlen($password) < 6) {
-                    return $this->fail('New password must be at least 6 characters');
-                }
                 $updateData['login_pwd'] = password_hash($password, PASSWORD_BCRYPT);
             }
 
-            $updated = Db::name('user')->where('user_code', $userId)->update($updateData);
-            if ($updated === false) {
+            if (Db::name('user')->where('user_code', $userId)->update($updateData) === false) {
                 return $this->fail('Failed to update user');
             }
 
@@ -145,15 +114,12 @@ class User extends BaseAdmin
     public function delete($user_code = '')
     {
         try {
-            $payload = $this->payload();
-            $userId  = (int) ($user_code !== '' ? $user_code : ($payload['user_code'] ?? 0));
-
+            $userId = $this->idParam('user_code', $user_code);
             if ($userId <= 0) {
                 return $this->fail('Valid user_code is required');
             }
 
-            $deleted = Db::name('user')->where('user_code', $userId)->delete();
-            if (!$deleted) {
+            if (!Db::name('user')->where('user_code', $userId)->delete()) {
                 return $this->fail('User not found', 404);
             }
 
@@ -161,5 +127,33 @@ class User extends BaseAdmin
         } catch (\Throwable $e) {
             return $this->serverError('Failed to delete user', $e);
         }
+    }
+
+    private function validateUserInput($name, $email, $password, $requirePassword, $excludeUserId)
+    {
+        if ($name === '' || $this->textLen($name) > 50) {
+            return 'Valid username (1-50 characters) is required';
+        }
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100) {
+            return 'Valid email address is required';
+        }
+        if ($requirePassword && strlen($password) < 6) {
+            return 'Password must be at least 6 characters';
+        }
+        if (!$requirePassword && $password !== '' && strlen($password) < 6) {
+            return 'New password must be at least 6 characters';
+        }
+
+        $dupQuery = Db::name('user')->where('email', $email);
+        if ($excludeUserId > 0) {
+            $dupQuery->where('user_code', '<>', $excludeUserId);
+        }
+        if ($dupQuery->find()) {
+            return $excludeUserId > 0
+                ? 'Email is already registered to another user'
+                : 'Email is already registered';
+        }
+
+        return null;
     }
 }

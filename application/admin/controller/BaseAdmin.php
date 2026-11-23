@@ -8,26 +8,31 @@ use think\facade\Session;
 
 /**
  * Base controller for authenticated admin endpoints.
- * Validates session state and optional X-Admin-Token / Bearer token header before executing actions.
+ * Centralizes session + X-Admin-Token / Bearer verification across Auth and CRUD controllers.
  */
 abstract class BaseAdmin extends ApiController
 {
     public function __construct()
     {
-        if (!$this->isAdminAuthenticated()) {
+        if (!self::checkSession($this->payload())) {
             throw new HttpResponseException(
                 $this->fail('Unauthorized: admin login required', 401)
             );
         }
     }
 
-    /**
-     * Extract client admin token from X-Admin-Token header, Authorization Bearer header, or request params.
-     *
-     * @param array $payload
-     * @return string
-     */
-    protected function extractAdminToken(array $payload = [])
+    public static function checkSession(array $payload = [])
+    {
+        $sessionToken = (string) Session::get('admin_token', '');
+        if (Session::get('admin_auth') !== true || $sessionToken === '') {
+            return false;
+        }
+
+        $clientToken = self::extractToken($payload);
+        return $clientToken === '' || hash_equals($sessionToken, $clientToken);
+    }
+
+    private static function extractToken(array $payload)
     {
         $headerToken = Request::header('x-admin-token');
         if (is_string($headerToken) && trim($headerToken) !== '') {
@@ -44,27 +49,5 @@ abstract class BaseAdmin extends ApiController
         }
 
         return '';
-    }
-
-    /**
-     * Verify active admin session and constant-time token match.
-     *
-     * @return bool
-     */
-    protected function isAdminAuthenticated()
-    {
-        $sessionAuth  = Session::get('admin_auth') === true;
-        $sessionToken = (string) Session::get('admin_token', '');
-
-        if (!$sessionAuth || $sessionToken === '') {
-            return false;
-        }
-
-        $clientToken = $this->extractAdminToken($this->payload());
-        if ($clientToken !== '') {
-            return hash_equals($sessionToken, $clientToken);
-        }
-
-        return true;
     }
 }

@@ -2,22 +2,20 @@
  * Checkout & Payment Processing Controller
  */
 document.addEventListener('DOMContentLoaded', function () {
+  const CT = window.CineTicket;
   const urlParams = new URLSearchParams(window.location.search);
   const movieCode = urlParams.get('movie_code') || '';
   const theaterCode = urlParams.get('theater_code') || '1';
   const date = urlParams.get('date') || '';
   const time = urlParams.get('time') || '';
-  const rawSeats = urlParams.get('seats') || '';
-  const seats = rawSeats
+  const seats = (urlParams.get('seats') || '')
     .split(',')
     .map(function (s) { return s.trim().toUpperCase(); })
     .filter(Boolean);
 
   if (!movieCode || !date || !time || seats.length === 0) {
     window.showToast('Missing booking details — returning to movie selection', 'warning');
-    setTimeout(function () {
-      window.location.href = 'homepage.html';
-    }, 900);
+    setTimeout(function () { window.location.href = 'homepage.html'; }, 900);
     return;
   }
 
@@ -26,26 +24,24 @@ document.addEventListener('DOMContentLoaded', function () {
   let subtotal = 0;
   let bulkDiscount = 0;
   let promoDiscount = 0;
-  let appliedPromoCode = '';
   const serviceFee = 2.50;
 
-  const dateEl = document.getElementById('booking-date');
-  const timeEl = document.getElementById('booking-time');
-  const seatsEl = document.getElementById('booking-seats');
-  const theaterEl = document.getElementById('booking-theater');
+  const setText = function (id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
 
-  if (dateEl) dateEl.textContent = date;
-  if (timeEl) timeEl.textContent = time;
-  if (seatsEl) seatsEl.textContent = seats.join(', ');
+  setText('booking-date', date);
+  setText('booking-time', time);
+  setText('booking-seats', seats.join(', '));
 
   initPaymentMethods();
   initCardFormatting();
   initPromoCodeHandler();
 
-  // Load movie & theater metadata concurrently
   Promise.all([
-    fetch('/index.php/movie/movies/getMovieByCode?movie_code=' + encodeURIComponent(movieCode)).then(function (r) { return r.json(); }),
-    fetch('/index.php/theater/theater/getTheaterDetails?theater_code=' + encodeURIComponent(theaterCode)).then(function (r) { return r.json(); }).catch(function () { return null; }),
+    CT.fetchJson('/index.php/movie/movies/getMovieByCode?movie_code=' + encodeURIComponent(movieCode)),
+    CT.fetchJson('/index.php/theater/theater/getTheaterDetails?theater_code=' + encodeURIComponent(theaterCode)).catch(function () { return null; }),
   ]).then(function (results) {
     const moviePayload = results[0];
     const theaterPayload = results[1];
@@ -53,22 +49,20 @@ document.addEventListener('DOMContentLoaded', function () {
     if (theaterPayload && theaterPayload.success && theaterPayload.data) {
       theaterName = theaterPayload.data.theater_name;
     }
-    if (theaterEl) theaterEl.textContent = theaterName;
+    setText('booking-theater', theaterName);
 
     if (moviePayload && moviePayload.success && moviePayload.data) {
       const movie = moviePayload.data;
       movieTitle = movie.movie_name;
       renderMovieSummary(movie);
 
-      const unitPrice = parseFloat(movie.money) || 39.0;
-      subtotal = unitPrice * seats.length;
-      bulkDiscount = seats.length >= 5 ? +(subtotal * 0.30).toFixed(2) : 0;
+      subtotal = (parseFloat(movie.money) || 39.0) * seats.length;
+      bulkDiscount = CT.calcGroupDiscount(subtotal, seats.length);
       updatePriceBreakdown();
     } else {
       window.showToast('Failed to load movie pricing', 'error');
     }
 
-    // Auto-fill claimed promo code from Offers page if present
     const savedPromo = sessionStorage.getItem('selectedPromoCode');
     const couponInput = document.getElementById('coupon-code');
     if (savedPromo && couponInput && !couponInput.value) {
@@ -79,77 +73,67 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   const payBtn = document.querySelector('.pay-now-btn');
-  if (payBtn) {
-    payBtn.addEventListener('click', async function () {
-      const checkedRadio = document.querySelector('input[name="payment"]:checked');
-      const selectedMethod = checkedRadio ? checkedRadio.value : 'card';
+  payBtn?.addEventListener('click', async function () {
+    const checkedRadio = document.querySelector('input[name="payment"]:checked');
+    const selectedMethod = checkedRadio ? checkedRadio.value : 'card';
 
-      if (selectedMethod === 'card' && !validateCardInputs()) {
-        return;
-      }
+    if (selectedMethod === 'card' && !validateCardInputs()) {
+      return;
+    }
 
-      const originalMarkup = payBtn.innerHTML;
-      payBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Processing...</span>';
-      payBtn.disabled = true;
+    const originalMarkup = payBtn.innerHTML;
+    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Processing...</span>';
+    payBtn.disabled = true;
 
-      const user = window.CineTicket.AuthStore.getUser();
-      const totalAmount = computeTotal();
+    const user = CT.AuthStore.getUser();
+    const totalAmount = computeTotal();
 
-      try {
-        const res = await fetch('/index.php/movie/seat/saveSeats', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            movie_code: movieCode,
-            theater_code: theaterCode,
-            date: date,
-            time: time,
-            seat_nums: seats,
-            user_code: user.isLoggedIn ? user.userId : null,
-            payment_method: selectedMethod,
-            promo_code: appliedPromoCode,
-            total_amount: totalAmount,
-          }),
-        });
-        const payload = await res.json();
+    try {
+      const payload = await CT.fetchJson('/index.php/movie/seat/saveSeats', {
+        method: 'POST',
+        body: {
+          movie_code: movieCode,
+          theater_code: theaterCode,
+          date: date,
+          time: time,
+          seat_nums: seats,
+          user_code: user.isLoggedIn ? user.userId : null,
+        },
+      });
 
-        if (payload.success) {
-          sessionStorage.removeItem('selectedPromoCode');
-          const receipt = {
-            bookingId: 'BK-' + Date.now().toString().slice(-6),
-            movieTitle: movieTitle,
-            theaterName: theaterName,
-            date: date,
-            time: time,
-            seats: seats,
-            totalPaid: totalAmount.toFixed(2),
-            paymentMethod: selectedMethod,
-          };
-          sessionStorage.setItem('lastBookingReceipt', JSON.stringify(receipt));
-          window.location.href = 'paysuccess.html';
-        } else {
-          window.showToast(payload.message || 'Seat booking failed', 'error');
-          payBtn.innerHTML = originalMarkup;
-          payBtn.disabled = false;
-        }
-      } catch (_) {
-        window.showToast('Network error while completing payment', 'error');
+      if (payload.success) {
+        sessionStorage.removeItem('selectedPromoCode');
+        sessionStorage.setItem('lastBookingReceipt', JSON.stringify({
+          bookingId: 'BK-' + Date.now().toString().slice(-6),
+          movieTitle: movieTitle,
+          theaterName: theaterName,
+          date: date,
+          time: time,
+          seats: seats,
+          totalPaid: totalAmount.toFixed(2),
+          paymentMethod: selectedMethod,
+        }));
+        window.location.href = 'paysuccess.html';
+      } else {
+        window.showToast(payload.message || 'Seat booking failed', 'error');
         payBtn.innerHTML = originalMarkup;
         payBtn.disabled = false;
       }
-    });
-  }
+    } catch (_) {
+      window.showToast('Network error while completing payment', 'error');
+      payBtn.innerHTML = originalMarkup;
+      payBtn.disabled = false;
+    }
+  });
 
   function renderMovieSummary(movie) {
     const container = document.getElementById('movie-info');
     if (!container) return;
 
-    const esc = window.CineTicket.escapeHtml;
-    const resolveAsset = window.CineTicket.resolveAssetUrl;
-
+    const esc = CT.escapeHtml;
     container.innerHTML =
       '<div class="movie-info">' +
-      '<img src="' + esc(resolveAsset(movie.img)) + '" alt="' + esc(movie.movie_name) + '" class="movie-poster">' +
+      '<img src="' + esc(CT.resolveAssetUrl(movie.img)) + '" alt="' + esc(movie.movie_name) + '" class="movie-poster">' +
       '<div class="movie-details">' +
       '<h3>' + esc(movie.movie_name) + '</h3>' +
       '<div class="movie-meta">' +
@@ -172,45 +156,32 @@ document.addEventListener('DOMContentLoaded', function () {
         const radio = card.querySelector('input[type="radio"]');
         if (radio) {
           radio.checked = true;
-          if (cardForm) {
-            cardForm.style.display = radio.value === 'card' ? 'block' : 'none';
-          }
+          if (cardForm) cardForm.style.display = radio.value === 'card' ? 'block' : 'none';
         }
       });
     });
   }
 
   function initCardFormatting() {
-    const numberInput = document.getElementById('card-number');
-    const expiryInput = document.getElementById('expiry');
-    const cvvInput = document.getElementById('cvv');
-
-    if (numberInput) {
-      numberInput.addEventListener('input', function (e) {
-        const digits = e.target.value.replace(/\D/g, '').slice(0, 16);
-        e.target.value = (digits.match(/.{1,4}/g) || []).join(' ');
-      });
-    }
-    if (expiryInput) {
-      expiryInput.addEventListener('input', function (e) {
-        const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
-        e.target.value = digits.length >= 3 ? digits.slice(0, 2) + '/' + digits.slice(2) : digits;
-      });
-    }
-    if (cvvInput) {
-      cvvInput.addEventListener('input', function (e) {
-        e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4);
-      });
-    }
+    document.getElementById('card-number')?.addEventListener('input', function (e) {
+      const digits = e.target.value.replace(/\D/g, '').slice(0, 16);
+      e.target.value = (digits.match(/.{1,4}/g) || []).join(' ');
+    });
+    document.getElementById('expiry')?.addEventListener('input', function (e) {
+      const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
+      e.target.value = digits.length >= 3 ? digits.slice(0, 2) + '/' + digits.slice(2) : digits;
+    });
+    document.getElementById('cvv')?.addEventListener('input', function (e) {
+      e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4);
+    });
   }
 
   function initPromoCodeHandler() {
-    const promoTags = document.querySelectorAll('.promo-tag');
     const couponInput = document.getElementById('coupon-code');
     const verifyBtn = document.getElementById('verify-coupon');
     if (!couponInput || !verifyBtn) return;
 
-    promoTags.forEach(function (tag) {
+    document.querySelectorAll('.promo-tag').forEach(function (tag) {
       tag.addEventListener('click', function () {
         couponInput.value = tag.textContent.trim();
         verifyBtn.click();
@@ -229,17 +200,13 @@ document.addEventListener('DOMContentLoaded', function () {
       verifyBtn.disabled = true;
 
       try {
-        const res = await fetch('/index.php/offer/offer/getMoneyByBadge?badge=' + encodeURIComponent(code));
-        const payload = await res.json();
-
+        const payload = await CT.fetchJson('/index.php/offer/offer/getMoneyByBadge?badge=' + encodeURIComponent(code));
         if (payload.success && payload.data && payload.data.money !== undefined) {
           promoDiscount = parseFloat(payload.data.money) || 0;
-          appliedPromoCode = code;
           couponInput.style.borderColor = '#16a34a';
           window.showToast('Promo code ' + code + ' applied (-$' + promoDiscount.toFixed(2) + ')', 'success');
         } else {
           promoDiscount = 0;
-          appliedPromoCode = '';
           couponInput.style.borderColor = '#dc2626';
           window.showToast(payload.message || 'Invalid promo code', 'error');
         }
@@ -263,8 +230,7 @@ document.addEventListener('DOMContentLoaded', function () {
       window.showToast('Please enter a valid 13-19 digit card number', 'error');
       return false;
     }
-    const expMatch = expiry.match(/^(0[1-9]|1[0-2])\/(\d{2})$/);
-    if (!expMatch) {
+    if (!/^(0[1-9]|1[0-2])\/(\d{2})$/.test(expiry)) {
       window.showToast('Please enter a valid expiry date (MM/YY)', 'error');
       return false;
     }
@@ -280,30 +246,21 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function computeTotal() {
-    const totalDiscount = bulkDiscount + promoDiscount;
-    return Math.max(0, +(subtotal - totalDiscount + serviceFee).toFixed(2));
+    return Math.max(0, +(subtotal - (bulkDiscount + promoDiscount) + serviceFee).toFixed(2));
   }
 
   function updatePriceBreakdown() {
     const totalDiscount = bulkDiscount + promoDiscount;
-    const total = computeTotal();
+    const totalStr = '$' + computeTotal().toFixed(2);
 
-    const subtotalEl = document.getElementById('total-price');
+    setText('total-price', '$' + subtotal.toFixed(2));
+    setText('amount-due', totalStr);
+    setText('final-amount', totalStr);
+
     const discountRow = document.getElementById('discount-row');
-    const discountEl = document.getElementById('discount-amount');
-    const dueEl = document.getElementById('amount-due');
-    const finalEl = document.getElementById('final-amount');
-
-    if (subtotalEl) subtotalEl.textContent = '$' + subtotal.toFixed(2);
-    if (discountRow && discountEl) {
-      if (totalDiscount > 0) {
-        discountRow.style.display = 'flex';
-        discountEl.textContent = '-$' + totalDiscount.toFixed(2);
-      } else {
-        discountRow.style.display = 'none';
-      }
+    if (discountRow) {
+      discountRow.style.display = totalDiscount > 0 ? 'flex' : 'none';
+      setText('discount-amount', '-$' + totalDiscount.toFixed(2));
     }
-    if (dueEl) dueEl.textContent = '$' + total.toFixed(2);
-    if (finalEl) finalEl.textContent = '$' + total.toFixed(2);
   }
 });

@@ -1,10 +1,12 @@
 /**
  * Shared Admin Console Runtime
- * Handles admin session verification, authenticated API requests (X-Admin-Token),
- * shared navigation bar rendering, theme toggle, logout, and lightweight Canvas charts.
+ * Reuses CineTicket core utilities (escaping, asset paths, dark mode) and centralizes
+ * authenticated API calls (X-Admin-Token), navigation, CRUD form/table helpers, and Canvas charts.
  */
 (function () {
   'use strict';
+
+  const CT = window.CineTicket;
 
   function getToken() {
     return localStorage.getItem('adminToken') || '';
@@ -20,46 +22,6 @@
     localStorage.removeItem('adminRemember');
   }
 
-  function escapeHtml(value) {
-    if (value === null || value === undefined) return '';
-    return String(value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
-  function resolveAdminAsset(rawPath) {
-    if (!rawPath || typeof rawPath !== 'string') return '../img/logo.jpg';
-    const trimmed = rawPath.trim();
-    if (
-      trimmed.startsWith('http://') ||
-      trimmed.startsWith('https://') ||
-      trimmed.startsWith('data:') ||
-      trimmed.startsWith('/')
-    ) {
-      return trimmed;
-    }
-    return '../' + trimmed.replace(/^(\.\.\/|\.\/)+/, '');
-  }
-
-  function initAdminTheme() {
-    const isDark = localStorage.getItem('darkMode') === 'true';
-    document.documentElement.classList.toggle('dark-mode', isDark);
-    if (document.body) {
-      document.body.classList.toggle('dark-mode', isDark);
-    }
-  }
-
-  function toggleAdminTheme() {
-    const next = !document.documentElement.classList.contains('dark-mode');
-    localStorage.setItem('darkMode', String(next));
-    initAdminTheme();
-  }
-
-  initAdminTheme();
-
   async function apiFetch(url, options) {
     const opts = Object.assign({ credentials: 'same-origin' }, options || {});
     const headers = Object.assign({}, opts.headers || {});
@@ -74,7 +36,7 @@
     opts.headers = headers;
 
     const response = await fetch(url, opts);
-    let payload = null;
+    let payload;
     try {
       payload = await response.json();
     } catch (_) {
@@ -92,11 +54,8 @@
   }
 
   async function ensureAuthenticated() {
-    const isLoginPage = (window.location.pathname || '').endsWith('/login.html');
-    if (isLoginPage) return true;
-
-    const token = getToken();
-    if (!token) {
+    if ((window.location.pathname || '').endsWith('/login.html')) return true;
+    if (!getToken()) {
       window.location.href = 'login.html';
       return false;
     }
@@ -156,22 +115,58 @@
       '</button>' +
       '<div class="admin-user-profile">' +
       '<div class="admin-avatar"><i class="fas fa-user-shield"></i></div>' +
-      '<span class="admin-user-name">' + escapeHtml(getAdminName()) + '</span>' +
+      '<span class="admin-user-name">' + CT.escapeHtml(getAdminName()) + '</span>' +
       '</div>' +
       '<a href="login.html" class="logout-btn" id="admin-logout-btn"><i class="fas fa-sign-out-alt"></i><span>Logout</span></a>' +
       '</div>' +
       '</nav>';
 
-    const themeBtn = document.getElementById('admin-theme-toggle');
-    if (themeBtn) themeBtn.addEventListener('click', toggleAdminTheme);
-
-    const logoutBtn = document.getElementById('admin-logout-btn');
-    if (logoutBtn) logoutBtn.addEventListener('click', logoutAdmin);
+    document.getElementById('admin-theme-toggle')?.addEventListener('click', CT.toggleDarkMode);
+    document.getElementById('admin-logout-btn')?.addEventListener('click', logoutAdmin);
   }
 
-  /**
-   * Offline-capable native Canvas bar chart renderer (no external CDN dependency required).
-   */
+  function bindDeleteActions(container, opts) {
+    container.querySelectorAll(opts.selector || '.delete-btn').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        const id = btn.getAttribute('data-id');
+        if (!window.confirm(opts.confirmText(id))) return;
+        const body = {};
+        body[opts.idKey] = id;
+        const res = await apiFetch(opts.endpoint, { method: 'POST', body: body });
+        if (res.success) {
+          window.showToast(typeof opts.successText === 'function' ? opts.successText(id) : opts.successText, 'success');
+          opts.onSuccess();
+        } else {
+          window.showToast(res.message || 'Operation failed', 'error');
+        }
+      });
+    });
+  }
+
+  function bindImagePreview(inputEl, previewEl) {
+    function sync() {
+      const val = inputEl.value.trim();
+      if (/\.(jpe?g|png|webp|gif|svg)(\?.*)?$/i.test(val) || val.startsWith('data:')) {
+        previewEl.src = CT.resolveAssetUrl(val);
+        previewEl.style.display = 'block';
+      } else {
+        previewEl.style.display = 'none';
+      }
+    }
+    inputEl.addEventListener('change', sync);
+    return sync;
+  }
+
+  async function submitForm(endpoint, payload, redirectUrl, successMsg, fallbackErr) {
+    const res = await apiFetch(endpoint, { method: 'POST', body: payload });
+    if (res.success) {
+      window.showToast(successMsg, 'success');
+      setTimeout(function () { window.location.href = redirectUrl; }, 500);
+    } else {
+      window.showToast(res.message || fallbackErr, 'error');
+    }
+  }
+
   function drawBarChart(canvas, labels, values, colors) {
     if (!canvas || !canvas.getContext) return;
     const dpr = window.devicePixelRatio || 1;
@@ -246,13 +241,13 @@
 
   window.AdminApp = {
     apiFetch: apiFetch,
-    clearAdminSession: clearAdminSession,
+    bindDeleteActions: bindDeleteActions,
+    bindImagePreview: bindImagePreview,
     drawBarChart: drawBarChart,
     ensureAuthenticated: ensureAuthenticated,
-    escapeHtml: escapeHtml,
-    logoutAdmin: logoutAdmin,
+    escapeHtml: CT.escapeHtml,
     renderAdminNav: renderAdminNav,
-    resolveAdminAsset: resolveAdminAsset,
-    toggleAdminTheme: toggleAdminTheme,
+    resolveAdminAsset: CT.resolveAssetUrl,
+    submitForm: submitForm,
   };
 })();

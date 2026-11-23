@@ -1,8 +1,6 @@
 /* Global Reset & Shared Header, Dropdown, Contact Modal, and Toast Styles */
 :root {
   --brand-primary: #4361ee;
-  --brand-primary-dark: #3046c9;
-  --brand-secondary: #3a0ca3;
   --brand-accent: #e74c3c;
   --header-gradient: linear-gradient(135deg, #4361ee, #3a0ca3);
   --surface-bg: #ffffff;
@@ -18,6 +16,15 @@ body {
   padding: 0;
   overflow-x: hidden;
   width: 100%;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
 }
 
 /* Primary Navigation Bar */
@@ -287,28 +294,12 @@ body.dark-mode .dark-mode-toggle .sun-icon {
   color: var(--text-main);
   text-decoration: none;
   transition: background-color 0.2s ease, color 0.2s ease;
-  border: none;
-  background: none;
-  width: 100%;
   box-sizing: border-box;
-  text-align: left;
-  cursor: pointer;
+  width: 100%;
 }
 
 .dropdown-item:hover {
   background-color: var(--surface-subtle);
-  color: var(--brand-primary);
-}
-
-.dropdown-item svg {
-  width: 18px;
-  height: 18px;
-  margin-right: 12px;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.dropdown-item:hover svg {
   color: var(--brand-primary);
 }
 
@@ -402,21 +393,10 @@ body.dark-mode .dark-mode-toggle .sun-icon {
   border-left: 4px solid var(--brand-primary);
 }
 
-.user-notification.success {
-  border-left-color: #16a34a;
-}
-
-.user-notification.error {
-  border-left-color: #dc2626;
-}
-
-.user-notification.warning {
-  border-left-color: #d97706;
-}
-
-.user-notification.info {
-  border-left-color: #0284c7;
-}
+.user-notification.success { border-left-color: #16a34a; }
+.user-notification.error   { border-left-color: #dc2626; }
+.user-notification.warning { border-left-color: #d97706; }
+.user-notification.info    { border-left-color: #0284c7; }
 
 .notification-content {
   display: flex;
@@ -469,50 +449,11 @@ body.dark-mode .dark-mode-toggle .sun-icon {
   }
 }
 
-/* Admin User Pill in Shared Header Context */
-.admin-nav-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.admin-user-section {
-  display: flex;
-  align-items: center;
-}
-
-.admin-user-profile {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #ffffff;
-  background-color: rgba(255, 255, 255, 0.15);
-  padding: 6px 14px;
-  border-radius: 20px;
-}
-
-.admin-avatar {
-  width: 30px;
-  height: 30px;
-  background-color: rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.admin-user-name {
-  font-weight: 500;
-  font-size: 14px;
-  color: #ffffff;
-}
-
 @media (max-width: 860px) {
   .header {
     padding: 12px 18px;
     flex-wrap: wrap;
     gap: 12px;
-    height: auto;
   }
 
   .nav-links {

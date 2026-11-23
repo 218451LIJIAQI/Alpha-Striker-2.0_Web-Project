@@ -9,83 +9,11 @@
   <link rel="stylesheet" href="../css/common/footer.css">
   <link rel="stylesheet" href="../css/homepage/homepage.css">
   <script src="../js/common.js"></script>
-  <style>
-    .cons {
-      font-family: 'Segoe UI', sans-serif;
-      max-width: 1200px;
-      margin: 0 auto 40px;
-      line-height: 1.6;
-    }
-    .section {
-      margin: 32px 0;
-      background: #ffffff;
-      padding: 30px;
-      border-radius: 12px;
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
-    }
-    .features {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 24px;
-    }
-    .feature-card {
-      text-align: center;
-      padding: 20px;
-    }
-    .feature-card i,
-    .step-icon {
-      font-size: 36px;
-      color: #4361ee;
-      margin-bottom: 14px;
-      display: inline-block;
-    }
-    .redeem-steps {
-      display: flex;
-      justify-content: space-around;
-      margin: 24px 0;
-      flex-wrap: wrap;
-      gap: 24px;
-    }
-    .step-card {
-      text-align: center;
-      padding: 20px;
-      flex: 1;
-      min-width: 240px;
-    }
-    .faq-accordion {
-      max-width: 800px;
-      margin: 0 auto;
-    }
-    .faq-question {
-      background: #f1f5f9;
-      padding: 15px 18px;
-      margin-bottom: 10px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 600;
-      transition: background-color 0.2s ease, color 0.2s ease;
-    }
-    .faq-answer {
-      padding: 12px 18px 18px;
-      display: none;
-    }
-    .faq-question.active {
-      background: #4361ee;
-      color: #ffffff;
-    }
-    .faq-question.active + .faq-answer {
-      display: block;
-    }
-    body.dark-mode .faq-question:not(.active) {
-      background: #191c24;
-      color: #e6eaf2;
-    }
-  </style>
 </head>
 <body>
   <div id="header-container"></div>
 
-  <div class="cons">
+  <div class="giftcard-wrapper">
     <section class="hero">
       <div class="container">
         <h1>Gift Cards</h1>
@@ -94,41 +22,41 @@
     </section>
 
     <div class="container">
-      <section class="section giftcard-option" id="what">
+      <section class="info-card-section giftcard-option" id="what">
         <h2>What Are CineTix Gift Cards?</h2>
-        <div class="features">
-          <div class="feature-card">
+        <div class="giftcard-features">
+          <div class="giftcard-feature-item">
             <i class="fas fa-ticket-alt"></i>
             <p>Redeemable for any movie format, reserved seat, and concession combo.</p>
           </div>
-          <div class="feature-card">
+          <div class="giftcard-feature-item">
             <i class="fas fa-envelope-open-text"></i>
             <p>Instant digital e-codes or collectible physical cards at the box office.</p>
           </div>
-          <div class="feature-card">
+          <div class="giftcard-feature-item">
             <i class="fas fa-gift"></i>
             <p>Flexible denominations from $15 to $200 with zero activation fees.</p>
           </div>
         </div>
       </section>
 
-      <section class="section giftcard-option" id="redeem">
+      <section class="info-card-section giftcard-option" id="redeem">
         <h2>How to Redeem</h2>
-        <div class="redeem-steps">
-          <div class="step-card">
-            <i class="fas fa-mobile-alt step-icon"></i>
+        <div class="giftcard-features">
+          <div class="giftcard-feature-item">
+            <i class="fas fa-laptop"></i>
             <h3>Digital E-Code</h3>
-            <p>Apply your 12-character gift code directly on the checkout screen.</p>
+            <p>Apply your 12-character gift code directly on the web checkout screen.</p>
           </div>
-          <div class="step-card">
-            <i class="fas fa-id-card step-icon"></i>
+          <div class="giftcard-feature-item">
+            <i class="fas fa-id-card"></i>
             <h3>Physical Card</h3>
             <p>Reveal the PIN on the back of your card to redeem online or in-theater.</p>
           </div>
         </div>
       </section>
 
-      <section class="section giftcard-option" id="faq">
+      <section class="info-card-section giftcard-option" id="faq">
         <h2>Gift Card FAQs</h2>
         <div class="faq-accordion">
           <div class="faq-question active">Can I combine Gift Cards with promo codes?</div>

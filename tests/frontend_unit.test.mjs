@@ -13,6 +13,7 @@ function createBrowserSandbox(pathname = '/pages/homepage.html') {
   const classes = new Set();
   const bodyClasses = new Set();
   const appended = [];
+  const fetchCalls = [];
 
   const makeClassList = (set) => ({
     add: (...names) => names.forEach((n) => set.add(n)),
@@ -43,13 +44,17 @@ function createBrowserSandbox(pathname = '/pages/homepage.html') {
 
   const sandbox = {
     window: null,
+    FormData: class FormData {},
     localStorage: {
       getItem: (k) => (storage.has(k) ? storage.get(k) : null),
       setItem: (k, v) => storage.set(k, String(v)),
       removeItem: (k) => storage.delete(k),
       clear: () => storage.clear(),
     },
-    fetch: async () => ({ json: async () => ({ success: true }) }),
+    fetch: async (url, opts) => {
+      fetchCalls.push({ url, opts });
+      return { json: async () => ({ success: true }) };
+    },
     setTimeout: (fn) => fn,
     clearTimeout: () => {},
     document: {
@@ -73,7 +78,7 @@ function createBrowserSandbox(pathname = '/pages/homepage.html') {
 
   const commonCode = fs.readFileSync(path.join(ROOT, 'public/js/common.js'), 'utf8');
   vm.runInNewContext(commonCode, sandbox);
-  return { sandbox, storage, classes, bodyClasses, appended };
+  return { sandbox, storage, classes, bodyClasses, appended, fetchCalls };
 }
 
 test('escapeHtml neutralizes XSS characters accurately', () => {
@@ -146,4 +151,26 @@ test('showNotification supports both 2-argument and 3-argument call signatures s
   const secondToast = appended[appended.length - 1];
   assert.ok(secondToast.innerHTML.includes('Custom Title'));
   assert.ok(secondToast.innerHTML.includes('&lt;script&gt;'));
+});
+
+test('shared pricing, star-rating, and fetchJson helpers enforce unified contracts', async () => {
+  const { sandbox, fetchCalls } = createBrowserSandbox('/pages/pay.html');
+  const CT = sandbox.CineTicket;
+
+  assert.equal(CT.calcGroupDiscount(156, 4), 0);
+  assert.equal(CT.calcGroupDiscount(195, 5), 58.5);
+  assert.equal(CT.formatStars(4.5), '★★★★½');
+  assert.equal(
+    CT.renderStarIcons(3.5),
+    '<i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star-half-alt"></i><i class="far fa-star"></i>'
+  );
+
+  const res = await CT.fetchJson('/index.php/user/user/login', {
+    method: 'POST',
+    body: { email: 'test@example.com' },
+  });
+  assert.equal(res.success, true);
+  assert.equal(fetchCalls.length, 1);
+  assert.equal(fetchCalls[0].opts.headers['Content-Type'], 'application/json');
+  assert.equal(fetchCalls[0].opts.body, '{"email":"test@example.com"}');
 });

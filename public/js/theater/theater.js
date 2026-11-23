@@ -13,83 +13,54 @@ document.addEventListener('DOMContentLoaded', function () {
   fetchTheaters('', '');
 
   function runSearch() {
-    const keyword = searchInput ? searchInput.value.trim() : '';
-    fetchTheaters(keyword, activeAmenity);
+    fetchTheaters(searchInput ? searchInput.value.trim() : '', activeAmenity);
   }
 
-  if (searchBtn) {
-    searchBtn.addEventListener('click', runSearch);
-  }
-  if (searchInput) {
-    searchInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        runSearch();
-      }
-    });
-  }
+  searchBtn?.addEventListener('click', runSearch);
+  searchInput?.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      runSearch();
+    }
+  });
 
   filterButtons.forEach(function (button) {
     button.addEventListener('click', function () {
-      filterButtons.forEach(function (btn) {
-        btn.classList.remove('active');
-      });
+      filterButtons.forEach(function (btn) { btn.classList.remove('active'); });
       this.classList.add('active');
-
       const label = this.textContent.trim();
       activeAmenity = label === 'All Theaters' ? '' : label;
-      const keyword = searchInput ? searchInput.value.trim() : '';
-      fetchTheaters(keyword, activeAmenity);
+      runSearch();
     });
   });
 });
 
-function fetchTheaters(address, amenity) {
+async function fetchTheaters(address, amenity) {
   const params = new URLSearchParams();
   if (address) params.append('address', address);
   if (amenity) params.append('amenity', amenity);
-
   const query = params.toString();
-  const url = '/index.php/theater/theater/getTheaterList' + (query ? '?' + query : '');
 
-  fetch(url)
-    .then(function (res) { return res.json(); })
-    .then(function (payload) {
-      if (payload.success) {
-        renderTheaters(payload.data || []);
-      } else {
-        window.showToast(payload.message || 'Failed to load theaters', 'error');
-      }
-    })
-    .catch(function () {
-      window.showToast('Unable to load theaters right now', 'error');
-    });
-}
-
-function getStarRatingMarkup(rating) {
-  const num = Math.max(0, Math.min(5, parseFloat(rating) || 0));
-  const fullStars = Math.floor(num);
-  const hasHalfStar = num - fullStars >= 0.5;
-
-  let stars = '';
-  for (let i = 1; i <= 5; i++) {
-    if (i <= fullStars) {
-      stars += '<span class="star full">★</span>';
-    } else if (i === fullStars + 1 && hasHalfStar) {
-      stars += '<span class="star half">★</span>';
+  try {
+    const payload = await window.CineTicket.fetchJson(
+      '/index.php/theater/theater/getTheaterList' + (query ? '?' + query : '')
+    );
+    if (payload.success) {
+      renderTheaters(payload.data || []);
     } else {
-      stars += '<span class="star empty">☆</span>';
+      window.showToast(payload.message || 'Failed to load theaters', 'error');
     }
+  } catch (_) {
+    window.showToast('Unable to load theaters right now', 'error');
   }
-  return stars;
 }
 
 function renderTheaters(theaters) {
   const theaterList = document.querySelector('.theater-list');
   if (!theaterList) return;
 
-  const esc = window.CineTicket.escapeHtml;
-  const resolveAsset = window.CineTicket.resolveAssetUrl;
+  const CT = window.CineTicket;
+  const esc = CT.escapeHtml;
 
   if (!Array.isArray(theaters) || theaters.length === 0) {
     theaterList.innerHTML =
@@ -112,19 +83,16 @@ function renderTheaters(theaters) {
     card.className = 'theater-card';
     card.innerHTML =
       '<div class="theater-image">' +
-      '<img src="' + esc(resolveAsset(theater.img)) + '" alt="' + esc(theater.theater_name) + '">' +
+      '<img src="' + esc(CT.resolveAssetUrl(theater.img)) + '" alt="' + esc(theater.theater_name) + '">' +
       '</div>' +
       '<div class="theater-details">' +
       '<h3>' + esc(theater.theater_name) + '</h3>' +
-      '<div class="theater-location">' +
-      '<span>📍</span>' +
-      '<span>' + esc(theater.address) + '</span>' +
-      '</div>' +
+      '<div class="theater-location"><span>📍</span><span>' + esc(theater.address) + '</span></div>' +
       '<div class="amenities">' +
       amenities.map(function (a) { return '<span class="amenity">' + esc(a) + '</span>'; }).join('') +
       '</div>' +
       '<div class="theater-rating">' +
-      '<span>' + getStarRatingMarkup(theater.star) + '</span>' +
+      '<span>' + CT.renderStarIcons(theater.star) + '</span>' +
       '<span>' + esc(theater.star) + ' (' + esc(reviewLabel) + ')</span>' +
       '</div>' +
       '<a href="theater-details.html?theater_code=' + encodeURIComponent(theater.theater_code) + '" class="view-details">View Theater Details</a>' +

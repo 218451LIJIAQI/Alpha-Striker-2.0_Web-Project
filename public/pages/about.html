@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>About Us | Alpha Striker 2.0</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" type="text/css" href="../css/common/header.css">
     <link rel="stylesheet" type="text/css" href="../css/common/footer.css">
     <link rel="stylesheet" type="text/css" href="../css/about/about.css">
@@ -104,8 +104,8 @@
                         <p class="team-position">CEO & Founder</p>
                         <p class="team-bio">Film enthusiast and tech visionary who founded Alpha Striker 2.0 with the mission to revolutionize movie ticketing.</p>
                         <div class="social-links">
-                            <a href="#" class="social-link"><img style="width:20px;height: 20px;" src="../img/linkin.png"/></a>
-                            <a href="#" class="social-link"><img style="width:20px;height: 20px;" src="../img/whatsapp.png"/></a>
+                            <a href="#" class="social-link"><img src="../img/linkin.png" alt="LinkedIn"></a>
+                            <a href="#" class="social-link"><img src="../img/whatsapp.png" alt="WhatsApp"></a>
                         </div>
                     </div>
                 </div>
@@ -120,8 +120,8 @@
                         <p class="team-position">Chief Operations & Technology Officer</p>
                         <p class="team-bio">Strategic thinker who oversees Alpha Striker 2.0's partnerships and ensures smooth operations across all fronts.</p>
                         <div class="social-links">
-                            <a href="#" class="social-link"><img style="width:20px;height: 20px;" src="../img/linkin.png"/></a>
-                            <a href="#" class="social-link"><img style="width:20px;height: 20px;" src="../img/whatsapp.png"/></a>
+                            <a href="#" class="social-link"><img src="../img/linkin.png" alt="LinkedIn"></a>
+                            <a href="#" class="social-link"><img src="../img/whatsapp.png" alt="WhatsApp"></a>
                         </div>
                     </div>
                 </div>
@@ -135,8 +135,8 @@
                         <p class="team-position">Chief Marketing Officer</p>
                         <p class="team-bio">Creative force behind Alpha Striker 2.0's brand identity and marketing campaigns that connect with movie lovers.</p>
                         <div class="social-links">
-                            <a href="#" class="social-link"><img style="width:20px;height: 20px;" src="../img/linkin.png"/></a>
-                            <a href="#" class="social-link"><img style="width:20px;height: 20px;" src="../img/whatsapp.png"/></a>
+                            <a href="#" class="social-link"><img src="../img/linkin.png" alt="LinkedIn"></a>
+                            <a href="#" class="social-link"><img src="../img/whatsapp.png" alt="WhatsApp"></a>
                         </div>
                     </div>
                 </div>
@@ -149,7 +149,7 @@
             <div class="testimonial-container">
                 <div class="testimonial-card">
                     <div class="testimonial-content">
-                        <p class="testimonial-text">Alpha Striker 2.0 has completely transformed how I experience movies. The app is so intuitive, and I love the seat selection feature. I haven't stood in a ticket line for years now!</p>
+                        <p class="testimonial-text">Alpha Striker 2.0 has completely transformed how I experience movies. The platform is so intuitive, and I love the seat selection feature. I haven't stood in a ticket line for years now!</p>
                         
                         <div class="testimonial-author">
                             <div class="author-image">
@@ -325,7 +325,7 @@
                                 <span>Mon-Fri: 8:00 AM - 10:00 PM</span>
                             </div>
                             <div class="features">
-                                <span class="feature-tag">App Issues</span>
+                                <span class="feature-tag">Portal Issues</span>
                                 <span class="feature-tag">Payment Problems</span>
                                 <span class="feature-tag">Website Help</span>
                             </div>
@@ -484,7 +484,7 @@
                             <div class="category-card" onclick="selectCategory('technical')">
                                 <i class="fas fa-bug"></i>
                                 <h4>Technical Issues</h4>
-                                <p>Website, app, or payment problems</p>
+                                <p>Website, booking, or payment problems</p>
                             </div>
                             <div class="category-card" onclick="selectCategory('account')">
                                 <i class="fas fa-user-cog"></i>
@@ -536,7 +536,7 @@
                                     <i class="fas fa-clock"></i>
                                     Response within 2-4 hours
                                 </div>
-                                <p>Website bugs, app issues, payment problems</p>
+                                <p>Website bugs, booking issues, payment problems</p>
                                 <button class="email-direct-btn" onclick="openEmail('tech@alphastriker.com')">
                                     <i class="fas fa-external-link-alt"></i> Send Email
                                 </button>
@@ -602,96 +602,69 @@
         </div>
     </div>
     
-    <!-- Enhanced Live Chat Dialog -->
-    <div id="chat-dialog" class="chat-dialog enhanced-chat">
-        <div class="chat-header">
-            <div class="chat-agent-info">
-                <div class="agent-avatar">
-                    <img src="../img/about/userlogo.jpeg" alt="Support Agent" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                    <div class="default-avatar" style="display: none;">
-                        <i class="fas fa-user-headset"></i>
+    <!-- Live Chat Dialog -->
+    <div id="chat-dialog" class="chat-dialog">
+        <div class="chat-panel">
+            <div class="chat-header">
+                <div class="chat-agent-info">
+                    <div class="agent-avatar">
+                        <img src="../img/about/userlogo.jpeg" alt="Support Agent">
+                    </div>
+                    <div class="agent-details">
+                        <h3>Customer Support</h3>
+                        <div class="agent-status">
+                            <span class="status-indicator"></span>
+                            <span>Online - Average response: 30 seconds</span>
+                        </div>
                     </div>
                 </div>
-                <div class="agent-details">
-                    <h3>Customer Support</h3>
-                    <div class="agent-status">
-                        <span class="status-indicator online"></span>
-                        <span>Online - Average response: 30 seconds</span>
+                <button type="button" class="close-chat" aria-label="Close chat">&times;</button>
+            </div>
+
+            <div class="chat-messages">
+                <div class="chat-message bot-message welcome-message">
+                    <div class="message-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="message-content">
+                        <div class="message-text">
+                            Welcome to Alpha Striker 2.0 Support! 👋<br>
+                            How can I help you today?
+                        </div>
+                        <div class="message-time">Just now</div>
+                    </div>
+                </div>
+
+                <div class="quick-actions">
+                    <h4>Quick Help:</h4>
+                    <div class="quick-action-buttons">
+                        <button type="button" class="quick-action-btn" onclick="selectQuickAction('booking')">
+                            <i class="fas fa-ticket-alt"></i> Booking Help
+                        </button>
+                        <button type="button" class="quick-action-btn" onclick="selectQuickAction('refund')">
+                            <i class="fas fa-undo"></i> Refund Request
+                        </button>
+                        <button type="button" class="quick-action-btn" onclick="selectQuickAction('technical')">
+                            <i class="fas fa-bug"></i> Promo &amp; Checkout
+                        </button>
+                        <button type="button" class="quick-action-btn" onclick="selectQuickAction('theaters')">
+                            <i class="fas fa-map-marker-alt"></i> Find Theaters
+                        </button>
                     </div>
                 </div>
             </div>
-            <button class="close-chat">&times;</button>
-        </div>
-        
-        <div class="chat-messages">
-            <div class="chat-message bot-message welcome-message">
-                <div class="message-avatar">
-                    <i class="fas fa-robot"></i>
-                </div>
-                <div class="message-content">
-                    <div class="message-text">
-                        Welcome to Alpha Striker 2.0 Support! 👋<br>
-                        How can I help you today?
-                    </div>
-                    <div class="message-time">Just now</div>
-                </div>
-            </div>
-            
-            <div class="quick-actions">
-                <h4>Quick Help:</h4>
-                <div class="quick-action-buttons">
-                    <button class="quick-action-btn" onclick="selectQuickAction('booking')">
-                        <i class="fas fa-ticket-alt"></i> Booking Help
+
+            <div class="chat-input-section">
+                <div class="chat-input">
+                    <input type="text" placeholder="Type your message..." id="chat-input-field">
+                    <button type="button" class="send-message" aria-label="Send message">
+                        <i class="fas fa-paper-plane"></i>
                     </button>
-                    <button class="quick-action-btn" onclick="selectQuickAction('refund')">
-                        <i class="fas fa-undo"></i> Refund Request
-                    </button>
-                    <button class="quick-action-btn" onclick="selectQuickAction('technical')">
-                        <i class="fas fa-bug"></i> Technical Issue
-                    </button>
-                    <button class="quick-action-btn" onclick="selectQuickAction('theaters')">
-                        <i class="fas fa-map-marker-alt"></i> Find Theaters
-                    </button>
-                </div>
-            </div>
-        </div>
-        
-        <div class="chat-input-section">
-            <div class="typing-indicator" id="typing-indicator" style="display: none;">
-                <div class="typing-dots">
-                    <span></span><span></span><span></span>
-                </div>
-                Support agent is typing...
-            </div>
-            
-            <div class="chat-input">
-                <button class="attach-btn" title="Attach file">
-                    <i class="fas fa-paperclip"></i>
-                </button>
-                <input type="text" placeholder="Type your message..." id="chat-input-field">
-                <button class="emoji-btn" title="Add emoji">
-                    <i class="fas fa-smile"></i>
-                </button>
-                <button class="send-message">
-                    <i class="fas fa-paper-plane"></i>
-                </button>
-            </div>
-            
-            <div class="chat-footer">
-                <div class="satisfaction-rating" id="satisfaction-rating" style="display: none;">
-                    <span>How was your experience?</span>
-                    <div class="rating-stars">
-                        <i class="fas fa-star" data-rating="1"></i>
-                        <i class="fas fa-star" data-rating="2"></i>
-                        <i class="fas fa-star" data-rating="3"></i>
-                        <i class="fas fa-star" data-rating="4"></i>
-                        <i class="fas fa-star" data-rating="5"></i>
-                    </div>
                 </div>
             </div>
         </div>
     </div>
-    
+
     <div id="bottom-container"></div>
 </body>
 </html>

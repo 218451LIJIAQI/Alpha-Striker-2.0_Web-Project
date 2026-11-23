@@ -1,7 +1,7 @@
 /**
  * CineTicket (Alpha Striker 2.0) — Shared Frontend Runtime
- * Centralizes path resolution, XSS-safe escaping, user session state, theme switching,
- * toast notifications, and shared header/footer/FAQ behaviors.
+ * Centralizes path resolution, XSS-safe escaping, JSON API requests, user session state,
+ * theme switching, pricing/rating helpers, toast notifications, and shared header/footer/FAQ UI.
  */
 (function () {
   'use strict';
@@ -39,8 +39,7 @@
     ) {
       return trimmed;
     }
-    const clean = trimmed.replace(/^(\.\.\/|\.\/)+/, '');
-    return currentDepthPrefix() + clean;
+    return currentDepthPrefix() + trimmed.replace(/^(\.\.\/|\.\/)+/, '');
   }
 
   function escapeHtml(value) {
@@ -59,6 +58,34 @@
     const half = num - full >= 0.5 ? 1 : 0;
     const empty = 5 - full - half;
     return '★'.repeat(full) + (half ? '½' : '') + '☆'.repeat(empty);
+  }
+
+  function renderStarIcons(score) {
+    const rating = Math.max(0, Math.min(5, parseFloat(score) || 5.0));
+    const full = Math.floor(rating);
+    const half = rating - full >= 0.5 ? 1 : 0;
+    const empty = 5 - full - half;
+    return (
+      '<i class="fas fa-star"></i>'.repeat(full) +
+      (half ? '<i class="fas fa-star-half-alt"></i>' : '') +
+      '<i class="far fa-star"></i>'.repeat(empty)
+    );
+  }
+
+  function calcGroupDiscount(subtotal, seatCount) {
+    return seatCount >= 5 ? +(subtotal * 0.30).toFixed(2) : 0;
+  }
+
+  async function fetchJson(url, options) {
+    const opts = Object.assign({ credentials: 'same-origin' }, options || {});
+    const headers = Object.assign({}, opts.headers || {});
+    if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(opts.body);
+    }
+    opts.headers = headers;
+    const res = await fetch(url, opts);
+    return res.json();
   }
 
   const AuthStore = {
@@ -93,12 +120,9 @@
     },
 
     async logout() {
-      localStorage.removeItem('userToken');
-      localStorage.removeItem('userId');
-      localStorage.removeItem('userName');
-      localStorage.removeItem('userEmail');
-      localStorage.removeItem('email');
-      localStorage.removeItem('pwd');
+      ['userToken', 'userId', 'userName', 'userEmail', 'email', 'pwd'].forEach(function (k) {
+        localStorage.removeItem(k);
+      });
       try {
         await fetch('/index.php/user/user/logout', { method: 'POST' });
       } catch (_) {
@@ -125,8 +149,7 @@
 
   function initTheme() {
     ensureStylesheet('dark-mode-css', 'css/common/dark-mode.css');
-    const savedDark = localStorage.getItem('darkMode') === 'true';
-    applyTheme(savedDark);
+    applyTheme(localStorage.getItem('darkMode') === 'true');
   }
 
   function toggleDarkMode() {
@@ -135,37 +158,31 @@
     applyTheme(nextDark);
   }
 
-  // Apply theme immediately during <head> execution to prevent light-flash
   initTheme();
 
-  function getToastIcon(type) {
-    if (type === 'success') {
-      return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>';
-    }
-    if (type === 'error') {
-      return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>';
-    }
-    if (type === 'warning') {
-      return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>';
-    }
-    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
-  }
+  const TOAST_ICONS = {
+    success: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>',
+    error: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>',
+    warning: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
+    info: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>',
+  };
+
+  const TOAST_TITLES = {
+    success: 'Success',
+    error: 'Error',
+    warning: 'Notice',
+    info: 'Notice',
+  };
 
   function showToast(message, type, title) {
     const resolvedType = type || 'info';
-    const defaultTitles = {
-      success: 'Success',
-      error: 'Error',
-      warning: 'Notice',
-      info: 'Notice',
-    };
-    const resolvedTitle = title || defaultTitles[resolvedType] || 'Notice';
+    const resolvedTitle = title || TOAST_TITLES[resolvedType] || 'Notice';
 
     const el = document.createElement('div');
     el.className = 'user-notification ' + escapeHtml(resolvedType);
     el.innerHTML =
       '<div class="notification-content">' +
-      '<div class="notification-icon">' + getToastIcon(resolvedType) + '</div>' +
+      '<div class="notification-icon">' + (TOAST_ICONS[resolvedType] || TOAST_ICONS.info) + '</div>' +
       '<div class="notification-text">' +
       '<div class="notification-title">' + escapeHtml(resolvedTitle) + '</div>' +
       '<div class="notification-message">' + escapeHtml(message) + '</div>' +
@@ -183,7 +200,6 @@
     }, 3500);
   }
 
-  // Supports both showNotification(title, message, type) and showNotification(message, type)
   function showNotification(arg1, arg2, arg3) {
     if (arg3 !== undefined) {
       showToast(arg2, arg3, arg1);
@@ -249,15 +265,6 @@
     ]);
   }
 
-  function highlightCurrentNavItem() {
-    const rawFile = (window.location.pathname || '').split('/').pop();
-    const currentFile = !rawFile || rawFile === 'index.html' ? 'homepage.html' : rawFile;
-
-    document.querySelectorAll('.header .nav-link').forEach(function (link) {
-      link.classList.toggle('active', link.getAttribute('data-page') === currentFile);
-    });
-  }
-
   function renderHeader() {
     const headerContainer = document.getElementById('header-container');
     if (!headerContainer) return;
@@ -277,27 +284,15 @@
       '</a>' +
       '</div>' +
       '<nav class="nav-links">' +
-      '<a href="' + escapeHtml(pageUrl('homepage.html')) + '" class="nav-link" data-page="homepage.html">Movies</a>' +
+      '<a href="' + escapeHtml(homeHref) + '" class="nav-link" data-page="homepage.html">Movies</a>' +
       '<a href="' + escapeHtml(pageUrl('theater.html')) + '" class="nav-link" data-page="theater.html">Theaters</a>' +
       '<a href="' + escapeHtml(pageUrl('offer.html')) + '" class="nav-link" data-page="offer.html">Offers</a>' +
       '<a href="' + escapeHtml(pageUrl('about.html')) + '" class="nav-link" data-page="about.html">About</a>' +
       '</nav>' +
       '<div class="user-actions">' +
       '<button type="button" class="dark-mode-toggle" id="theme-toggle-btn" title="Toggle Dark Mode" aria-label="Toggle Dark Mode">' +
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="moon-icon">' +
-      '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>' +
-      '</svg>' +
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="sun-icon">' +
-      '<circle cx="12" cy="12" r="5"></circle>' +
-      '<line x1="12" y1="1" x2="12" y2="3"></line>' +
-      '<line x1="12" y1="21" x2="12" y2="23"></line>' +
-      '<line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>' +
-      '<line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>' +
-      '<line x1="1" y1="12" x2="3" y2="12"></line>' +
-      '<line x1="21" y1="12" x2="23" y2="12"></line>' +
-      '<line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>' +
-      '<line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>' +
-      '</svg>' +
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="moon-icon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>' +
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="sun-icon"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>' +
       '</button>' +
       '<a href="' + escapeHtml(ticketsHref) + '" class="user-profile" id="header-tickets-link" title="My Tickets">' +
       '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>' +
@@ -321,8 +316,8 @@
       '<div class="info-item"><span class="info-label">Status:</span><span class="info-value">' + (user.isLoggedIn ? 'Authenticated' : 'Browsing as Guest') + '</span></div>' +
       '</div>' +
       '<div class="dropdown-menu">' +
-      '<a href="' + escapeHtml(pageUrl('homepage.html')) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">Browse Movies</span><span class="dropdown-item-desc">Explore current screenings</span></div></a>' +
-      '<a href="' + escapeHtml(pageUrl('theater.html')) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">Find Theaters</span><span class="dropdown-item-desc">View cinema locations & schedules</span></div></a>' +
+      '<a href="' + escapeHtml(homeHref) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">Browse Movies</span><span class="dropdown-item-desc">Explore current screenings</span></div></a>' +
+      '<a href="' + escapeHtml(pageUrl('theater.html')) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">Find Theaters</span><span class="dropdown-item-desc">View cinema locations &amp; schedules</span></div></a>' +
       '<a href="' + escapeHtml(pageUrl('offer.html')) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">Special Offers</span><span class="dropdown-item-desc">Claim active promo codes</span></div></a>' +
       '<a href="' + escapeHtml(ticketsHref) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">My Tickets</span><span class="dropdown-item-desc">Manage or print bookings</span></div></a>' +
       '<div class="dropdown-separator"></div>' +
@@ -337,12 +332,13 @@
       '</div>' +
       '</header>';
 
-    highlightCurrentNavItem();
+    const rawFile = (window.location.pathname || '').split('/').pop();
+    const currentFile = !rawFile || rawFile === 'index.html' ? 'homepage.html' : rawFile;
+    document.querySelectorAll('.header .nav-link').forEach(function (link) {
+      link.classList.toggle('active', link.getAttribute('data-page') === currentFile);
+    });
 
-    const themeBtn = document.getElementById('theme-toggle-btn');
-    if (themeBtn) {
-      themeBtn.addEventListener('click', toggleDarkMode);
-    }
+    document.getElementById('theme-toggle-btn')?.addEventListener('click', toggleDarkMode);
 
     const profileTrigger = document.getElementById('user-profile-trigger');
     const dropdown = document.getElementById('userDropdown');
@@ -354,40 +350,26 @@
       });
     }
 
-    const authBtn = document.getElementById('header-auth-btn');
-    if (authBtn) {
-      authBtn.addEventListener('click', async function (e) {
-        if (!user.isLoggedIn) {
-          return; // Navigate directly to login.html
-        }
-        e.preventDefault();
-        await AuthStore.logout();
-        window.location.href = rootUrl('login.html');
-      });
-    }
+    document.getElementById('header-auth-btn')?.addEventListener('click', async function (e) {
+      if (!user.isLoggedIn) return;
+      e.preventDefault();
+      await AuthStore.logout();
+      window.location.href = rootUrl('login.html');
+    });
   }
 
-  function addBottom() {
+  function renderFooter() {
     const bottomContainer = document.getElementById('bottom-container');
     if (!bottomContainer) return;
 
-    const currentFile = (window.location.pathname || '').split('/').pop();
-    const skipFooter = ['booking3.html', 'pay.html', 'paysuccess.html'];
-    if (skipFooter.includes(currentFile)) {
-      bottomContainer.innerHTML = '';
-      return;
-    }
-
     ensureStylesheet('common-footer-css', 'css/common/footer.css');
-    const appStoreImg = resolveAssetUrl('img/app-store.png');
-
     bottomContainer.innerHTML =
       '<footer class="homepage-footer">' +
-      '<div class="container" style="max-width:1200px; margin: 0 auto; padding: 0 20px;">' +
+      '<div class="container" style="max-width:1200px; margin:0 auto; padding:0 20px;">' +
       '<div class="footer-grid">' +
       '<div class="footer-column">' +
       '<h3>CineTix</h3>' +
-      '<p>The premier destination for movie enthusiasts to discover screenings, reserve seats, and enjoy cinema experiences.</p>' +
+      '<p>The premier web destination for movie enthusiasts to discover screenings, preview 3D auditoriums, reserve seats, and manage digital tickets.</p>' +
       '</div>' +
       '<div class="footer-column">' +
       '<h3>Quick Links</h3>' +
@@ -397,6 +379,7 @@
       '<li><a href="' + escapeHtml(pageUrl('upcoming.html')) + '">Upcoming Releases</a></li>' +
       '<li><a href="' + escapeHtml(pageUrl('giftcards.html')) + '">Gift Cards</a></li>' +
       '<li><a href="' + escapeHtml(pageUrl('offer.html')) + '">Offers &amp; Discounts</a></li>' +
+      '<li><a href="' + escapeHtml(pageUrl('generate_ticket.html')) + '">My Tickets</a></li>' +
       '</ul>' +
       '</div>' +
       '<div class="footer-column">' +
@@ -409,13 +392,6 @@
       '<li><a href="' + escapeHtml(pageUrl('help.html')) + '">Help Center</a></li>' +
       '</ul>' +
       '</div>' +
-      '<div class="footer-column">' +
-      '<h3>Mobile App</h3>' +
-      '<p>Access your digital tickets and showtimes anywhere.</p>' +
-      '<a href="' + escapeHtml(pageUrl('generate_ticket.html')) + '" class="app-store-link">' +
-      '<img src="' + escapeHtml(appStoreImg) + '" alt="App Store">' +
-      '</a>' +
-      '</div>' +
       '</div>' +
       '<div class="footer-bottom">' +
       '<p>&copy; 2026 Alpha Striker 2.0 (CineTix). All rights reserved.</p>' +
@@ -423,13 +399,10 @@
       '</div>' +
       '</footer>';
 
-    const contactTrigger = document.getElementById('footer-contact-trigger');
-    if (contactTrigger) {
-      contactTrigger.addEventListener('click', function (e) {
-        e.preventDefault();
-        clickLink();
-      });
-    }
+    document.getElementById('footer-contact-trigger')?.addEventListener('click', function (e) {
+      e.preventDefault();
+      clickLink();
+    });
   }
 
   function initFaqAccordions() {
@@ -437,37 +410,35 @@
       if (questionEl.dataset.faqBound === 'true') return;
       questionEl.dataset.faqBound = 'true';
       questionEl.addEventListener('click', function () {
-        const parentItem = questionEl.closest('.faq-item');
         questionEl.classList.toggle('active');
-        if (parentItem) {
-          parentItem.classList.toggle('active');
-        }
+        questionEl.closest('.faq-item')?.classList.toggle('active');
       });
     });
   }
 
   document.addEventListener('click', function (event) {
     if (!event.target.closest('#user-profile-trigger')) {
-      const dropdown = document.getElementById('userDropdown');
-      if (dropdown) dropdown.classList.remove('show');
+      document.getElementById('userDropdown')?.classList.remove('show');
     }
   });
 
   document.addEventListener('DOMContentLoaded', function () {
     initTheme();
     renderHeader();
-    addBottom();
+    renderFooter();
     initFaqAccordions();
   });
 
-  // Expose structured namespace and backwards-compatible global helpers
   window.CineTicket = {
     AuthStore: AuthStore,
+    calcGroupDiscount: calcGroupDiscount,
     escapeHtml: escapeHtml,
+    fetchJson: fetchJson,
     formatStars: formatStars,
     pageUrl: pageUrl,
-    rootUrl: rootUrl,
+    renderStarIcons: renderStarIcons,
     resolveAssetUrl: resolveAssetUrl,
+    rootUrl: rootUrl,
     showToast: showToast,
     toggleDarkMode: toggleDarkMode,
   };
@@ -478,8 +449,4 @@
   window.clickEmailUs = clickEmailUs;
   window.clickCallUs = clickCallUs;
   window.clickLink = clickLink;
-  window.addBottom = addBottom;
-  window.checkLoginStatus = function () {
-    return AuthStore.getUser().isLoggedIn;
-  };
 })();

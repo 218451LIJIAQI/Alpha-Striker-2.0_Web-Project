@@ -3,19 +3,15 @@ namespace app\admin\controller;
 
 use app\common\controller\ApiController;
 use think\facade\Env;
-use think\facade\Request;
 use think\facade\Session;
 
 class Auth extends ApiController
 {
-    /**
-     * Authenticate administrator and issue a session-bound cryptographic token.
-     */
     public function login()
     {
         try {
             $data     = $this->payload();
-            $username = isset($data['username']) ? trim((string) $data['username']) : '';
+            $username = $this->strParam('username');
             $password = isset($data['password']) ? (string) $data['password'] : '';
 
             if ($username === '' || $password === '') {
@@ -52,9 +48,6 @@ class Auth extends ApiController
         }
     }
 
-    /**
-     * Destroy administrator session state.
-     */
     public function logout()
     {
         Session::delete('admin_auth');
@@ -63,34 +56,11 @@ class Auth extends ApiController
         return $this->ok(null, 'Logout successful');
     }
 
-    /**
-     * Verify current admin session and token validity.
-     */
     public function checkAuth()
     {
         try {
-            $payload      = $this->payload();
-            $sessionAuth  = Session::get('admin_auth') === true;
-            $sessionToken = (string) Session::get('admin_token', '');
-
-            if (!$sessionAuth || $sessionToken === '') {
+            if (!BaseAdmin::checkSession($this->payload())) {
                 return $this->fail('Authentication required', 401);
-            }
-
-            $clientToken = Request::header('x-admin-token') ?: '';
-            if ($clientToken === '') {
-                $authHeader = Request::header('authorization') ?: '';
-                if (stripos($authHeader, 'Bearer ') === 0) {
-                    $clientToken = substr($authHeader, 7);
-                }
-            }
-            if ($clientToken === '' && !empty($payload['token'])) {
-                $clientToken = (string) $payload['token'];
-            }
-            $clientToken = trim((string) $clientToken);
-
-            if ($clientToken !== '' && !hash_equals($sessionToken, $clientToken)) {
-                return $this->fail('Invalid or expired token', 401);
             }
 
             return $this->ok([

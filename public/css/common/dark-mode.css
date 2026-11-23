@@ -1,7 +1,6 @@
 /*
  * CineTicket Semantic Dark Mode System
- * Replaces legacy 2,884-line override sheet and runtime DOM style mutation scripts
- * with clean CSS custom properties and conflict-free component surface rules.
+ * Maps active component surfaces, typography, forms, seat map, tables, and dialogs cleanly.
  */
 
 html.dark-mode,
@@ -11,14 +10,12 @@ body.dark-mode {
   --border-color: #343a4a;
   --text-main: #e6eaf2;
   --text-muted: #9aa3b5;
-  --bg-page: #14171f;
-  --bg-elevated: #2a2f3d;
-  --accent-blue: #6ea8fe;
 }
 
 html.dark-mode body,
 body.dark-mode {
   background-color: #14171f;
+  background-image: none;
   color: #e6eaf2;
 }
 
@@ -29,7 +26,7 @@ body.dark-mode .admin-nav {
   border-bottom: 1px solid #2e3650;
 }
 
-/* Shared Cards, Containers & Panels */
+/* Shared Cards, Containers & Modals */
 body.dark-mode .card,
 body.dark-mode .auth-container,
 body.dark-mode .admin-container,
@@ -43,26 +40,38 @@ body.dark-mode .table-container,
 body.dark-mode .form-container,
 body.dark-mode .page-header,
 body.dark-mode .action-card,
-body.dark-mode .faq-item,
-body.dark-mode .help-card,
 body.dark-mode .policy-section,
 body.dark-mode .terms-section,
 body.dark-mode .giftcard-option,
-body.dark-mode .upcoming-card,
-body.dark-mode .member-card,
+body.dark-mode .info-card-section,
+body.dark-mode .mission-values,
 body.dark-mode .value-card,
-body.dark-mode .stat-item,
+body.dark-mode .team-member,
 body.dark-mode .testimonial-card,
-body.dark-mode .contact-form-container,
-body.dark-mode .contact-info-card,
 body.dark-mode .detail-card,
 body.dark-mode .amenity-card,
 body.dark-mode .review-card,
-body.dark-mode .info-box {
+body.dark-mode .tabs-container,
+body.dark-mode .modal-content,
+body.dark-mode .chat-panel {
   background-color: #222631;
   color: #e6eaf2;
   border-color: #343a4a;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+}
+
+body.dark-mode .testimonials,
+body.dark-mode .tabs-header,
+body.dark-mode .call-option,
+body.dark-mode .email-department,
+body.dark-mode .category-card,
+body.dark-mode .chat-messages,
+body.dark-mode .chat-input-section,
+body.dark-mode .quick-actions,
+body.dark-mode .info-callout {
+  background-color: #191c24;
+  border-color: #343a4a;
+  color: #e6eaf2;
 }
 
 /* Headings & Copy */
@@ -74,35 +83,36 @@ body.dark-mode .section-title,
 body.dark-mode .movie-title,
 body.dark-mode .theater-name,
 body.dark-mode .offer-title,
-body.dark-mode .form-label {
+body.dark-mode .form-label,
+body.dark-mode .question {
   color: #f1f4fa;
 }
 
 body.dark-mode p,
 body.dark-mode .movie-info,
-body.dark-mode .theater-address,
+body.dark-mode .theater-location,
 body.dark-mode .offer-description,
 body.dark-mode .offer-validity,
 body.dark-mode .faq-answer,
-body.dark-mode .subtitle {
+body.dark-mode .answer {
   color: #b2bacb;
 }
 
-/* preserve white text on gradient hero banners & profile headers */
+/* Preserve white text on gradient hero banners & profile headers */
 body.dark-mode .hero h1,
 body.dark-mode .hero p,
-body.dark-mode .about-hero h1,
-body.dark-mode .about-hero p,
 body.dark-mode .theater-hero h1,
 body.dark-mode .theater-hero p,
-body.dark-mode .offer-hero h1,
-body.dark-mode .offer-hero p,
-body.dark-mode .page-banner h1,
-body.dark-mode .page-banner p,
+body.dark-mode .newsletter h2,
+body.dark-mode .newsletter p,
+body.dark-mode .contact-section h2,
+body.dark-mode .contact-section p,
+body.dark-mode .modal-header h3,
+body.dark-mode .modal-header p,
+body.dark-mode .chat-header h3,
 body.dark-mode .user-profile-card .user-display-name,
 body.dark-mode .user-profile-card .user-email,
-body.dark-mode .ticket-header h2,
-body.dark-mode .ticket-header p {
+body.dark-mode .movie-banner .movie-title {
   color: #ffffff;
 }
 
@@ -129,29 +139,29 @@ body.dark-mode textarea:focus {
   outline: none;
 }
 
-/* Filter Chips & Category Tabs */
-body.dark-mode .genre-btn,
-body.dark-mode .filter-btn,
-body.dark-mode .category-btn,
+/* Filter Chips, Category Tabs & Amenity Pills */
+body.dark-mode .btn-filter,
+body.dark-mode .filter-options button,
+body.dark-mode .filter-tabs button,
 body.dark-mode .tab-btn,
-body.dark-mode .amenity-tag {
+body.dark-mode .amenity,
+body.dark-mode .quick-action-btn,
+body.dark-mode .faq-question:not(.active) {
   background-color: #262b38;
   color: #d5dce9;
   border-color: #384054;
 }
 
-body.dark-mode .genre-btn.active,
-body.dark-mode .filter-btn.active,
-body.dark-mode .category-btn.active,
+body.dark-mode .btn-filter.active,
+body.dark-mode .filter-options button.active,
+body.dark-mode .filter-tabs button.active,
 body.dark-mode .tab-btn.active {
   background-color: #4361ee;
   color: #ffffff;
   border-color: #4361ee;
 }
 
-/* Promo Code Box on Offers Page */
-body.dark-mode .promo-box,
-body.dark-mode .promo-code-container {
+body.dark-mode .promo-code {
   background-color: #181b23;
   border-color: #384054;
   color: #6ea8fe;
@@ -172,7 +182,8 @@ body.dark-mode .time-slot.active {
   color: #ffffff;
 }
 
-body.dark-mode .seats-container {
+body.dark-mode .seats-container,
+body.dark-mode .selected-seats {
   background-color: #191c24;
   border: 1px solid #343a4a;
 }
@@ -210,19 +221,18 @@ body.dark-mode .seat-demo.reserved {
   opacity: 0.85;
 }
 
-body.dark-mode .selected-seats {
-  background-color: #191c24;
-  border: 1px solid #343a4a;
-}
-
 /* Ticket View */
-body.dark-mode .ticket-body,
 body.dark-mode .ticket-details,
-body.dark-mode .ticket-qr-section,
 body.dark-mode .no-tickets {
   background-color: #222631;
   color: #e6eaf2;
   border-color: #343a4a;
+}
+
+body.dark-mode .detail-value,
+body.dark-mode .text-info div:last-child,
+body.dark-mode .rating span {
+  color: #e6eaf2;
 }
 
 body.dark-mode .detail-row,
@@ -230,19 +240,21 @@ body.dark-mode .summary-row {
   border-color: #343a4a;
 }
 
-/* Tables (Admin & User) */
+/* Tables (Admin & Info Pages) */
 body.dark-mode table {
   background-color: #222631;
   color: #e6eaf2;
 }
 
-body.dark-mode thead th {
+body.dark-mode thead th,
+body.dark-mode .info-table th {
   background-color: #1a1e28;
   color: #d5dce9;
   border-color: #343a4a;
 }
 
-body.dark-mode tbody td {
+body.dark-mode tbody td,
+body.dark-mode .info-table td {
   border-color: #2f3545;
   color: #e6eaf2;
 }
@@ -254,7 +266,8 @@ body.dark-mode tbody tr:hover {
 /* Dropdowns, Popups & Notifications */
 body.dark-mode .dropdown-content,
 body.dark-mode .contact-popup-content,
-body.dark-mode .user-notification {
+body.dark-mode .user-notification,
+body.dark-mode .bot-message .message-content {
   background-color: #222631;
   color: #e6eaf2;
   border-color: #343a4a;

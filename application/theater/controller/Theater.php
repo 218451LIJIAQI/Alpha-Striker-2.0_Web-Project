@@ -6,15 +6,11 @@ use think\Db;
 
 class Theater extends ApiController
 {
-    /**
-     * List theaters with optional search keyword (matching name or address) and amenity filter.
-     */
     public function getTheaterList()
     {
         try {
-            $params  = $this->payload();
-            $keyword = isset($params['address']) ? trim((string) $params['address']) : '';
-            $amenity = isset($params['amenity']) ? trim((string) $params['amenity']) : '';
+            $keyword = $this->strParam('address');
+            $amenity = $this->strParam('amenity');
 
             $query = Db::name('theater')
                 ->field('theater_code, theater_name, address, amenity, star, img, reviews, distance')
@@ -36,29 +32,21 @@ class Theater extends ApiController
         }
     }
 
-    /**
-     * Get single theater details along with its active screening movies from theater_movie.
-     */
     public function getTheaterDetails()
     {
         try {
-            $params      = $this->payload();
-            $theaterCode = isset($params['theater_code']) ? (int) $params['theater_code'] : 0;
-
+            $theaterCode = $this->idParam('theater_code');
             if ($theaterCode <= 0) {
                 return $this->fail('Valid theater_code parameter is required');
             }
 
-            $theater = Db::name('theater')
-                ->where('theater_code', $theaterCode)
-                ->find();
-
+            $theater = Db::name('theater')->where('theater_code', $theaterCode)->find();
             if (!$theater) {
                 return $this->fail('Theater does not exist', 404);
             }
 
-            $today  = date('Y-m-d');
-            $movies = Db::table('theater_movie')
+            $today = date('Y-m-d');
+            $theater['movies'] = Db::table('theater_movie')
                 ->alias('tm')
                 ->join('t_movies m', 'tm.movie_code = m.movie_code')
                 ->where('tm.theater_code', $theaterCode)
@@ -68,8 +56,6 @@ class Theater extends ApiController
                 ->field('m.movie_code, m.movie_name, m.star, m.tag, m.money, m.movie_type, m.img, m.times, tm.daily_showtimes')
                 ->order('m.movie_code', 'asc')
                 ->select();
-
-            $theater['movies'] = $movies;
 
             return $this->ok($theater);
         } catch (\Throwable $e) {

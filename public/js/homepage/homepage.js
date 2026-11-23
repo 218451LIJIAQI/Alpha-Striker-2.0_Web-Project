@@ -13,95 +13,78 @@ document.addEventListener('DOMContentLoaded', function () {
 
   filterButtons.forEach(function (button) {
     button.addEventListener('click', function () {
-      filterButtons.forEach(function (btn) {
-        btn.classList.remove('active');
-      });
+      filterButtons.forEach(function (btn) { btn.classList.remove('active'); });
       this.classList.add('active');
       if (searchInput) searchInput.value = '';
       fetchMovies(this.dataset.genre || 'all');
     });
   });
 
-  function triggerSearch() {
+  async function triggerSearch() {
     const keyword = searchInput ? searchInput.value.trim() : '';
+    resetGenreSelection();
     if (!keyword) {
-      fetchAllMovies();
+      fetchMovies('all');
       return;
     }
 
-    filterButtons.forEach(function (btn) {
-      btn.classList.toggle('active', btn.dataset.genre === 'all');
-    });
-
-    fetch('/index.php/movie/movies/searchMovies?keyword=' + encodeURIComponent(keyword))
-      .then(function (res) { return res.json(); })
-      .then(function (payload) {
-        if (payload.success) {
-          renderMovies(payload.data || []);
-        } else {
-          window.showToast(payload.message || 'Search failed', 'error');
-        }
-      })
-      .catch(function () {
-        window.showToast('Unable to search movies right now', 'error');
-      });
-  }
-
-  if (searchBtn) {
-    searchBtn.addEventListener('click', triggerSearch);
-  }
-  if (searchInput) {
-    searchInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        triggerSearch();
-      }
-    });
-  }
-});
-
-function fetchAllMovies() {
-  document.querySelectorAll('.btn-filter').forEach(function (btn) {
-    btn.classList.toggle('active', btn.dataset.genre === 'all');
-  });
-  fetchMovies('all');
-}
-
-function fetchMovies(genre) {
-  const targetGenre = genre || 'all';
-  fetch('/index.php/movie/movies/getMovieList?genre=' + encodeURIComponent(targetGenre))
-    .then(function (res) { return res.json(); })
-    .then(function (payload) {
+    try {
+      const payload = await window.CineTicket.fetchJson(
+        '/index.php/movie/movies/searchMovies?keyword=' + encodeURIComponent(keyword)
+      );
       if (payload.success) {
         renderMovies(payload.data || []);
       } else {
-        window.showToast(payload.message || 'Failed to load movies', 'error');
+        window.showToast(payload.message || 'Search failed', 'error');
       }
-    })
-    .catch(function () {
-      window.showToast('Unable to connect to movie service', 'error');
-    });
+    } catch (_) {
+      window.showToast('Unable to search movies right now', 'error');
+    }
+  }
+
+  searchBtn?.addEventListener('click', triggerSearch);
+  searchInput?.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      triggerSearch();
+    }
+  });
+});
+
+function resetGenreSelection() {
+  document.querySelectorAll('.btn-filter').forEach(function (btn) {
+    btn.classList.toggle('active', btn.dataset.genre === 'all');
+  });
 }
 
-function renderStarIcons(score) {
-  const rating = Math.max(0, Math.min(5, parseFloat(score) || 5.0));
-  const full = Math.floor(rating);
-  const half = rating - full >= 0.5 ? 1 : 0;
-  const empty = 5 - full - half;
-  let html = '';
-  for (let i = 0; i < full; i++) html += '<i class="fas fa-star"></i>';
-  if (half) html += '<i class="fas fa-star-half-alt"></i>';
-  for (let i = 0; i < empty; i++) html += '<i class="far fa-star"></i>';
-  return html;
+function fetchAllMovies() {
+  const searchInput = document.querySelector('.search-input');
+  if (searchInput) searchInput.value = '';
+  resetGenreSelection();
+  fetchMovies('all');
+}
+
+async function fetchMovies(genre) {
+  try {
+    const payload = await window.CineTicket.fetchJson(
+      '/index.php/movie/movies/getMovieList?genre=' + encodeURIComponent(genre || 'all')
+    );
+    if (payload.success) {
+      renderMovies(payload.data || []);
+    } else {
+      window.showToast(payload.message || 'Failed to load movies', 'error');
+    }
+  } catch (_) {
+    window.showToast('Unable to connect to movie service', 'error');
+  }
 }
 
 function renderMovies(movies) {
   const movieGrid = document.querySelector('.movie-grid');
   if (!movieGrid) return;
 
-  const esc = window.CineTicket.escapeHtml;
-  const resolveAsset = window.CineTicket.resolveAssetUrl;
-  const pageUrl = window.CineTicket.pageUrl;
+  const CT = window.CineTicket;
+  const esc = CT.escapeHtml;
 
   if (!Array.isArray(movies) || movies.length === 0) {
     movieGrid.innerHTML =
@@ -118,19 +101,15 @@ function renderMovies(movies) {
     const priceText = movie.money !== undefined && movie.money !== null
       ? '$' + parseFloat(movie.money).toFixed(2)
       : '';
-    const posterSrc = resolveAsset(movie.img);
 
     const card = document.createElement('div');
     card.className = 'movie-card';
     card.innerHTML =
       (movie.tag ? '<div class="movie-badge">' + esc(movie.tag) + '</div>' : '') +
-      '<img src="' + esc(posterSrc) + '" alt="' + esc(movie.movie_name) + '" class="movie-poster">' +
+      '<img src="' + esc(CT.resolveAssetUrl(movie.img)) + '" alt="' + esc(movie.movie_name) + '" class="movie-poster">' +
       '<div class="movie-info">' +
       '<div class="movie-title">' + esc(movie.movie_name) + '</div>' +
-      '<div class="rating">' +
-      renderStarIcons(ratingVal) +
-      '<span>' + esc(ratingVal) + '</span>' +
-      '</div>' +
+      '<div class="rating">' + CT.renderStarIcons(ratingVal) + '<span>' + esc(ratingVal) + '</span></div>' +
       '<div class="movie-meta">' +
       '<span><i class="fas fa-film"></i> ' + esc(movie.movie_type) + '</span>' +
       '<span><i class="fas fa-clock"></i> ' + esc(movie.times) + '</span>' +
@@ -142,8 +121,7 @@ function renderMovies(movies) {
       '</div>';
 
     card.querySelector('.btn-book').addEventListener('click', function () {
-      const code = this.getAttribute('data-movie-code');
-      window.location.href = pageUrl('booking3.html?movie_code=' + encodeURIComponent(code));
+      window.location.href = CT.pageUrl('booking3.html?movie_code=' + encodeURIComponent(movie.movie_code));
     });
 
     movieGrid.appendChild(card);

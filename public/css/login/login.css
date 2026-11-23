@@ -1,4 +1,4 @@
-/* General Styles */
+/* Customer & Admin Authentication Form Styles */
 * {
   margin: 0;
   padding: 0;
@@ -8,36 +8,30 @@
 
 body {
   background-color: #f5f7fb;
-  color: #333;
   background-image: linear-gradient(135deg, #f5f7fb 0%, #e0e7ff 100%);
+  color: #333333;
   min-height: 100vh;
-  overflow: hidden;
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
-  margin: 0;
-  padding: 0;
+  padding: 24px 16px;
 }
 
 .container {
   max-width: 1200px;
+  width: 100%;
   margin: 0 auto;
-  padding: 20px;
-  height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 15px;
-  max-height: 100vh;
 }
 
 .card {
-  background: white;
+  background: #ffffff;
   border-radius: 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  padding: 20px;
-  margin-bottom: 20px;
+  padding: 24px;
+  margin-bottom: 18px;
 }
 
 .btn {
@@ -46,12 +40,12 @@ body {
   border-radius: 8px;
   padding: 12px 20px;
   font-weight: 600;
-  transition: all 0.3s;
+  transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
 .btn-primary {
   background-color: #3366cc;
-  color: white;
+  color: #ffffff;
   width: 100%;
   border-radius: 30px;
   padding: 14px;
@@ -63,30 +57,29 @@ body {
   background-color: #2a56ac;
 }
 
-.btn-outline {
-  background-color: transparent;
-  border: 1px solid #ddd;
-  color: #666;
-}
-
-.btn-outline:hover {
-  background-color: #f5f5f5;
-}
-
 /* Logo Section */
 .logo-section {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   text-align: center;
 }
 
 .logo-section img {
   width: 100px;
   height: 50px;
+  object-fit: contain;
+}
+
+.admin-logo-section img {
+  width: 84px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: 12px;
+  margin-bottom: 10px;
 }
 
 .logo-section p {
-  color: #666;
-  font-size: 18px;
+  color: #666666;
+  font-size: 17px;
 }
 
 .logo-section h1 {
@@ -95,30 +88,32 @@ body {
   color: #3366cc;
 }
 
+.admin-branding h1 {
+  font-size: 28px;
+  color: #4361ee;
+  margin-bottom: 4px;
+}
+
 /* Auth Container */
 .auth-container {
-  max-width: 400px;
+  max-width: 420px;
+  width: 100%;
   margin: 0 auto;
-  padding: 15px;
-  overflow: hidden;
-  max-height: none;
-  background-size: contain;
-  background-blend-mode: soft-light;
 }
 
 .auth-header {
   text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: 24px;
 }
 
 .auth-header h1 {
   color: #3366cc;
   font-size: 28px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .auth-header p {
-  color: #666;
+  color: #666666;
 }
 
 /* Form Styles */
@@ -138,7 +133,7 @@ body {
   border: 2px solid #e0e7ff;
   border-radius: 8px;
   font-size: 16px;
-  transition: all 0.3s;
+  transition: border-color 0.2s ease;
 }
 
 .form-input:focus {
@@ -146,7 +141,6 @@ body {
   outline: none;
 }
 
-/* Remember Me & Forgot Password */
 .remember-forgot {
   display: flex;
   justify-content: space-between;
@@ -154,48 +148,34 @@ body {
   align-items: center;
 }
 
-.remember-me {
-  display: flex;
-  align-items: center;
-}
-
-.remember-me input {
-  margin-right: 8px;
-}
-
-.remember-me label {
-  color: #666;
-  font-size: 14px;
-}
-
-.forgot-password {
-  color: #3366cc;
-  text-decoration: none;
-  font-size: 14px;
-}
-
-/* Terms Checkbox */
+.remember-me,
 .terms-check {
   display: flex;
   align-items: center;
+}
+
+.terms-check {
   margin-bottom: 15px;
 }
 
+.remember-me input,
 .terms-check input {
   margin-right: 8px;
 }
 
+.remember-me label,
 .terms-check label {
-  color: #666;
+  color: #666666;
   font-size: 14px;
 }
 
+.forgot-password,
 .terms-check a {
   color: #3366cc;
   text-decoration: none;
+  font-size: 14px;
 }
 
-/* Auth Footer */
 .auth-footer {
   margin-top: 15px;
   text-align: center;
@@ -211,14 +191,13 @@ body {
   text-decoration: none;
 }
 
-/* Social Buttons */
 .social-buttons {
   margin-top: 15px;
   text-align: center;
 }
 
 .social-buttons p {
-  color: #666;
+  color: #666666;
   font-size: 14px;
   margin-bottom: 10px;
 }
@@ -241,16 +220,19 @@ body {
   cursor: pointer;
 }
 
+.social-icon img {
+  width: 20px;
+  height: 20px;
+}
+
 .social-icon:hover {
   background: #e0e7ff;
 }
 
-/* Copyright */
 .copyright {
   margin-top: 10px;
-  padding-bottom: 5px;
   text-align: center;
-  color: #666;
+  color: #666666;
   font-size: 14px;
 }
 
@@ -262,9 +244,9 @@ body {
 .send-code-btn {
   padding: 0 15px;
   background: #2c3e50;
-  color: white;
+  color: #ffffff;
   border: none;
-  border-radius: 5px;
+  border-radius: 8px;
   cursor: pointer;
   white-space: nowrap;
 }

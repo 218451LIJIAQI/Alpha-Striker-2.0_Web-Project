@@ -1,193 +1,74 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Upcoming Releases | Alpha Striker 2.0</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-  <link rel="stylesheet" type="text/css" href="../css/common/header.css">
-  <link rel="stylesheet" type="text/css" href="../css/common/footer.css">
-  <link rel="stylesheet" type="text/css" href="../css/homepage/homepage.css">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="../css/common/header.css">
+  <link rel="stylesheet" href="../css/common/footer.css">
+  <link rel="stylesheet" href="../css/homepage/homepage.css">
   <script src="../js/common.js"></script>
-   <style>
-        .cons {
-            font-family: 'Segoe UI', sans-serif;
-            max-width: 800px;
-            margin: 30px auto;
-            padding: 20px;
-            line-height: 1.6;
-        }
-        
-        .section-title {
-            color: #2c3e50;
-            border-bottom: 2px solid #e0e0e0;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-        }
-
-        .feature-list {
-            list-style: none;
-            padding-left: 20px;
-        }
-
-        .feature-list li {
-            margin: 15px 0;
-            line-height: 1.4;
-        }
-
-        .key-feature {
-            color: #e74c3c;
-            font-weight: 600;
-        }
-
-        .reminder-method {
-            margin: 25px 0;
-            padding: 18px;
-            background: #f8f9fa;
-            border-radius: 6px;
-        }
-
-        .perks-table {
-            width: 100%;
-            margin: 30px 0;
-            border-collapse: collapse;
-        }
-
-        .perks-table th,
-        .perks-table td {
-            padding: 12px;
-            border: 1px solid #e0e0e0;
-        }
-
-        .perks-table th {
-            background-color: #f8f9fa;
-            color: #2c3e50;
-            text-align: left;
-        }
-
-        .highlights-table {
-            width: 100%;
-            margin: 25px 0;
-            border-collapse: collapse;
-        }
-
-        .highlights-table th,
-        .highlights-table td {
-            padding: 12px;
-            border: 1px solid #e0e0e0;
-            text-align: left;
-        }
-
-        .highlights-table th {
-            background-color: #f8f9fa;
-            color: #2c3e50;
-        }
-
-        .faq-accordion {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-
-        .faq-question {
-            background: #f8f9fa;
-            padding: 15px;
-            margin-bottom: 10px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .faq-answer {
-            padding: 15px;
-            display: none;
-        }
-
-        .faq-question.active {
-            background: #e74c3c;
-            color: white;
-        }
-
-        .faq-question.active + .faq-answer {
-            display: block;
-        }
-    </style>
 </head>
 <body>
-  <!-- Include common header component -->
   <div id="header-container"></div>
-  <div class="cons">
-    <h1 class="section-title">Upcoming Releases 🎬✨</h1>
-    <p>Stay ahead of the curve - discover the latest blockbusters and indie gems coming soon to your local theaters. Here’s everything you need to know about our Upcoming Releases section:</p>
 
-    <h2 class="section-title">🌟 Key Features</h2>
-    <ul class="feature-list">
-        <li><span class="key-feature">Release Calendar</span><br>
-            View a month-by-month grid of all new titles, color-coded by format (Standard, IMAX®, 4DX®, VIP).<br>
-            Hover or tap a date to see a quick pop-up of that day’s premieres.</li>
-        
-        <li><span class="key-feature">Movie Spotlight Cards</span><br>
-            Each card displays the poster, title, official release date, genre, and MPAA rating.<br>
-            Includes a “Watch Trailer” button and a 2-line synopsis.<br>
-            “Add to Watchlist” icon toggles your personal “Coming Soon” list.</li>
-        
-        <!-- Other Key Features repeated structures omitted -->
+  <main class="info-page card">
+    <h1 class="info-page-title">Upcoming Releases 🎬✨</h1>
+    <p>Stay ahead of the curve — discover upcoming blockbusters and indie features scheduled at partner theaters.</p>
+
+    <h2 class="info-section-heading">🌟 Key Features</h2>
+    <ul class="topic-list">
+      <li><strong class="guide-link">Release Calendar:</strong> View monthly premieres color-coded by format (Standard, IMAX®, 4DX®, VIP). Click or hover over a date to inspect scheduled openings.</li>
+      <li><strong class="guide-link">Movie Spotlight Cards:</strong> Inspect posters, release dates, genres, runtimes, and advance booking windows.</li>
     </ul>
 
-    <h2 class="section-title">🔔 How to Get Reminders</h2>
-    <div class="reminder-method">
-        <strong>Email Alerts:</strong> Enable “Notify Me” on any movie card. We’ll send you a heads-up 24 hours before tickets drop.
+    <h2 class="info-section-heading">🔔 Release Reminders</h2>
+    <div class="info-callout">
+      <strong>Email Alerts:</strong> Subscribe to our newsletter on the <a class="guide-link" href="offer.html">Offers</a> page to receive a 24-hour heads-up before advance tickets open.
     </div>
 
-    <!-- Other reminder methods added in the same format -->
-
-    <h2 class="section-title">🎟️ Pre-Booking Perks</h2>
-    <table class="perks-table">
+    <h2 class="info-section-heading">🎟️ Pre-Booking Perks</h2>
+    <table class="info-table">
+      <tbody>
         <tr>
-            <th>Early Bird Pricing</th>
-            <td>Get up to 10% off if you pre-book within the first 48 hours of tickets going on sale.</td>
+          <th>Early Bird Pricing</th>
+          <td>Save on advance screenings booked within the first 48 hours of ticket release.</td>
         </tr>
         <tr>
-            <th>VIP Previews</th>
-            <td>Platinum members can snag invites to advance screenings and Q&A sessions.</td>
+          <th>Group Reservations</th>
+          <td>Automatic 30% group discount when reserving 5 or more seats in a single order.</td>
         </tr>
+      </tbody>
     </table>
 
-    <h2 class="section-title">📆 Upcoming Highlights</h2>
-    <table class="highlights-table">
+    <h2 class="info-section-heading">📆 Upcoming Highlights</h2>
+    <table class="info-table">
+      <thead>
         <tr>
-            <th>Date</th>
-            <th>Title</th>
-            <th>Format</th>
-            <th>Watchlist</th>
-            <th>Pre-Book</th>
+          <th>Date</th>
+          <th>Title</th>
+          <th>Format</th>
+          <th>Status</th>
         </tr>
+      </thead>
+      <tbody>
         <tr>
-            <td>December 18, 2026</td>
-            <td>Galactic Odyssey</td>
-            <td>IMAX®</td>
-            <td>⭐ Add</td>
-            <td>🔒 Open</td>
+          <td>December 18, 2026</td>
+          <td>Galactic Odyssey</td>
+          <td>IMAX®</td>
+          <td>Pre-Book Opens 2 Weeks Prior</td>
         </tr>
-        <!-- Other movies added in the same format -->
+      </tbody>
     </table>
-    <p>⭐ Click “Add” to save to your watchlist - 🔒 Pre-Book opens 2 weeks before release</p>
 
-    <h2 class="section-title">🤔 FAQs About Upcoming Releases</h2>
+    <h2 class="info-section-heading">🤔 FAQs About Upcoming Releases</h2>
     <div class="faq-accordion">
-        <div class="faq-question active">
-            Q: Can I pre-book for any movie?
-        </div>
-        <div class="faq-answer">
-            A: Only select titles support pre-booking. Look for the 🔒 “Pre-Book” button on the card.
-        </div>
-
-        <!-- Other FAQs added in the same format -->
+      <div class="faq-question active">Q: Can I pre-book for any upcoming movie?</div>
+      <div class="faq-answer">A: Advance seat selection opens two weeks prior to the premiere date for participating titles.</div>
     </div>
+  </main>
 
-    <p>Keep checking the Upcoming Releases page every week - new titles and surprise previews are added regularly. Grab your popcorn, set your reminders, and get ready for a summer of unforgettable cinema!</p>
-
-    
- </div>
   <div id="bottom-container"></div>
-  
 </body>
 </html>

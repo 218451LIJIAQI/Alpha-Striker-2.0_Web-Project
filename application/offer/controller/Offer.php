@@ -2,44 +2,40 @@
 namespace app\offer\controller;
 
 use app\common\controller\ApiController;
-use app\offer\model\Offer as OfferModel;
+use think\Db;
 
 class Offer extends ApiController
 {
-    /**
-     * List active offers, optionally filtered by offer_type.
-     */
     public function getOfferList()
     {
         try {
-            $params    = $this->payload();
-            $offerType = isset($params['offer_type']) ? trim((string) $params['offer_type']) : '';
+            $offerType = $this->strParam('offer_type');
+            $query     = Db::name('offer')
+                ->field('offer_code, offer_title, offer_description, promo_code, offer_validity, img, badge, money, offer_type')
+                ->order('offer_code', 'asc');
 
-            $offerModel = new OfferModel();
-            $offers     = $offerModel->getOfferList($offerType);
+            if ($offerType !== '' && strtolower($offerType) !== 'all') {
+                $query->where('offer_type', $offerType);
+            }
 
-            return $this->ok($offers);
+            return $this->ok($query->select());
         } catch (\Throwable $e) {
             return $this->serverError('Failed to load offers', $e);
         }
     }
 
-    /**
-     * Validate a promo code (passed as badge or promo_code) and return its discount amount.
-     */
     public function getMoneyByBadge()
     {
         try {
-            $params = $this->payload();
-            $code   = $params['badge'] ?? ($params['promo_code'] ?? '');
-            $code   = strtoupper(trim((string) $code));
-
+            $code = strtoupper($this->strParam('badge') ?: $this->strParam('promo_code'));
             if ($code === '') {
                 return $this->fail('Promo code is required');
             }
 
-            $offerModel = new OfferModel();
-            $offer      = $offerModel->findByPromoCode($code);
+            $offer = Db::name('offer')
+                ->field('offer_code, offer_title, promo_code, offer_validity, badge, money')
+                ->where('promo_code', $code)
+                ->find();
 
             if (!$offer) {
                 return $this->fail('Invalid promo code');

@@ -3,7 +3,7 @@
 Static & Relational Contract Audit Suite for CineTicket (Alpha Striker 2.0).
 Verifies:
 1. movies.sql relational schema, foreign keys, unique constraints, and seed rows in SQLite (PRAGMA foreign_keys=ON).
-2. PHP controller/model syntax structure, balanced delimiters, BaseAdmin inheritance, and 1-to-1 route/method mapping.
+2. PHP controller syntax structure, balanced delimiters, BaseAdmin inheritance, and 1-to-1 route/method mapping.
 3. JavaScript syntax across all external .js files and inline HTML <script> blocks via `node --check`.
 4. HTML local asset integrity (<img src>, <link href>, <script src>, <a href>) with zero broken local paths.
 5. CSS brace balance and absence of destructive global !important overrides.
@@ -49,7 +49,6 @@ def translate_mysql_to_sqlite(sql_text: str) -> str:
     body = re.sub(r"\s+COLLATE\s+\w+", "", body, flags=re.I)
     body = re.sub(r"NOW\(\)", "CURRENT_TIMESTAMP", body)
 
-    # Convert inlinePRIMARY KEY / UNIQUE KEY / KEY lines inside CREATE TABLE
     converted_stmts = []
     for stmt in body.split(";"):
         s = stmt.strip()
@@ -60,13 +59,11 @@ def translate_mysql_to_sqlite(sql_text: str) -> str:
             tname = table_match.group(1)
             extra_indexes = []
             out_lines = []
-            has_inline_pk = "INTEGER PRIMARY KEY" in s
-            lines_in_table = s.splitlines()
-            for ln in lines_in_table:
+            for ln in s.splitlines():
                 stripped = ln.strip().rstrip(",")
-                if re.match(r"^PRIMARY KEY\s*\(`(\w+)`\)$", stripped, re.I):
-                    pk_col = re.match(r"^PRIMARY KEY\s*\(`(\w+)`\)$", stripped, re.I).group(1)
-                    # Mark INTEGER column as PRIMARY KEY AUTOINCREMENT
+                pk_match = re.match(r"^PRIMARY KEY\s*\(`(\w+)`\)$", stripped, re.I)
+                if pk_match:
+                    pk_col = pk_match.group(1)
                     out_lines = [
                         re.sub(
                             rf"(`{pk_col}`\s+INTEGER)",
@@ -90,7 +87,6 @@ def translate_mysql_to_sqlite(sql_text: str) -> str:
                     continue
                 out_lines.append(ln)
 
-            # Fix trailing comma before closing paren
             cleaned = "\n".join(out_lines)
             cleaned = re.sub(r",(\s*\))$", r"\1", cleaned)
             converted_stmts.append(cleaned)
@@ -101,7 +97,7 @@ def translate_mysql_to_sqlite(sql_text: str) -> str:
     return ";\n".join(converted_stmts) + ";"
 
 
-def verify_sql_schema() -> dict[str, set[str]]:
+def verify_sql_schema() -> None:
     sql_path = ROOT / "movies.sql"
     sql_text = sql_path.read_text(encoding="utf-8")
     sqlite_sql = translate_mysql_to_sqlite(sql_text)
@@ -124,11 +120,9 @@ def verify_sql_schema() -> dict[str, set[str]]:
     assert_true(counts["theater_movie"] == 42, f"Expected 42 theater_movie rows, got {counts['theater_movie']}")
     assert_true(counts["movie_offer"] == 35, f"Expected 35 movie_offer rows, got {counts['movie_offer']}")
 
-    # Verify seed user password is bcrypt hashed ($2y$10$), never plaintext
     pwd = conn.execute("SELECT login_pwd FROM t_user WHERE user_code = 1").fetchone()[0]
     assert_true(pwd.startswith("$2y$10$") and len(pwd) == 60, f"Seed password is not valid bcrypt: {pwd}")
 
-    # Verify composite unique seat constraint prevents duplicate seat booking
     try:
         conn.execute(
             "INSERT INTO t_seat (movie_code, user_code, date, time, seat_num, seat_zone, theater_code) "
@@ -138,20 +132,13 @@ def verify_sql_schema() -> dict[str, set[str]]:
     except sqlite3.IntegrityError:
         pass
 
-    # Verify guest booking with user_code = NULL succeeds under foreign key enforcement
     conn.execute(
         "INSERT INTO t_seat (movie_code, user_code, date, time, seat_num, seat_zone, theater_code) "
         "VALUES (1, NULL, '2026-11-25', '08:00 PM', 'H12', 1, 1)"
     )
 
-    schema_cols: dict[str, set[str]] = {}
-    for tbl in counts:
-        cols = {row[1] for row in conn.execute(f"PRAGMA table_info(`{tbl}`)").fetchall()}
-        schema_cols[tbl] = cols
-
     conn.close()
     print(f"[PASS] SQL schema & relational constraints verified ({counts})")
-    return schema_cols
 
 
 def strip_php_comments_and_strings(code: str) -> str:
@@ -162,7 +149,7 @@ def strip_php_comments_and_strings(code: str) -> str:
     return pattern.sub("''", code)
 
 
-def verify_php_contracts(schema_cols: dict[str, set[str]]) -> None:
+def verify_php_contracts() -> None:
     php_files = sorted(
         list((ROOT / "application").rglob("*.php"))
         + list((ROOT / "config").rglob("*.php"))
@@ -199,12 +186,10 @@ def verify_php_contracts(schema_cols: dict[str, set[str]]) -> None:
                     f"Admin controller {path} must extend BaseAdmin",
                 )
 
-    # Verify Admin User never exposes login_pwd in SAFE_FIELDS
     admin_user_src = (ROOT / "application/admin/controller/User.php").read_text(encoding="utf-8")
     safe_match = re.search(r"SAFE_FIELDS\s*=\s*'([^']+)'", admin_user_src)
     assert_true(safe_match is not None and "login_pwd" not in safe_match.group(1), "Admin User leaked login_pwd!")
 
-    # Verify every /index.php/<module>/<controller>/<action> endpoint referenced in frontend exists
     frontend_files = sorted(list((ROOT / "public").rglob("*.js")) + list((ROOT / "public").rglob("*.html")))
     endpoint_re = re.compile(r"/index\.php/([a-zA-Z0-9_]+)/([a-zA-Z0-9_]+)/([a-zA-Z0-9_]+)")
     referenced_endpoints = set()
@@ -236,7 +221,6 @@ def verify_js_and_html_assets() -> None:
 
     for hf in html_files:
         txt = hf.read_text(encoding="utf-8")
-        # Check inline scripts via node --check
         for script_match in re.finditer(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", txt, re.S | re.I):
             code = script_match.group(1).strip()
             if not code:
@@ -251,7 +235,6 @@ def verify_js_and_html_assets() -> None:
             finally:
                 os.unlink(tmp_path)
 
-        # Verify all local src / href targets exist
         for attr_val in re.findall(r'(?:src|href)=["\']([^"\']+)["\']', txt):
             val = attr_val.strip()
             if (
@@ -293,8 +276,8 @@ def verify_js_and_html_assets() -> None:
 
 
 def main() -> int:
-    schema_cols = verify_sql_schema()
-    verify_php_contracts(schema_cols)
+    verify_sql_schema()
+    verify_php_contracts()
     verify_js_and_html_assets()
     print("ALL STATIC & CONTRACT AUDITS PASSED.")
     return 0
