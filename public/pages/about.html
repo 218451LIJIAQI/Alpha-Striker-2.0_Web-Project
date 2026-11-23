@@ -259,17 +259,17 @@
             <p>Have questions, feedback, or suggestions? We'd love to hear from you! Reach out to our team using any of the methods below.</p>
             
             <div class="contact-buttons">
-                <a href="#" class="contact-button call-btn" onclick="clickCallUs()">
+                <a href="#" class="contact-button call-btn" onclick="clickCallUs(); return false;">
                     <i class="fas fa-phone"></i>
                     <span>Call Us</span>
                     <small>Speak directly with our team</small>
                 </a>
-                <a href="#" class="contact-button email-btn" onclick="clickEmailUs()">
+                <a href="#" class="contact-button email-btn" onclick="clickEmailUs(); return false;">
                     <i class="fas fa-envelope"></i>
                     <span>Email Us</span>
                     <small>Get detailed support via email</small>
                 </a>
-                <a href="#" class="contact-button chat-btn" onclick="clickLiveChat()">
+                <a href="#" class="contact-button chat-btn" onclick="clickLiveChat(); return false;">
                     <i class="fas fa-comments"></i>
                     <span>Live Chat</span>
                     <small>Instant support available 24/7</small>
@@ -607,7 +607,7 @@
         <div class="chat-header">
             <div class="chat-agent-info">
                 <div class="agent-avatar">
-                    <img src="../img/about/support-agent.png" alt="Support Agent" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <img src="../img/about/userlogo.jpeg" alt="Support Agent" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                     <div class="default-avatar" style="display: none;">
                         <i class="fas fa-user-headset"></i>
                     </div>

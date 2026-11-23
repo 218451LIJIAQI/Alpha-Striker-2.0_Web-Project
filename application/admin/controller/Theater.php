@@ -1,24 +1,20 @@
 <?php
 namespace app\admin\controller;
-use app\theater\model\Theater as TheaterModel;
+
 use think\Db;
 
-class Theater
+class Theater extends BaseAdmin
 {
-    /**
-     * Get theater list for admin
-     * @return json
-     */
     public function index()
     {
         try {
-            $theaters = Db::name('theater')->select();
-            return json(['success' => true, 'data' => $theaters]);
-        } catch (\Exception $e) {
-            return json([
-                'success' => false,
-                'message' => 'Failed to query theater information: ' . $e->getMessage()
-            ]);
+            $theaters = Db::name('theater')
+                ->order('theater_code', 'asc')
+                ->select();
+
+            return $this->ok($theaters);
+        } catch (\Throwable $e) {
+            return $this->serverError('Failed to query theaters', $e);
         }
     }
-} 
+}

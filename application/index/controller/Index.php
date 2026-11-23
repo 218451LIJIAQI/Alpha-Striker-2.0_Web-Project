@@ -5,6 +5,6 @@ class Index
 {
     public function index()
     {
-        return 'Application is running.';
+        return 'CineTicket API is running.';
     }
 }

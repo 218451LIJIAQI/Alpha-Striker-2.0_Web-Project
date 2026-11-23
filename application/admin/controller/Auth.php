@@ -1,125 +1,105 @@
 <?php
 namespace app\admin\controller;
 
-class Auth
+use app\common\controller\ApiController;
+use think\facade\Env;
+use think\facade\Request;
+use think\facade\Session;
+
+class Auth extends ApiController
 {
+    /**
+     * Authenticate administrator and issue a session-bound cryptographic token.
+     */
     public function login()
     {
         try {
-            // Get request data
-            $data = input('post.');
-            
-            // If POST data is empty, try parsing JSON
-            if (empty($data)) {
-                $input = file_get_contents('php://input');
-                if (!empty($input)) {
-                    $jsonData = json_decode($input, true);
-                    if ($jsonData) {
-                        $data = $jsonData;
-                    }
-                }
+            $data     = $this->payload();
+            $username = isset($data['username']) ? trim((string) $data['username']) : '';
+            $password = isset($data['password']) ? (string) $data['password'] : '';
+
+            if ($username === '' || $password === '') {
+                return $this->fail('Username and password are required');
             }
-            
-            $username = isset($data['username']) ? $data['username'] : '';
-            $password = isset($data['password']) ? $data['password'] : '';
-            
-            // Validate required fields
-            if (empty($username) || empty($password)) {
-                return json([
-                    'success' => false,
-                    'message' => 'Username and password are required'
-                ]);
+
+            $expectedUser = (string) Env::get('admin.username', 'admin');
+            $passwordHash = (string) Env::get('admin.password_hash', '');
+            $expectedPass = (string) Env::get('admin.password', 'admin');
+
+            $userMatches = hash_equals($expectedUser, $username);
+            $passMatches = $passwordHash !== ''
+                ? password_verify($password, $passwordHash)
+                : hash_equals($expectedPass, $password);
+
+            if (!$userMatches || !$passMatches) {
+                return $this->fail('Invalid username or password', 401);
             }
-            
-            // Admin credentials verification
-            // Should verify from database, using hardcode temporarily
-            if ($username === 'admin' && $password === 'admin') {
-                // Generate more secure token
-                $token = md5('admin_token_' . time() . rand(1000, 9999));
-                
-                return json([
-                    'success' => true,
-                    'message' => 'Login successful',
-                    'token' => $token,
-                    'data' => [
-                        'admin_id' => 1,
-                        'username' => $username,
-                        'role' => 'admin'
-                    ]
-                ]);
-            }
-            
-            return json([
-                'success' => false,
-                'message' => 'Invalid username or password'
+
+            $token = bin2hex(random_bytes(32));
+            Session::set('admin_auth', true);
+            Session::set('admin_token', $token);
+            Session::set('admin_user', $username);
+
+            return $this->ok([
+                'admin_id' => 1,
+                'username' => $username,
+                'role'     => 'admin',
+            ], 'Login successful', [
+                'token' => $token,
             ]);
-            
-        } catch (\Exception $e) {
-            return json([
-                'success' => false,
-                'message' => 'Login failed: ' . $e->getMessage()
-            ]);
+        } catch (\Throwable $e) {
+            return $this->serverError('Admin login failed', $e);
         }
     }
-    
+
     /**
-     * Admin logout method
+     * Destroy administrator session state.
      */
     public function logout()
     {
-        try {
-            // Clear session or token related logic
-            return json([
-                'success' => true,
-                'message' => 'Logout successful'
-            ]);
-        } catch (\Exception $e) {
-            return json([
-                'success' => false,
-                'message' => 'Logout failed: ' . $e->getMessage()
-            ]);
-        }
+        Session::delete('admin_auth');
+        Session::delete('admin_token');
+        Session::delete('admin_user');
+        return $this->ok(null, 'Logout successful');
     }
-    
+
     /**
-     * Check admin authentication
+     * Verify current admin session and token validity.
      */
     public function checkAuth()
     {
         try {
-            // Should verify token validity here
-            $token = input('post.token') ?: input('get.token');
-            
-            if (empty($token)) {
-                return json([
-                    'success' => false,
-                    'message' => 'Token is required'
-                ]);
+            $payload      = $this->payload();
+            $sessionAuth  = Session::get('admin_auth') === true;
+            $sessionToken = (string) Session::get('admin_token', '');
+
+            if (!$sessionAuth || $sessionToken === '') {
+                return $this->fail('Authentication required', 401);
             }
-            
-            // Simple token verification, should be more complex in actual application
-            if (strpos($token, 'admin_token') !== false) {
-                return json([
-                    'success' => true,
-                    'message' => 'Authentication valid',
-                    'data' => [
-                        'admin_id' => 1,
-                        'username' => 'admin',
-                        'role' => 'admin'
-                    ]
-                ]);
+
+            $clientToken = Request::header('x-admin-token') ?: '';
+            if ($clientToken === '') {
+                $authHeader = Request::header('authorization') ?: '';
+                if (stripos($authHeader, 'Bearer ') === 0) {
+                    $clientToken = substr($authHeader, 7);
+                }
             }
-            
-            return json([
-                'success' => false,
-                'message' => 'Invalid token'
-            ]);
-            
-        } catch (\Exception $e) {
-            return json([
-                'success' => false,
-                'message' => 'Authentication check failed: ' . $e->getMessage()
-            ]);
+            if ($clientToken === '' && !empty($payload['token'])) {
+                $clientToken = (string) $payload['token'];
+            }
+            $clientToken = trim((string) $clientToken);
+
+            if ($clientToken !== '' && !hash_equals($sessionToken, $clientToken)) {
+                return $this->fail('Invalid or expired token', 401);
+            }
+
+            return $this->ok([
+                'admin_id' => 1,
+                'username' => (string) Session::get('admin_user', 'admin'),
+                'role'     => 'admin',
+            ], 'Authentication valid');
+        } catch (\Throwable $e) {
+            return $this->serverError('Authentication check failed', $e);
         }
     }
 }

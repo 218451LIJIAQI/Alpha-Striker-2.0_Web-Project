@@ -1,17 +1,13 @@
 <?php
-// +----------------------------------------------------------------------
-// | ThinkPHP [ WE CAN DO IT JUST THINK ]
-// +----------------------------------------------------------------------
-// | Copyright (c) 2006~2018 http://thinkphp.cn All rights reserved.
-// +----------------------------------------------------------------------
-// | Licensed ( http://www.apache.org/licenses/LICENSE-2.0 )
-// +----------------------------------------------------------------------
-// | Author: liu21st <liu21st@gmail.com>
-// +----------------------------------------------------------------------
-// $Id$
+$requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 
-if (is_file($_SERVER["DOCUMENT_ROOT"] . $_SERVER["SCRIPT_NAME"])) {
+if (
+    $requestPath !== '/' &&
+    $requestPath !== '/index.php' &&
+    strpos($requestPath, '/index.php/') !== 0 &&
+    is_file(__DIR__ . $requestPath)
+) {
     return false;
-} else {
-    require __DIR__ . "/index.php";
 }
+
+require __DIR__ . '/index.php';

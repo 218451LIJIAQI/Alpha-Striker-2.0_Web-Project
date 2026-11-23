@@ -1,63 +1,58 @@
 <?php
 namespace app\offer\controller;
+
+use app\common\controller\ApiController;
 use app\offer\model\Offer as OfferModel;
 
-class Offer
+class Offer extends ApiController
 {
     /**
-     * Get offer list
-     * @return json
+     * List active offers, optionally filtered by offer_type.
      */
     public function getOfferList()
     {
         try {
-            $offer_type = input('offer_type', '');
-            // Modified here, instantiate model first then call method
+            $params    = $this->payload();
+            $offerType = isset($params['offer_type']) ? trim((string) $params['offer_type']) : '';
+
             $offerModel = new OfferModel();
-            $offers = $offerModel->getOfferList($offer_type);
-            
-            return json([
-                'success' => true,
-                'data' => $offers
-            ]);
-            
-        } catch (\Exception $e) {
-            return json([
-                'success' => false,
-                'message' => 'Failed to get offer list: ' . $e->getMessage()
-            ]);
+            $offers     = $offerModel->getOfferList($offerType);
+
+            return $this->ok($offers);
+        } catch (\Throwable $e) {
+            return $this->serverError('Failed to load offers', $e);
         }
     }
-    
+
     /**
-     * Query money by badge
-     * @param string $badge Offer identifier
-     * @return json
+     * Validate a promo code (passed as badge or promo_code) and return its discount amount.
      */
     public function getMoneyByBadge()
     {
         try {
-            $badge = input('badge');
-            if (empty($badge)) {
-                return json([
-                    'success' => false,
-                    'message' => 'Badge parameter cannot be empty'
-                ]);
+            $params = $this->payload();
+            $code   = $params['badge'] ?? ($params['promo_code'] ?? '');
+            $code   = strtoupper(trim((string) $code));
+
+            if ($code === '') {
+                return $this->fail('Promo code is required');
             }
-            
+
             $offerModel = new OfferModel();
-            $money = $offerModel->getMoneyByBadge($badge);
-            
-            return json([
-                'success' => true,
-                'data' => $money
-            ]);
-            
-        } catch (\Exception $e) {
-            return json([
-                'success' => false,
-                'message' => 'Query failed: ' . $e->getMessage()
-            ]);
+            $offer      = $offerModel->findByPromoCode($code);
+
+            if (!$offer) {
+                return $this->fail('Invalid promo code');
+            }
+
+            $validity = trim((string) ($offer['offer_validity'] ?? ''));
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $validity) && $validity < date('Y-m-d')) {
+                return $this->fail('This promo code has expired');
+            }
+
+            return $this->ok($offer, 'Promo code applied');
+        } catch (\Throwable $e) {
+            return $this->serverError('Failed to verify promo code', $e);
         }
     }
 }

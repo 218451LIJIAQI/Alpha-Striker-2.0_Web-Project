@@ -3,65 +3,57 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login | Alpha Striker 2.0</title>
-  <link rel="stylesheet" type="text/css" href="css/login/login.css">
+  <title>Reset Password | Alpha Striker 2.0</title>
+  <link rel="stylesheet" href="css/common/header.css">
+  <link rel="stylesheet" href="css/login/login.css">
+  <script src="js/common.js"></script>
+  <script src="js/login/pwd.js" defer></script>
 </head>
 <body>
-    <!-- Login Page -->
-    <div id="login-page" style="display:block;">
-      <div class="container">
-        <div class="logo-section">
-            <img src="img/logo.jpg" alt="logo">
-          <p>Your Ultimate Movie Experience</p>
+  <div id="login-page" style="display:block;">
+    <div class="container">
+      <div class="logo-section">
+        <a href="pages/homepage.html"><img src="img/logo.jpg" alt="CineTix Logo"></a>
+        <p>Your Ultimate Movie Experience</p>
+      </div>
+
+      <div class="auth-container card">
+        <div class="auth-header">
+          <h1>Reset Password</h1>
+          <p>Verify your account email to set a new password</p>
         </div>
-        
-        <div class="auth-container card">
-          <div class="auth-header">
-            <h1>Forget Password</h1>
-            <p>From Email reset password</p>
+
+        <form id="reset-form" onsubmit="resetPwd(event)">
+          <div class="form-group">
+            <label for="email" class="form-label">Email</label>
+            <input type="email" id="email" class="form-input" placeholder="Enter your registered email" required>
           </div>
-          
-          <form id="login-form" onsubmit="resetPwd(event)">
-            <div class="form-group">
-              <label for="email" class="form-label">Email</label>
-              <input type="email" id="email" class="form-input" placeholder="Enter your email" required>
-            </div>
 
-
-
-            <div class="form-group">
-              <label for="Verification code" class="form-label">Verification code</label>
-              <div class="verification-input">
-                <input type="text" id="Verification" class="form-input" placeholder="Enter your verification code" required>
-                <button type="button" id="send-code" class="send-code-btn">Send Code</button>
-              </div>
+          <div class="form-group">
+            <label for="Verification" class="form-label">Verification Code</label>
+            <div class="verification-input">
+              <input type="text" id="Verification" class="form-input" placeholder="Demo code: 888888" required>
+              <button type="button" id="send-code" class="send-code-btn">Send Code</button>
             </div>
-            
-            <div class="form-group">
-              <label for="password" class="form-label">Password</label>
-              <input type="password" id="password" class="form-input" placeholder="Enter your password" required>
-            </div>
-            
-           
-            
-            <button type="submit" class="btn btn-primary">Reset Password</button>
-          </form>
-          
-          <div class="auth-footer">
-            <p><a href="login.html" class="auth-link">Sign In</a></p>
           </div>
-          
-      
-        </div>
-        
-        <div class="copyright">
-          <p>© 2025 CineTix. All rights reserved.</p>
+
+          <div class="form-group">
+            <label for="password" class="form-label">New Password</label>
+            <input type="password" id="password" class="form-input" placeholder="At least 6 characters" required minlength="6">
+          </div>
+
+          <button type="submit" class="btn btn-primary">Reset Password</button>
+        </form>
+
+        <div class="auth-footer">
+          <p><a href="login.html" class="auth-link">Back to Sign In</a></p>
         </div>
       </div>
+
+      <div class="copyright">
+        <p>&copy; 2026 Alpha Striker 2.0 (CineTix). All rights reserved.</p>
+      </div>
     </div>
-  
-   
-    </div>
-    <script type="text/javascript" src="js/login/pwd.js"></script>
-  </body>
+  </div>
+</body>
 </html>

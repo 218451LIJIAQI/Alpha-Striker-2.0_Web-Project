@@ -1,19 +1,258 @@
-function createAdminNav() {
-    const nav = document.createElement('div');
-    nav.className = 'admin-nav';
-    nav.innerHTML = `
-        <a href="dashboard.html">Dashboard</a>
-        <a href="movies.html">Movies</a>
-        <a href="offers.html">Offers</a>
-        <a href="login.html" id="logout">Logout</a>
-    `;
-    return nav;
-}
+/**
+ * Shared Admin Console Runtime
+ * Handles admin session verification, authenticated API requests (X-Admin-Token),
+ * shared navigation bar rendering, theme toggle, logout, and lightweight Canvas charts.
+ */
+(function () {
+  'use strict';
 
-// Insert navigation when page loads
-document.addEventListener('DOMContentLoaded', function() {
-    const body = document.querySelector('body');
-    if (body) {
-        body.insertBefore(createAdminNav(), body.firstChild);
+  function getToken() {
+    return localStorage.getItem('adminToken') || '';
+  }
+
+  function getAdminName() {
+    return localStorage.getItem('adminUser') || 'admin';
+  }
+
+  function clearAdminSession() {
+    localStorage.removeItem('adminToken');
+    localStorage.removeItem('adminUser');
+    localStorage.removeItem('adminRemember');
+  }
+
+  function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function resolveAdminAsset(rawPath) {
+    if (!rawPath || typeof rawPath !== 'string') return '../img/logo.jpg';
+    const trimmed = rawPath.trim();
+    if (
+      trimmed.startsWith('http://') ||
+      trimmed.startsWith('https://') ||
+      trimmed.startsWith('data:') ||
+      trimmed.startsWith('/')
+    ) {
+      return trimmed;
     }
-});
+    return '../' + trimmed.replace(/^(\.\.\/|\.\/)+/, '');
+  }
+
+  function initAdminTheme() {
+    const isDark = localStorage.getItem('darkMode') === 'true';
+    document.documentElement.classList.toggle('dark-mode', isDark);
+    if (document.body) {
+      document.body.classList.toggle('dark-mode', isDark);
+    }
+  }
+
+  function toggleAdminTheme() {
+    const next = !document.documentElement.classList.contains('dark-mode');
+    localStorage.setItem('darkMode', String(next));
+    initAdminTheme();
+  }
+
+  initAdminTheme();
+
+  async function apiFetch(url, options) {
+    const opts = Object.assign({ credentials: 'same-origin' }, options || {});
+    const headers = Object.assign({}, opts.headers || {});
+    const token = getToken();
+    if (token) {
+      headers['X-Admin-Token'] = token;
+    }
+    if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(opts.body);
+    }
+    opts.headers = headers;
+
+    const response = await fetch(url, opts);
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch (_) {
+      payload = { success: false, message: 'Invalid server response' };
+    }
+
+    if (response.status === 401) {
+      clearAdminSession();
+      if (!(window.location.pathname || '').endsWith('/login.html')) {
+        window.location.href = 'login.html';
+      }
+    }
+
+    return payload;
+  }
+
+  async function ensureAuthenticated() {
+    const isLoginPage = (window.location.pathname || '').endsWith('/login.html');
+    if (isLoginPage) return true;
+
+    const token = getToken();
+    if (!token) {
+      window.location.href = 'login.html';
+      return false;
+    }
+
+    try {
+      const res = await apiFetch('/index.php/admin/auth/checkAuth', { method: 'POST' });
+      if (!res || !res.success) {
+        clearAdminSession();
+        window.location.href = 'login.html';
+        return false;
+      }
+      return true;
+    } catch (_) {
+      window.location.href = 'login.html';
+      return false;
+    }
+  }
+
+  async function logoutAdmin(event) {
+    if (event) event.preventDefault();
+    try {
+      await apiFetch('/index.php/admin/auth/logout', { method: 'POST' });
+    } catch (_) {
+      // Proceed with local cleanup
+    }
+    clearAdminSession();
+    window.location.href = 'login.html';
+  }
+
+  function renderAdminNav(activeKey) {
+    const mount = document.getElementById('admin-nav-container');
+    if (!mount) return;
+
+    const items = [
+      { key: 'dashboard', href: 'dashboard.html', icon: 'fas fa-chart-pie', label: 'Dashboard' },
+      { key: 'movies', href: 'movies.html', icon: 'fas fa-film', label: 'Movies' },
+      { key: 'offers', href: 'offers.html', icon: 'fas fa-tags', label: 'Offers' },
+      { key: 'seats', href: 'seat.html', icon: 'fas fa-chair', label: 'Seat Bookings' },
+      { key: 'users', href: 'user.html', icon: 'fas fa-users', label: 'Users' },
+    ];
+
+    mount.innerHTML =
+      '<nav class="admin-nav">' +
+      '<div class="nav-left">' +
+      '<a href="dashboard.html" class="admin-logo"><i class="fas fa-shield-alt"></i><span>CineTix Admin</span></a>' +
+      '<div class="nav-links">' +
+      items.map(function (item) {
+        const cls = item.key === activeKey ? 'active' : '';
+        return '<a href="' + item.href + '" class="' + cls + '"><i class="' + item.icon + '"></i> ' + item.label + '</a>';
+      }).join('') +
+      '</div>' +
+      '</div>' +
+      '<div class="admin-nav-right">' +
+      '<button type="button" class="dark-mode-toggle" id="admin-theme-toggle" title="Toggle Dark Mode" aria-label="Toggle Dark Mode">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="moon-icon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>' +
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sun-icon"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line></svg>' +
+      '</button>' +
+      '<div class="admin-user-profile">' +
+      '<div class="admin-avatar"><i class="fas fa-user-shield"></i></div>' +
+      '<span class="admin-user-name">' + escapeHtml(getAdminName()) + '</span>' +
+      '</div>' +
+      '<a href="login.html" class="logout-btn" id="admin-logout-btn"><i class="fas fa-sign-out-alt"></i><span>Logout</span></a>' +
+      '</div>' +
+      '</nav>';
+
+    const themeBtn = document.getElementById('admin-theme-toggle');
+    if (themeBtn) themeBtn.addEventListener('click', toggleAdminTheme);
+
+    const logoutBtn = document.getElementById('admin-logout-btn');
+    if (logoutBtn) logoutBtn.addEventListener('click', logoutAdmin);
+  }
+
+  /**
+   * Offline-capable native Canvas bar chart renderer (no external CDN dependency required).
+   */
+  function drawBarChart(canvas, labels, values, colors) {
+    if (!canvas || !canvas.getContext) return;
+    const dpr = window.devicePixelRatio || 1;
+    const width = canvas.clientWidth || 460;
+    const height = 240;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    const isDark = document.documentElement.classList.contains('dark-mode');
+    const textColor = isDark ? '#cbd5e1' : '#475569';
+    const gridColor = isDark ? '#334155' : '#e2e8f0';
+
+    if (!labels.length) {
+      ctx.fillStyle = textColor;
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('No data available', width / 2, height / 2);
+      return;
+    }
+
+    const padLeft = 40;
+    const padRight = 20;
+    const padTop = 24;
+    const padBottom = 44;
+    const plotW = width - padLeft - padRight;
+    const plotH = height - padTop - padBottom;
+    const maxVal = Math.max(1, Math.max.apply(null, values));
+
+    ctx.strokeStyle = gridColor;
+    ctx.lineWidth = 1;
+    for (let step = 0; step <= 4; step++) {
+      const y = padTop + plotH - (step / 4) * plotH;
+      ctx.beginPath();
+      ctx.moveTo(padLeft, y);
+      ctx.lineTo(width - padRight, y);
+      ctx.stroke();
+
+      ctx.fillStyle = textColor;
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(String(Math.round((step / 4) * maxVal)), padLeft - 6, y + 4);
+    }
+
+    const slotW = plotW / labels.length;
+    const barW = Math.min(44, slotW * 0.58);
+
+    labels.forEach(function (label, idx) {
+      const val = values[idx] || 0;
+      const barH = (val / maxVal) * plotH;
+      const x = padLeft + idx * slotW + (slotW - barW) / 2;
+      const y = padTop + plotH - barH;
+
+      ctx.fillStyle = colors[idx % colors.length];
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(x, y, barW, barH, 6) : ctx.rect(x, y, barW, barH);
+      ctx.fill();
+
+      ctx.fillStyle = textColor;
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(val), x + barW / 2, y - 6);
+
+      const shortLabel = label.length > 10 ? label.slice(0, 9) + '…' : label;
+      ctx.font = '11px sans-serif';
+      ctx.fillText(shortLabel, x + barW / 2, height - 16);
+    });
+  }
+
+  window.AdminApp = {
+    apiFetch: apiFetch,
+    clearAdminSession: clearAdminSession,
+    drawBarChart: drawBarChart,
+    ensureAuthenticated: ensureAuthenticated,
+    escapeHtml: escapeHtml,
+    logoutAdmin: logoutAdmin,
+    renderAdminNav: renderAdminNav,
+    resolveAdminAsset: resolveAdminAsset,
+    toggleAdminTheme: toggleAdminTheme,
+  };
+})();

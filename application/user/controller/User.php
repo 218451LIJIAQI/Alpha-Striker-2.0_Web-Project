@@ -1,145 +1,169 @@
 <?php
 namespace app\user\controller;
+
+use app\common\controller\ApiController;
 use app\user\model\User as UserModel;
 use think\Db;
+use think\facade\Env;
+use think\facade\Session;
 
-class User
+class User extends ApiController
 {
     /**
-     * User registration method
-     * @param string $name Username
-     * @param string $email Email
-     * @param string $password Password
-     * @return json
+     * Register a new user account with bcrypt password hashing and immediate session login.
      */
     public function reg()
     {
         try {
-        // Get request parameters
-            $data = input('post.');
-            // 
-            $name = $data['name'];
-            $email = $data['email'];
-            $password = $data['password'];
-            // Verify if email already exists
-            $exist = Db::name('user')->where('email', $email)->find();
-    
-            if ($exist) {
-                return json(['success' => false, 'message' => 'This email has been registered']);
+            $data     = $this->payload();
+            $name     = isset($data['name']) ? trim((string) $data['name']) : '';
+            $email    = isset($data['email']) ? strtolower(trim((string) $data['email'])) : '';
+            $password = isset($data['password']) ? (string) $data['password'] : '';
+
+            if ($name === '' || mb_strlen($name) > 50) {
+                return $this->fail('Please enter a valid name (1-50 characters)');
+            }
+            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100) {
+                return $this->fail('Please enter a valid email address');
+            }
+            if (strlen($password) < 6) {
+                return $this->fail('Password must be at least 6 characters');
             }
 
-            $login_pwd =$password;
+            if (Db::name('user')->where('email', $email)->find()) {
+                return $this->fail('This email has already been registered');
+            }
 
-            // Save user data
-            $userModel = new UserModel();
-            $userModel->user_name = $name;
-            $userModel->email = $email;
-            $userModel->login_pwd = $login_pwd;
+            $userModel              = new UserModel();
+            $userModel->user_name   = $name;
+            $userModel->email       = $email;
+            $userModel->login_pwd   = password_hash($password, PASSWORD_BCRYPT);
             $userModel->create_time = date('Y-m-d H:i:s');
-            
-            if ($userModel->save()) {
-                return json(['success' => true, 'message' => 'Registration successful']);
-            } else {
-                return json(['success' => false, 'message' => 'Registration failed']);
+
+            if (!$userModel->save()) {
+                return $this->fail('Registration failed');
             }
-        
-        } catch (\Exception $e) {
-            // Catch and return database error
-            return json([
-                'success' => false,
-                'message' => 'Database operation failed: ' . $e->getMessage()
-            ]);
+
+            $userId = (int) $userModel->user_code;
+            Session::set('user_id', $userId);
+            Session::set('user_email', $email);
+
+            return $this->ok([
+                'user_id'   => $userId,
+                'user_name' => $name,
+                'email'     => $email,
+            ], 'Registration successful');
+        } catch (\Throwable $e) {
+            return $this->serverError('Registration failed', $e);
         }
     }
 
     /**
-     * User login method
-     * @return json
+     * Authenticate user credentials using bcrypt verification (with transparent upgrade for legacy rows).
      */
     public function login()
     {
         try {
-            // Get request parameters
-            $data = input('post.');
-            $email = $data['email'];
-            $password = $data['password'];
+            $data     = $this->payload();
+            $email    = isset($data['email']) ? strtolower(trim((string) $data['email'])) : '';
+            $password = isset($data['password']) ? (string) $data['password'] : '';
 
-            // Verify if email exists
+            if ($email === '' || $password === '') {
+                return $this->fail('Email and password are required');
+            }
+
             $user = Db::name('user')->where('email', $email)->find();
-            
             if (!$user) {
-                return json(['success' => false, 'message' => 'User does not exist']);
+                return $this->fail('Invalid email or password');
             }
 
-            if ($password !== $user['login_pwd']) {
-                return json(['success' => false, 'message' => 'Password incorrect']);
+            $storedHash = (string) ($user['login_pwd'] ?? '');
+            $isBcrypt   = strpos($storedHash, '$2y$') === 0 || strpos($storedHash, '$2b$') === 0 || strpos($storedHash, '$2a$') === 0;
+
+            if ($isBcrypt) {
+                $authenticated = password_verify($password, $storedHash);
+            } else {
+                $authenticated = $storedHash !== '' && hash_equals($storedHash, $password);
+                if ($authenticated) {
+                    Db::name('user')
+                        ->where('user_code', $user['user_code'])
+                        ->update([
+                            'login_pwd'   => password_hash($password, PASSWORD_BCRYPT),
+                            'update_time' => date('Y-m-d H:i:s'),
+                        ]);
+                }
             }
 
-            // Login successful
-            return json([
-                'success' => true,
-                'message' => 'Login successful',
-                'data' => [
-                    'user_id' => $user['user_code'],
-                    'user_name' => $user['user_name'],
-                    'email' => $user['email']
-                ]
-            ]);
+            if (!$authenticated) {
+                return $this->fail('Invalid email or password');
+            }
 
-        } catch (\Exception $e) {
-            return json([
-                'success' => false,
-                'message' => 'Login failed: ' . $e->getMessage()
-            ]);
+            $userId = (int) $user['user_code'];
+            Session::set('user_id', $userId);
+            Session::set('user_email', $user['email']);
+
+            return $this->ok([
+                'user_id'   => $userId,
+                'user_name' => $user['user_name'],
+                'email'     => $user['email'],
+            ], 'Login successful');
+        } catch (\Throwable $e) {
+            return $this->serverError('Login failed', $e);
         }
     }
 
     /**
-     * Change password method
-     * @param string $email User email
-     * @param string $pwd New password
-     * @param string $verification_code Verification code
-     * @return json
+     * Clear current user session.
+     */
+    public function logout()
+    {
+        Session::delete('user_id');
+        Session::delete('user_email');
+        return $this->ok(null, 'Logout successful');
+    }
+
+    /**
+     * Reset user password after verifying email and reset verification code.
      */
     public function changePassword()
     {
         try {
-            // Get request parameters
-            $data = input('post.');
-            $email = $data['email'];
-            $pwd = $data['pwd'];
-            $verification_code = $data['verification_code'];
-            
-            // Verify verification code
-            if ($verification_code !== '888888') {
-                return json(['success' => false, 'message' => 'Verification code incorrect']);
+            $data             = $this->payload();
+            $email            = isset($data['email']) ? strtolower(trim((string) $data['email'])) : '';
+            $newPassword      = isset($data['pwd']) ? (string) $data['pwd'] : '';
+            $verificationCode = isset($data['verification_code']) ? trim((string) $data['verification_code']) : '';
+
+            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                return $this->fail('Please enter a valid email address');
             }
-            
-            // Verify if email exists
+            if (strlen($newPassword) < 6) {
+                return $this->fail('New password must be at least 6 characters');
+            }
+
+            $expectedCode = (string) Env::get('auth.reset_code', '888888');
+            if ($verificationCode === '' || !hash_equals($expectedCode, $verificationCode)) {
+                return $this->fail('Verification code is incorrect');
+            }
+
             $user = Db::name('user')->where('email', $email)->find();
             if (!$user) {
-                return json(['success' => false, 'message' => 'User does not exist']);
+                return $this->fail('Account not found for this email');
             }
-            
-            // Update password
-            $update = Db::name('user')
-                ->where('email', $email)
+
+            $updated = Db::name('user')
+                ->where('user_code', $user['user_code'])
                 ->update([
-                    'login_pwd' => $pwd,
-                    'update_time' => date('Y-m-d H:i:s')
+                    'login_pwd'   => password_hash($newPassword, PASSWORD_BCRYPT),
+                    'update_time' => date('Y-m-d H:i:s'),
                 ]);
-                
-            if ($update) {
-                return json(['success' => true, 'message' => 'Password changed successfully']);
-            } else {
-                return json(['success' => false, 'message' => 'Password change failed']);
+
+            if ($updated === false) {
+                return $this->fail('Password update failed');
             }
-            
-        } catch (\Exception $e) {
-            return json([
-                'success' => false,
-                'message' => 'Password change failed: ' . $e->getMessage()
-            ]);
+
+            return $this->ok(null, 'Password changed successfully');
+        } catch (\Throwable $e) {
+            return $this->serverError('Password change failed', $e);
         }
     }
 }
