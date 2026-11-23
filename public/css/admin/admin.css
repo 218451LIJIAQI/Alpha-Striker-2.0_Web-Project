@@ -405,10 +405,17 @@ tbody tr:hover {
   color: #ffffff;
 }
 
-.add-btn:hover,
-.submit-btn:hover {
+.add-btn:hover:not(:disabled),
+.submit-btn:hover:not(:disabled) {
   background: var(--admin-primary-dark);
   transform: translateY(-1px);
+}
+
+.submit-btn:disabled,
+.delete-btn:disabled,
+.refund-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .edit-btn {
@@ -428,8 +435,8 @@ tbody tr:hover {
   padding: 7px 13px;
 }
 
-.delete-btn:hover,
-.refund-btn:hover {
+.delete-btn:hover:not(:disabled),
+.refund-btn:hover:not(:disabled) {
   background-color: #fee2e2;
 }
 
@@ -448,7 +455,7 @@ tbody tr:hover {
   flex-wrap: wrap;
 }
 
-/* Admin Forms */
+/* Admin Forms & Relation Checklists */
 .form-container {
   background: var(--admin-card);
   padding: 32px;
@@ -504,6 +511,48 @@ tbody tr:hover {
   box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.14);
 }
 
+.checklist-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.checklist-toggle-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid var(--admin-border);
+  background: #f8fafc;
+  color: var(--admin-text);
+  cursor: pointer;
+}
+
+.relation-checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.relation-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--admin-border);
+  border-radius: 10px;
+  background: #f8fafc;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.relation-chip input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--admin-primary);
+}
+
 .form-hint {
   font-size: 12px;
   color: var(--admin-muted);
@@ -535,6 +584,11 @@ tbody tr:hover {
   text-align: center;
   padding: 40px 20px;
   color: var(--admin-muted);
+}
+
+.empty-state.error-state {
+  color: var(--admin-danger-dark);
+  font-weight: 500;
 }
 
 @media (max-width: 900px) {

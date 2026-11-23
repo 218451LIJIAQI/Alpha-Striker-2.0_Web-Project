@@ -1,6 +1,6 @@
 /*
- * CineTicket Semantic Dark Mode System
- * Maps active component surfaces, typography, forms, seat map, tables, and dialogs cleanly.
+ * CineTicket Unified Semantic Dark Mode System
+ * Maps active component surfaces, typography, forms, seat map, checkout, tables, and dialogs cleanly.
  */
 
 html.dark-mode,
@@ -10,6 +10,11 @@ body.dark-mode {
   --border-color: #343a4a;
   --text-main: #e6eaf2;
   --text-muted: #9aa3b5;
+  --card-bg: #222631;
+  --bg-light: #191c24;
+  --input-bg: #181b23;
+  --text-dark: #e6eaf2;
+  --text-light: #9aa3b5;
 }
 
 html.dark-mode body,
@@ -26,8 +31,9 @@ body.dark-mode .admin-nav {
   border-bottom: 1px solid #2e3650;
 }
 
-/* Shared Cards, Containers & Modals */
+/* Shared Cards, Containers, Checkout Panels & Modals */
 body.dark-mode .card,
+body.dark-mode .state-block,
 body.dark-mode .auth-container,
 body.dark-mode .admin-container,
 body.dark-mode .movie-card,
@@ -53,7 +59,12 @@ body.dark-mode .amenity-card,
 body.dark-mode .review-card,
 body.dark-mode .tabs-container,
 body.dark-mode .modal-content,
-body.dark-mode .chat-panel {
+body.dark-mode .chat-panel,
+body.dark-mode .payment-header,
+body.dark-mode .payment-main,
+body.dark-mode .order-summary,
+body.dark-mode .loading-content,
+body.dark-mode .success-content {
   background-color: #222631;
   color: #e6eaf2;
   border-color: #343a4a;
@@ -68,7 +79,14 @@ body.dark-mode .category-card,
 body.dark-mode .chat-messages,
 body.dark-mode .chat-input-section,
 body.dark-mode .quick-actions,
-body.dark-mode .info-callout {
+body.dark-mode .info-callout,
+body.dark-mode .payment-method-card:not(.active),
+body.dark-mode .card-form,
+body.dark-mode .promo-section,
+body.dark-mode .trust-item,
+body.dark-mode .booking-confirmation,
+body.dark-mode .step-item,
+body.dark-mode .relation-chip {
   background-color: #191c24;
   border-color: #343a4a;
   color: #e6eaf2;
@@ -199,6 +217,7 @@ body.dark-mode .screen::after {
 body.dark-mode .seat,
 body.dark-mode .seat-demo.available {
   background-color: #475166;
+  color: #cbd5e1;
 }
 
 body.dark-mode .seat:hover:not(.reserved):not(.selected) {
@@ -218,6 +237,7 @@ body.dark-mode .seat-demo.selected {
 body.dark-mode .seat.reserved,
 body.dark-mode .seat-demo.reserved {
   background-color: #dc2626;
+  color: rgba(255, 255, 255, 0.7);
   opacity: 0.85;
 }
 

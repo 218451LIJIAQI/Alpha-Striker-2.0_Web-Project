@@ -1,7 +1,8 @@
 /**
  * CineTicket (Alpha Striker 2.0) — Shared Frontend Runtime
- * Centralizes path resolution, XSS-safe escaping, JSON API requests, user session state,
- * theme switching, pricing/rating helpers, toast notifications, and shared header/footer/FAQ UI.
+ * Centralizes path resolution, XSS-safe escaping, safe redirects, JSON API requests,
+ * session-backed user state, theme switching, pricing/rating helpers, state blocks,
+ * keyboard accessibility, toast notifications, and shared header/footer/FAQ UI.
  */
 (function () {
   'use strict';
@@ -27,19 +28,43 @@
   }
 
   function resolveAssetUrl(rawPath) {
+    const fallback = currentDepthPrefix() + 'img/logo.jpg';
     if (!rawPath || typeof rawPath !== 'string') {
-      return currentDepthPrefix() + 'img/logo.jpg';
+      return fallback;
     }
     const trimmed = rawPath.trim();
-    if (
-      trimmed.startsWith('http://') ||
-      trimmed.startsWith('https://') ||
-      trimmed.startsWith('data:') ||
-      trimmed.startsWith('/')
-    ) {
+    if (!trimmed || /[\x00-\x1F\x7F]/.test(trimmed)) {
+      return fallback;
+    }
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) {
+      if (/^(https?:\/\/|data:image\/[a-zA-Z0-9.+-]+;base64,)/i.test(trimmed)) {
+        return trimmed;
+      }
+      return fallback;
+    }
+    if (trimmed.startsWith('//')) {
+      return fallback;
+    }
+    if (trimmed.startsWith('/')) {
       return trimmed;
     }
     return currentDepthPrefix() + trimmed.replace(/^(\.\.\/|\.\/)+/, '');
+  }
+
+  function safeRedirectUrl(rawTarget, fallbackUrl) {
+    const fallback = fallbackUrl || pageUrl('homepage.html');
+    if (!rawTarget || typeof rawTarget !== 'string') return fallback;
+    const trimmed = rawTarget.trim();
+    if (
+      !trimmed ||
+      trimmed.startsWith('//') ||
+      trimmed.includes('\\') ||
+      /[\x00-\x1F\x7F]/.test(trimmed) ||
+      /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)
+    ) {
+      return fallback;
+    }
+    return trimmed;
   }
 
   function escapeHtml(value) {
@@ -76,6 +101,25 @@
     return seatCount >= 5 ? +(subtotal * 0.30).toFixed(2) : 0;
   }
 
+  function calcCheckoutTotals(unitPrice, seatCount, promoDiscount) {
+    const unit = Math.max(0, parseFloat(unitPrice) || 0);
+    const count = Math.max(0, parseInt(seatCount, 10) || 0);
+    const subtotal = +(unit * count).toFixed(2);
+    const groupDiscount = calcGroupDiscount(subtotal, count);
+    const promoOff = Math.max(0, +(parseFloat(promoDiscount) || 0).toFixed(2));
+    const serviceFee = count > 0 ? 2.50 : 0;
+    const totalPaid = Math.max(0, +(subtotal - (groupDiscount + promoOff) + serviceFee).toFixed(2));
+    return {
+      unitPrice: unit,
+      seatCount: count,
+      subtotal: subtotal,
+      groupDiscount: groupDiscount,
+      promoDiscount: promoOff,
+      serviceFee: serviceFee,
+      totalPaid: totalPaid,
+    };
+  }
+
   async function fetchJson(url, options) {
     const opts = Object.assign({ credentials: 'same-origin' }, options || {});
     const headers = Object.assign({}, opts.headers || {});
@@ -85,7 +129,17 @@
     }
     opts.headers = headers;
     const res = await fetch(url, opts);
-    return res.json();
+    const payload = await res.json();
+    if (payload && typeof payload === 'object' && res.status !== undefined) {
+      Object.defineProperty(payload, '_status', { value: res.status, enumerable: false });
+    }
+    return payload;
+  }
+
+  function clearUserStorage() {
+    ['userToken', 'userId', 'userName', 'userEmail', 'email', 'pwd'].forEach(function (k) {
+      localStorage.removeItem(k);
+    });
   }
 
   const AuthStore = {
@@ -119,12 +173,30 @@
       localStorage.removeItem('email');
     },
 
-    async logout() {
-      ['userToken', 'userId', 'userName', 'userEmail', 'email', 'pwd'].forEach(function (k) {
-        localStorage.removeItem(k);
-      });
+    clearLocal: clearUserStorage,
+
+    async syncSession() {
       try {
-        await fetch('/index.php/user/user/logout', { method: 'POST' });
+        const res = await fetchJson('/index.php/user/user/session');
+        if (res && res.success && res.data) {
+          if (res.data.authenticated) {
+            AuthStore.setUser(res.data);
+            return AuthStore.getUser();
+          }
+          if (AuthStore.getUser().isLoggedIn) {
+            clearUserStorage();
+          }
+        }
+      } catch (_) {
+        // Keep existing client state if session check cannot be reached
+      }
+      return AuthStore.getUser();
+    },
+
+    async logout() {
+      clearUserStorage();
+      try {
+        await fetch('/index.php/user/user/logout', { method: 'POST', credentials: 'same-origin' });
       } catch (_) {
         // Ignore network errors during client logout cleanup
       }
@@ -140,6 +212,15 @@
     document.head.appendChild(link);
   }
 
+  function ensureFavicon() {
+    if (!document.head || document.querySelector?.('link[rel="icon"]')) return;
+    const icon = document.createElement('link');
+    icon.id = 'site-favicon';
+    icon.rel = 'icon';
+    icon.href = currentDepthPrefix() + 'favicon.ico';
+    document.head.appendChild(icon);
+  }
+
   function applyTheme(isDark) {
     document.documentElement.classList.toggle('dark-mode', isDark);
     if (document.body) {
@@ -149,6 +230,7 @@
 
   function initTheme() {
     ensureStylesheet('dark-mode-css', 'css/common/dark-mode.css');
+    ensureFavicon();
     applyTheme(localStorage.getItem('darkMode') === 'true');
   }
 
@@ -159,6 +241,38 @@
   }
 
   initTheme();
+
+  function bindActivateKey(el, callback) {
+    if (!el) return;
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        callback(e);
+      }
+    });
+  }
+
+  function renderStateBlock(container, stateType, title, message, retryFn) {
+    if (!container) return;
+    const iconMap = {
+      loading: '<i class="fas fa-circle-notch fa-spin state-block-icon"></i>',
+      empty: '<i class="fas fa-Inbox state-block-icon"></i>'.replace('fa-Inbox', 'fa-film'),
+      error: '<i class="fas fa-exclamation-triangle state-block-icon error"></i>',
+    };
+    container.innerHTML =
+      '<div class="state-block state-' + escapeHtml(stateType) + '">' +
+      (iconMap[stateType] || '') +
+      '<h3>' + escapeHtml(title) + '</h3>' +
+      (message ? '<p>' + escapeHtml(message) + '</p>' : '') +
+      (typeof retryFn === 'function'
+        ? '<button type="button" class="btn btn-primary state-retry-btn"><i class="fas fa-redo"></i> Retry</button>'
+        : '') +
+      '</div>';
+
+    if (typeof retryFn === 'function') {
+      container.querySelector('.state-retry-btn')?.addEventListener('click', retryFn);
+    }
+  }
 
   const TOAST_ICONS = {
     success: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>',
@@ -180,6 +294,7 @@
 
     const el = document.createElement('div');
     el.className = 'user-notification ' + escapeHtml(resolvedType);
+    el.setAttribute('role', 'status');
     el.innerHTML =
       '<div class="notification-content">' +
       '<div class="notification-icon">' + (TOAST_ICONS[resolvedType] || TOAST_ICONS.info) + '</div>' +
@@ -214,6 +329,8 @@
 
     const popup = document.createElement('div');
     popup.className = 'contact-popup';
+    popup.setAttribute('role', 'dialog');
+    popup.setAttribute('aria-modal', 'true');
     popup.innerHTML =
       '<div class="contact-popup-content">' +
       '<div class="contact-popup-header">' +
@@ -283,7 +400,7 @@
       '<img src="' + escapeHtml(logoSrc) + '" alt="Alpha Striker 2.0" id="logo-image">' +
       '</a>' +
       '</div>' +
-      '<nav class="nav-links">' +
+      '<nav class="nav-links" aria-label="Main Navigation">' +
       '<a href="' + escapeHtml(homeHref) + '" class="nav-link" data-page="homepage.html">Movies</a>' +
       '<a href="' + escapeHtml(pageUrl('theater.html')) + '" class="nav-link" data-page="theater.html">Theaters</a>' +
       '<a href="' + escapeHtml(pageUrl('offer.html')) + '" class="nav-link" data-page="offer.html">Offers</a>' +
@@ -298,7 +415,7 @@
       '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>' +
       '<span class="user-name" id="header-cart">Tickets</span>' +
       '</a>' +
-      '<div class="user-profile" id="user-profile-trigger">' +
+      '<div class="user-profile" id="user-profile-trigger" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false">' +
       '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>' +
       '<span class="user-name" id="header-username">' + escapeHtml(user.userName) + '</span>' +
       '<div class="dropdown-content" id="userDropdown">' +
@@ -320,6 +437,9 @@
       '<a href="' + escapeHtml(pageUrl('theater.html')) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">Find Theaters</span><span class="dropdown-item-desc">View cinema locations &amp; schedules</span></div></a>' +
       '<a href="' + escapeHtml(pageUrl('offer.html')) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">Special Offers</span><span class="dropdown-item-desc">Claim active promo codes</span></div></a>' +
       '<a href="' + escapeHtml(ticketsHref) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">My Tickets</span><span class="dropdown-item-desc">Manage or print bookings</span></div></a>' +
+      (user.isLoggedIn
+        ? '<a href="' + escapeHtml(rootUrl('pwd.html')) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">Change Password</span><span class="dropdown-item-desc">Update your account password</span></div></a>'
+        : '') +
       '<div class="dropdown-separator"></div>' +
       '<a href="' + escapeHtml(pageUrl('help.html')) + '" class="dropdown-item"><div class="dropdown-item-text"><span class="dropdown-item-title">Help Center</span><span class="dropdown-item-desc">FAQs and customer support</span></div></a>' +
       '</div>' +
@@ -343,15 +463,18 @@
     const profileTrigger = document.getElementById('user-profile-trigger');
     const dropdown = document.getElementById('userDropdown');
     if (profileTrigger && dropdown) {
-      profileTrigger.addEventListener('click', function (e) {
-        if (e.target.closest('.dropdown-item')) return;
+      const toggleMenu = function (e) {
+        if (e.target && e.target.closest && e.target.closest('.dropdown-item')) return;
         e.stopPropagation();
-        dropdown.classList.toggle('show');
-      });
+        const open = dropdown.classList.toggle('show');
+        profileTrigger.setAttribute('aria-expanded', String(open));
+      };
+      profileTrigger.addEventListener('click', toggleMenu);
+      bindActivateKey(profileTrigger, toggleMenu);
     }
 
     document.getElementById('header-auth-btn')?.addEventListener('click', async function (e) {
-      if (!user.isLoggedIn) return;
+      if (!AuthStore.getUser().isLoggedIn) return;
       e.preventDefault();
       await AuthStore.logout();
       window.location.href = rootUrl('login.html');
@@ -386,7 +509,7 @@
       '<h3>Support</h3>' +
       '<ul class="footer-links-list">' +
       '<li><a href="' + escapeHtml(pageUrl('faqs.html')) + '">FAQs</a></li>' +
-      '<li><a href="#" id="footer-contact-trigger">Contact Us</a></li>' +
+      '<li><a href="#contact" id="footer-contact-trigger">Contact Us</a></li>' +
       '<li><a href="' + escapeHtml(pageUrl('team.html')) + '">Terms of Service</a></li>' +
       '<li><a href="' + escapeHtml(pageUrl('privacy.html')) + '">Privacy Policy</a></li>' +
       '<li><a href="' + escapeHtml(pageUrl('help.html')) + '">Help Center</a></li>' +
@@ -409,36 +532,74 @@
     document.querySelectorAll('.faq-question').forEach(function (questionEl) {
       if (questionEl.dataset.faqBound === 'true') return;
       questionEl.dataset.faqBound = 'true';
-      questionEl.addEventListener('click', function () {
-        questionEl.classList.toggle('active');
-        questionEl.closest('.faq-item')?.classList.toggle('active');
-      });
+      questionEl.setAttribute('tabindex', '0');
+      questionEl.setAttribute('role', 'button');
+      questionEl.setAttribute('aria-expanded', String(questionEl.classList.contains('active')));
+
+      const toggleFaq = function () {
+        const isActive = questionEl.classList.toggle('active');
+        questionEl.setAttribute('aria-expanded', String(isActive));
+        questionEl.closest('.faq-item')?.classList.toggle('active', isActive);
+      };
+      questionEl.addEventListener('click', toggleFaq);
+      bindActivateKey(questionEl, toggleFaq);
     });
   }
 
   document.addEventListener('click', function (event) {
-    if (!event.target.closest('#user-profile-trigger')) {
-      document.getElementById('userDropdown')?.classList.remove('show');
+    if (event.target && event.target.closest && !event.target.closest('#user-profile-trigger')) {
+      const dd = document.getElementById('userDropdown');
+      if (dd && dd.classList.contains('show')) {
+        dd.classList.remove('show');
+        document.getElementById('user-profile-trigger')?.setAttribute('aria-expanded', 'false');
+      }
     }
   });
 
-  document.addEventListener('DOMContentLoaded', function () {
+  document.addEventListener('keydown', function (event) {
+    if (event.key !== 'Escape') return;
+    document.querySelector('.contact-popup')?.remove();
+    document.querySelectorAll('.contact-modal').forEach(function (m) { m.style.display = 'none'; });
+    const chat = document.getElementById('chat-dialog');
+    if (chat) chat.style.display = 'none';
+    const dd = document.getElementById('userDropdown');
+    if (dd && dd.classList.contains('show')) {
+      dd.classList.remove('show');
+      document.getElementById('user-profile-trigger')?.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', async function () {
     initTheme();
     renderHeader();
     renderFooter();
     initFaqAccordions();
+
+    if (document.getElementById('header-container')) {
+      const before = AuthStore.getUser();
+      const after = await AuthStore.syncSession();
+      if (before.isLoggedIn !== after.isLoggedIn || before.userName !== after.userName) {
+        renderHeader();
+      }
+    }
   });
 
   window.CineTicket = {
     AuthStore: AuthStore,
+    bindActivateKey: bindActivateKey,
+    calcCheckoutTotals: calcCheckoutTotals,
     calcGroupDiscount: calcGroupDiscount,
     escapeHtml: escapeHtml,
     fetchJson: fetchJson,
     formatStars: formatStars,
+    initFaqAccordions: initFaqAccordions,
     pageUrl: pageUrl,
+    renderHeader: renderHeader,
     renderStarIcons: renderStarIcons,
+    renderStateBlock: renderStateBlock,
     resolveAssetUrl: resolveAssetUrl,
     rootUrl: rootUrl,
+    safeRedirectUrl: safeRedirectUrl,
     showToast: showToast,
     toggleDarkMode: toggleDarkMode,
   };

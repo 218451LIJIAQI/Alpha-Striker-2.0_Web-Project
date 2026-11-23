@@ -17,7 +17,7 @@
     <div class="page-header">
       <div>
         <h1><i class="fas fa-film"></i> Movie Catalog</h1>
-        <p>Add, edit, or remove feature films available for ticket booking.</p>
+        <p>Add, edit, schedule across partner theaters, or remove feature films.</p>
       </div>
       <a href="add-movie.html" class="add-btn"><i class="fas fa-plus"></i> Add Movie</a>
     </div>
@@ -33,12 +33,13 @@
             <th>Duration</th>
             <th>Rating</th>
             <th>Price</th>
+            <th>Theaters</th>
             <th>Badge</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody id="movies-tbody">
-          <tr><td colspan="9" class="empty-state">Loading movies...</td></tr>
+          <tr><td colspan="10" class="empty-state">Loading movies...</td></tr>
         </tbody>
       </table>
     </div>
@@ -47,42 +48,61 @@
   <script>
     async function loadMovies() {
       const tbody = document.getElementById('movies-tbody');
-      const res = await AdminApp.apiFetch('/index.php/admin/movie/index');
-      if (!res.success || !Array.isArray(res.data) || res.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No movies found.</td></tr>';
-        return;
+      AdminApp.renderTableState(tbody, 10, 'loading', 'Loading movies...');
+
+      try {
+        const res = await AdminApp.apiFetch('/index.php/admin/movie/index');
+        if (!res.success) {
+          AdminApp.renderTableState(tbody, 10, 'error', res.message || 'Failed to load movies.', loadMovies);
+          return;
+        }
+        if (!Array.isArray(res.data) || res.data.length === 0) {
+          AdminApp.renderTableState(tbody, 10, 'empty', 'No movies in catalog yet.');
+          return;
+        }
+
+        const esc = AdminApp.escapeHtml;
+        const fallbackImg = AdminApp.resolveAdminAsset('img/logo.jpg');
+        tbody.innerHTML = res.data.map(function (m) {
+          const poster = AdminApp.resolveAdminAsset(m.img);
+          const price = '$' + (parseFloat(m.money) || 0).toFixed(2);
+          const theaterCount = Array.isArray(m.theater_codes) ? m.theater_codes.length : 0;
+          const tagHtml = m.tag ? '<span class="tag-badge">' + esc(m.tag) + '</span>' : '<span style="opacity:0.45;">—</span>';
+          return (
+            '<tr>' +
+            '<td>#' + esc(m.movie_code) + '</td>' +
+            '<td><img src="' + esc(poster) + '" alt="' + esc(m.movie_name) + '" class="movie-poster"></td>' +
+            '<td><strong>' + esc(m.movie_name) + '</strong></td>' +
+            '<td><span class="type-badge">' + esc(m.movie_type) + '</span></td>' +
+            '<td>' + esc(m.times) + '</td>' +
+            '<td><i class="fas fa-star" style="color:#f59e0b;"></i> ' + esc(m.star) + '</td>' +
+            '<td><strong>' + esc(price) + '</strong></td>' +
+            '<td>' + esc(theaterCount) + ' cinema(s)</td>' +
+            '<td>' + tagHtml + '</td>' +
+            '<td><div class="action-buttons">' +
+            '<a href="edit-movie.html?movie_code=' + encodeURIComponent(m.movie_code) + '" class="edit-btn"><i class="fas fa-edit"></i> Edit</a>' +
+            '<button type="button" class="delete-btn" data-id="' + esc(m.movie_code) + '"><i class="fas fa-trash"></i> Delete</button>' +
+            '</div></td>' +
+            '</tr>'
+          );
+        }).join('');
+
+        tbody.querySelectorAll('img.movie-poster').forEach(function (img) {
+          img.addEventListener('error', function () {
+            if (img.src !== fallbackImg) img.src = fallbackImg;
+          });
+        });
+
+        AdminApp.bindDeleteActions(tbody, {
+          endpoint: '/index.php/admin/movie/delete',
+          idKey: 'movie_code',
+          confirmText: function (id) { return 'Delete movie #' + id + '? Related schedules, offer links, and seat bookings will also be removed.'; },
+          successText: 'Movie deleted',
+          onSuccess: loadMovies,
+        });
+      } catch (_) {
+        AdminApp.renderTableState(tbody, 10, 'error', 'Network error while loading movies.', loadMovies);
       }
-
-      const esc = AdminApp.escapeHtml;
-      tbody.innerHTML = res.data.map(function (m) {
-        const poster = AdminApp.resolveAdminAsset(m.img);
-        const price = '$' + (parseFloat(m.money) || 0).toFixed(2);
-        const tagHtml = m.tag ? '<span class="tag-badge">' + esc(m.tag) + '</span>' : '<span style="opacity:0.45;">—</span>';
-        return (
-          '<tr>' +
-          '<td>#' + esc(m.movie_code) + '</td>' +
-          '<td><img src="' + esc(poster) + '" alt="' + esc(m.movie_name) + '" class="movie-poster"></td>' +
-          '<td><strong>' + esc(m.movie_name) + '</strong></td>' +
-          '<td><span class="type-badge">' + esc(m.movie_type) + '</span></td>' +
-          '<td>' + esc(m.times) + '</td>' +
-          '<td><i class="fas fa-star" style="color:#f59e0b;"></i> ' + esc(m.star) + '</td>' +
-          '<td><strong>' + esc(price) + '</strong></td>' +
-          '<td>' + tagHtml + '</td>' +
-          '<td><div class="action-buttons">' +
-          '<a href="edit-movie.html?movie_code=' + encodeURIComponent(m.movie_code) + '" class="edit-btn"><i class="fas fa-edit"></i> Edit</a>' +
-          '<button type="button" class="delete-btn" data-id="' + esc(m.movie_code) + '"><i class="fas fa-trash"></i> Delete</button>' +
-          '</div></td>' +
-          '</tr>'
-        );
-      }).join('');
-
-      AdminApp.bindDeleteActions(tbody, {
-        endpoint: '/index.php/admin/movie/delete',
-        idKey: 'movie_code',
-        confirmText: function (id) { return 'Delete movie #' + id + '? Related seat bookings will also be removed.'; },
-        successText: 'Movie deleted',
-        onSuccess: loadMovies,
-      });
     }
 
     document.addEventListener('DOMContentLoaded', async function () {

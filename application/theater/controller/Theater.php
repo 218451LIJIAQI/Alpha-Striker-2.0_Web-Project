@@ -9,8 +9,36 @@ class Theater extends ApiController
     public function getTheaterList()
     {
         try {
-            $keyword = $this->strParam('address');
-            $amenity = $this->strParam('amenity');
+            $keyword   = $this->strParam('address');
+            $amenity   = $this->strParam('amenity');
+            $movieCode = $this->idParam('movie_code');
+
+            if ($movieCode > 0) {
+                $today = date('Y-m-d');
+                $query = Db::table('t_theater')
+                    ->alias('t')
+                    ->join('theater_movie tm', 'tm.theater_code = t.theater_code')
+                    ->where('tm.movie_code', $movieCode)
+                    ->where(function ($q) use ($today) {
+                        $q->whereNull('tm.start_date')->whereOr('tm.start_date', '<=', $today);
+                    })
+                    ->where(function ($q) use ($today) {
+                        $q->whereNull('tm.end_date')->whereOr('tm.end_date', '>=', $today);
+                    })
+                    ->field('t.theater_code, t.theater_name, t.address, t.amenity, t.star, t.img, t.reviews, t.distance, tm.daily_showtimes')
+                    ->order('t.theater_code', 'asc');
+
+                if ($keyword !== '') {
+                    $escapedKeyword = $this->escapeLike($keyword);
+                    $query->where('t.theater_name|t.address', 'like', "%{$escapedKeyword}%");
+                }
+                if ($amenity !== '' && strtolower($amenity) !== 'all') {
+                    $escapedAmenity = $this->escapeLike($amenity);
+                    $query->where('t.amenity', 'like', "%{$escapedAmenity}%");
+                }
+
+                return $this->ok($query->select());
+            }
 
             $query = Db::name('theater')
                 ->field('theater_code, theater_name, address, amenity, star, img, reviews, distance')
@@ -50,6 +78,9 @@ class Theater extends ApiController
                 ->alias('tm')
                 ->join('t_movies m', 'tm.movie_code = m.movie_code')
                 ->where('tm.theater_code', $theaterCode)
+                ->where(function ($q) use ($today) {
+                    $q->whereNull('tm.start_date')->whereOr('tm.start_date', '<=', $today);
+                })
                 ->where(function ($q) use ($today) {
                     $q->whereNull('tm.end_date')->whereOr('tm.end_date', '>=', $today);
                 })

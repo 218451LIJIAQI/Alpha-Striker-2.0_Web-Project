@@ -15,18 +15,6 @@
   --gradient-success: linear-gradient(135deg, #4caf50, #2e7d32);
 }
 
-body.dark-mode {
-  --primary: #64b5f6;
-  --text-dark: #e1e5e9;
-  --text-light: #9ea7b8;
-  --bg-light: #1e2126;
-  --card-bg: #2c2f36;
-  --input-bg: #1a1d24;
-  --border-color: #3a3d44;
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  background: linear-gradient(135deg, #1a1d24 0%, #2c2f36 100%);
-}
-
 * {
   margin: 0;
   padding: 0;
@@ -579,7 +567,7 @@ body {
 }
 
 .pay-now-btn:disabled {
-  opacity: 0.7;
+  opacity: 0.65;
   cursor: not-allowed;
 }
 

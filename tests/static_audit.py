@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Static & Relational Contract Audit Suite for CineTicket (Alpha Striker 2.0).
+Static & Relational Contract Audit Suite for CineTix (Alpha Striker 2.0).
 Verifies:
 1. movies.sql relational schema, foreign keys, unique constraints, and seed rows in SQLite (PRAGMA foreign_keys=ON).
-2. PHP controller syntax structure, balanced delimiters, BaseAdmin inheritance, and 1-to-1 route/method mapping.
+2. PHP controller syntax structure, balanced delimiters, BaseAdmin inheritance, ThinkPHP table-prefix rules,
+   password redaction, absence of hardcoded reset backdoors, and 1-to-1 route/method mapping.
 3. JavaScript syntax across all external .js files and inline HTML <script> blocks via `node --check`.
-4. HTML local asset integrity (<img src>, <link href>, <script src>, <a href>) with zero broken local paths.
+4. HTML local asset integrity (<img src>, <link href>, <script src>, <a href>) with exact case matching and zero dead `href="#"`.
 5. CSS brace balance and absence of destructive global !important overrides.
 """
 
@@ -20,6 +21,8 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+PREFIXED_TABLES = {"movies", "user", "theater", "offer", "seat"}
+UNPREFIXED_TABLES = {"theater_movie", "movie_offer", "t_movies", "t_user", "t_theater", "t_offer", "t_seat"}
 
 
 def assert_true(condition: bool, message: str) -> None:
@@ -163,8 +166,20 @@ def verify_php_contracts() -> None:
     for path in php_files:
         content = path.read_text(encoding="utf-8")
         assert_true(content.startswith("<?php"), f"{path} must start with <?php")
-        stripped = strip_php_comments_and_strings(content)
+        assert_true("888888" not in content, f"Hardcoded reset code 888888 found in {path}")
 
+        for tbl_name in re.findall(r"Db::name\(\s*['\"]([^'\"]+)['\"]\s*\)", content):
+            assert_true(
+                tbl_name in PREFIXED_TABLES,
+                f"Invalid Db::name('{tbl_name}') in {path}; non-t_ tables must use Db::table()",
+            )
+        for tbl_name in re.findall(r"Db::table\(\s*['\"]([^'\"]+)['\"]\s*\)", content):
+            assert_true(
+                tbl_name in UNPREFIXED_TABLES,
+                f"Unexpected Db::table('{tbl_name}') in {path}",
+            )
+
+        stripped = strip_php_comments_and_strings(content)
         for open_ch, close_ch in (("{", "}"), ("(", ")"), ("[", "]")):
             assert_true(
                 stripped.count(open_ch) == stripped.count(close_ch),
@@ -195,6 +210,7 @@ def verify_php_contracts() -> None:
     referenced_endpoints = set()
     for fpath in frontend_files:
         txt = fpath.read_text(encoding="utf-8")
+        assert_true("888888" not in txt, f"Hardcoded reset code 888888 found in {fpath}")
         for mod, ctrl, act in endpoint_re.findall(txt):
             referenced_endpoints.add((mod.lower(), ctrl.lower(), act.lower(), fpath.relative_to(ROOT)))
 
@@ -221,6 +237,13 @@ def verify_js_and_html_assets() -> None:
 
     for hf in html_files:
         txt = hf.read_text(encoding="utf-8")
+        for bare_hash in re.finditer(r'<a\b[^>]*\bhref=["\']#["\'][^>]*>', txt, re.I):
+            tag = bare_hash.group(0)
+            assert_true(
+                "onclick=" in tag.lower(),
+                f"Dead bare href='#' link without handler in {hf.relative_to(ROOT)}: {tag}",
+            )
+
         for script_match in re.finditer(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", txt, re.S | re.I):
             code = script_match.group(1).strip()
             if not code:
@@ -255,6 +278,10 @@ def verify_js_and_html_assets() -> None:
             resolved = (hf.parent / clean_target).resolve()
             local_ref_count += 1
             assert_true(resolved.is_file(), f"Broken local asset/link '{val}' in {hf.relative_to(ROOT)} -> {resolved}")
+            assert_true(
+                resolved.name in os.listdir(resolved.parent),
+                f"Case mismatch on asset '{val}' in {hf.relative_to(ROOT)}",
+            )
 
     css_files = sorted((ROOT / "public" / "css").rglob("*.css"))
     for cf in css_files:

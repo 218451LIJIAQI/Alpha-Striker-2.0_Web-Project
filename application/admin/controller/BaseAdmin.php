@@ -8,7 +8,7 @@ use think\facade\Session;
 
 /**
  * Base controller for authenticated admin endpoints.
- * Centralizes session + X-Admin-Token / Bearer verification across Auth and CRUD controllers.
+ * Enforces both server-side admin session AND matching X-Admin-Token / Bearer token (anti-CSRF).
  */
 abstract class BaseAdmin extends ApiController
 {
@@ -29,7 +29,7 @@ abstract class BaseAdmin extends ApiController
         }
 
         $clientToken = self::extractToken($payload);
-        return $clientToken === '' || hash_equals($sessionToken, $clientToken);
+        return $clientToken !== '' && hash_equals($sessionToken, $clientToken);
     }
 
     private static function extractToken(array $payload)
@@ -44,7 +44,7 @@ abstract class BaseAdmin extends ApiController
             return trim(substr($authHeader, 7));
         }
 
-        if (!empty($payload['token']) && is_string($payload['token'])) {
+        if (isset($payload['token']) && is_string($payload['token']) && trim($payload['token']) !== '') {
             return trim($payload['token']);
         }
 

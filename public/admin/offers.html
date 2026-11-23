@@ -17,7 +17,7 @@
     <div class="page-header">
       <div>
         <h1><i class="fas fa-tags"></i> Promotional Offers</h1>
-        <p>Manage promo codes, discount amounts, categories, and expiration dates.</p>
+        <p>Manage promo codes, discount amounts, eligible movies, and expiration dates.</p>
       </div>
       <a href="add-offer.html" class="add-btn"><i class="fas fa-plus"></i> Add Offer</a>
     </div>
@@ -31,13 +31,14 @@
             <th>Title &amp; Category</th>
             <th>Promo Code</th>
             <th>Discount</th>
+            <th>Eligible Movies</th>
             <th>Valid Until</th>
             <th>Badge</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody id="offers-tbody">
-          <tr><td colspan="8" class="empty-state">Loading offers...</td></tr>
+          <tr><td colspan="9" class="empty-state">Loading offers...</td></tr>
         </tbody>
       </table>
     </div>
@@ -46,41 +47,60 @@
   <script>
     async function loadOffers() {
       const tbody = document.getElementById('offers-tbody');
-      const res = await AdminApp.apiFetch('/index.php/admin/offer/index');
-      if (!res.success || !Array.isArray(res.data) || res.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No promotional offers found.</td></tr>';
-        return;
+      AdminApp.renderTableState(tbody, 9, 'loading', 'Loading offers...');
+
+      try {
+        const res = await AdminApp.apiFetch('/index.php/admin/offer/index');
+        if (!res.success) {
+          AdminApp.renderTableState(tbody, 9, 'error', res.message || 'Failed to load offers.', loadOffers);
+          return;
+        }
+        if (!Array.isArray(res.data) || res.data.length === 0) {
+          AdminApp.renderTableState(tbody, 9, 'empty', 'No promotional offers found.');
+          return;
+        }
+
+        const esc = AdminApp.escapeHtml;
+        const fallbackImg = AdminApp.resolveAdminAsset('img/logo.jpg');
+        tbody.innerHTML = res.data.map(function (o) {
+          const imgSrc = AdminApp.resolveAdminAsset(o.img);
+          const discount = '$' + (parseFloat(o.money) || 0).toFixed(2);
+          const movieCount = Array.isArray(o.movie_codes) ? o.movie_codes.length : 0;
+          const badgeHtml = o.badge ? '<span class="badge-tag">' + esc(o.badge) + '</span>' : '<span style="opacity:0.45;">—</span>';
+          return (
+            '<tr>' +
+            '<td>#' + esc(o.offer_code) + '</td>' +
+            '<td><img src="' + esc(imgSrc) + '" alt="' + esc(o.offer_title) + '" class="offer-img"></td>' +
+            '<td><strong>' + esc(o.offer_title) + '</strong><br><small style="opacity:0.75;">' + esc(o.offer_type) + '</small></td>' +
+            '<td><span class="promo-code">' + esc(o.promo_code) + '</span></td>' +
+            '<td><strong>' + esc(discount) + '</strong></td>' +
+            '<td>' + esc(movieCount) + ' film(s)</td>' +
+            '<td>' + esc(o.offer_validity) + '</td>' +
+            '<td>' + badgeHtml + '</td>' +
+            '<td><div class="action-buttons">' +
+            '<a href="edit-offer.html?offer_code=' + encodeURIComponent(o.offer_code) + '" class="edit-btn"><i class="fas fa-edit"></i> Edit</a>' +
+            '<button type="button" class="delete-btn" data-id="' + esc(o.offer_code) + '"><i class="fas fa-trash"></i> Delete</button>' +
+            '</div></td>' +
+            '</tr>'
+          );
+        }).join('');
+
+        tbody.querySelectorAll('img.offer-img').forEach(function (img) {
+          img.addEventListener('error', function () {
+            if (img.src !== fallbackImg) img.src = fallbackImg;
+          });
+        });
+
+        AdminApp.bindDeleteActions(tbody, {
+          endpoint: '/index.php/admin/offer/delete',
+          idKey: 'offer_code',
+          confirmText: function (id) { return 'Delete offer #' + id + '?'; },
+          successText: 'Offer deleted',
+          onSuccess: loadOffers,
+        });
+      } catch (_) {
+        AdminApp.renderTableState(tbody, 9, 'error', 'Network error while loading offers.', loadOffers);
       }
-
-      const esc = AdminApp.escapeHtml;
-      tbody.innerHTML = res.data.map(function (o) {
-        const imgSrc = AdminApp.resolveAdminAsset(o.img);
-        const discount = '$' + (parseFloat(o.money) || 0).toFixed(2);
-        const badgeHtml = o.badge ? '<span class="badge-tag">' + esc(o.badge) + '</span>' : '<span style="opacity:0.45;">—</span>';
-        return (
-          '<tr>' +
-          '<td>#' + esc(o.offer_code) + '</td>' +
-          '<td><img src="' + esc(imgSrc) + '" alt="' + esc(o.offer_title) + '" class="offer-img"></td>' +
-          '<td><strong>' + esc(o.offer_title) + '</strong><br><small style="opacity:0.75;">' + esc(o.offer_type) + '</small></td>' +
-          '<td><span class="promo-code">' + esc(o.promo_code) + '</span></td>' +
-          '<td><strong>' + esc(discount) + '</strong></td>' +
-          '<td>' + esc(o.offer_validity) + '</td>' +
-          '<td>' + badgeHtml + '</td>' +
-          '<td><div class="action-buttons">' +
-          '<a href="edit-offer.html?offer_code=' + encodeURIComponent(o.offer_code) + '" class="edit-btn"><i class="fas fa-edit"></i> Edit</a>' +
-          '<button type="button" class="delete-btn" data-id="' + esc(o.offer_code) + '"><i class="fas fa-trash"></i> Delete</button>' +
-          '</div></td>' +
-          '</tr>'
-        );
-      }).join('');
-
-      AdminApp.bindDeleteActions(tbody, {
-        endpoint: '/index.php/admin/offer/delete',
-        idKey: 'offer_code',
-        confirmText: function (id) { return 'Delete offer #' + id + '?'; },
-        successText: 'Offer deleted',
-        onSuccess: loadOffers,
-      });
     }
 
     document.addEventListener('DOMContentLoaded', async function () {

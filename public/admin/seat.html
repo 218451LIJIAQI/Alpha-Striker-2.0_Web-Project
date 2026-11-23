@@ -19,6 +19,7 @@
         <h1><i class="fas fa-chair"></i> Seat Reservations</h1>
         <p>Inspect reserved seats across all screenings and process administrative cancellations.</p>
       </div>
+      <input type="search" id="seat-filter-input" class="form-input" style="max-width:280px;" placeholder="Filter by movie, theater, customer, seat...">
     </div>
 
     <div class="table-container">
@@ -43,16 +44,17 @@
   </main>
 
   <script>
-    async function loadSeats() {
+    let allSeats = [];
+
+    function renderSeatRows(rows) {
       const tbody = document.getElementById('seats-tbody');
-      const res = await AdminApp.apiFetch('/index.php/admin/seat/index');
-      if (!res.success || !Array.isArray(res.data) || res.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No seat reservations found.</td></tr>';
+      if (!rows.length) {
+        AdminApp.renderTableState(tbody, 8, 'empty', 'No matching seat reservations found.');
         return;
       }
 
       const esc = AdminApp.escapeHtml;
-      tbody.innerHTML = res.data.map(function (s) {
+      tbody.innerHTML = rows.map(function (s) {
         const movieTitle = (s.movie && s.movie.movie_name) ? s.movie.movie_name : ('Movie #' + s.movie_code);
         const theaterName = (s.theater && s.theater.theater_name) ? s.theater.theater_name : ('Theater #' + (s.theater_code || 1));
         const userName = (s.user && s.user.user_name) ? (s.user.user_name + ' (' + (s.user.email || '') + ')') : 'Guest Checkout';
@@ -81,9 +83,51 @@
       });
     }
 
+    function applySeatFilter() {
+      const q = (document.getElementById('seat-filter-input')?.value || '').trim().toLowerCase();
+      if (!q) {
+        renderSeatRows(allSeats);
+        return;
+      }
+      renderSeatRows(allSeats.filter(function (s) {
+        const hay = [
+          s.seat_code,
+          s.movie && s.movie.movie_name,
+          s.theater && s.theater.theater_name,
+          s.user ? (s.user.user_name + ' ' + s.user.email) : 'Guest Checkout',
+          s.date,
+          s.time,
+          s.seat_num,
+        ].join(' ').toLowerCase();
+        return hay.includes(q);
+      }));
+    }
+
+    async function loadSeats() {
+      const tbody = document.getElementById('seats-tbody');
+      AdminApp.renderTableState(tbody, 8, 'loading', 'Loading reservations...');
+
+      try {
+        const res = await AdminApp.apiFetch('/index.php/admin/seat/index');
+        if (!res.success) {
+          AdminApp.renderTableState(tbody, 8, 'error', res.message || 'Failed to load seat bookings.', loadSeats);
+          return;
+        }
+        allSeats = Array.isArray(res.data) ? res.data : [];
+        if (!allSeats.length) {
+          AdminApp.renderTableState(tbody, 8, 'empty', 'No seat reservations found.');
+          return;
+        }
+        applySeatFilter();
+      } catch (_) {
+        AdminApp.renderTableState(tbody, 8, 'error', 'Network error while loading seat bookings.', loadSeats);
+      }
+    }
+
     document.addEventListener('DOMContentLoaded', async function () {
       AdminApp.renderAdminNav('seats');
       if (!(await AdminApp.ensureAuthenticated())) return;
+      document.getElementById('seat-filter-input')?.addEventListener('input', applySeatFilter);
       loadSeats();
     });
   </script>

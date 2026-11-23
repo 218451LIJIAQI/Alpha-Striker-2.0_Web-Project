@@ -15,62 +15,76 @@
 
   <main class="info-page card">
     <h1 class="info-page-title">Welcome to the CineTix Help Center</h1>
-    <p>Your one-stop resource for booking, managing, and enjoying your cinema experience. Explore step-by-step guides, troubleshooting tips, and video walkthroughs below.</p>
+    <p>Your one-stop resource for booking, managing, and enjoying your cinema experience. Select a quick topic below or browse our step-by-step walkthroughs.</p>
 
     <h2 class="info-section-heading">🔍 Quick Topics</h2>
-    <div class="info-callout">
-      Find quick answers on <strong>"refund," "promo code," "4DX," or "seat selection."</strong>
+    <div class="filters" id="help-topic-pills" style="margin-bottom:18px;">
+      <button type="button" class="btn-filter active" data-topic="all">All Topics</button>
+      <button type="button" class="btn-filter" data-topic="account">Account &amp; Password</button>
+      <button type="button" class="btn-filter" data-topic="booking">Seat Selection &amp; 3D</button>
+      <button type="button" class="btn-filter" data-topic="promo">Promo &amp; Group Savings</button>
+      <button type="button" class="btn-filter" data-topic="refund">Tickets &amp; Cancellations</button>
     </div>
 
-    <h2 class="info-section-heading">📚 Help Topics</h2>
-    <ul class="topic-list">
-      <li><strong>1. Account &amp; Registration</strong>
-        <ul>
-          <li>How to Create an Account</li>
-          <li>Managing Your Profile &amp; Password</li>
-          <li>Resetting Your Password</li>
+    <div id="help-guides-container">
+      <div class="info-callout help-card-item" data-topics="account">
+        <h3>1. Account Registration &amp; Password Security</h3>
+        <ul class="topic-list">
+          <li>Create an account or sign in from the <a class="guide-link" href="../login.html">Sign In</a> portal.</li>
+          <li>Reset a forgotten password with a 5-minute one-time verification code on the <a class="guide-link" href="../pwd.html">Password Reset</a> page.</li>
         </ul>
-      </li>
-      <li><strong>2. Booking &amp; Tickets</strong>
-        <ul>
-          <li>Searching for Movies &amp; Showtimes</li>
-          <li>Selecting Seats &amp; Formats (IMAX, 4DX, VIP)</li>
-          <li>Applying Promo Codes &amp; Group Discounts</li>
-          <li>Printing or Saving Digital E-Tickets</li>
-        </ul>
-      </li>
-      <li><strong>3. Promotions &amp; Events</strong>
-        <ul>
-          <li>Current Deals &amp; Weekday Specials</li>
-          <li>Student &amp; Group Discounts</li>
-        </ul>
-      </li>
-    </ul>
+      </div>
 
-    <h2 class="info-section-heading">📺 Video Tutorials</h2>
-    <ul class="topic-list">
-      <li>▶️ <a class="guide-link" href="https://youtu.be/3LrFVT4gqJQ" target="_blank" rel="noopener noreferrer">Booking Your First Ticket (2 min)</a></li>
-      <li>▶️ Viewing &amp; Printing Your Digital E-Tickets (3 min)</li>
-      <li>▶️ Applying Promo Codes at Checkout (1.5 min)</li>
-      <li>▶️ Managing Your Reservations (2.5 min)</li>
-    </ul>
+      <div class="info-callout help-card-item" data-topics="booking">
+        <h3>2. Theater Formats, 3D Sightlines &amp; Seat Selection</h3>
+        <ul class="topic-list">
+          <li>Compare IMAX, 4DX, Dolby Atmos, and VIP amenities in the <a class="guide-link" href="theater.html">Theaters Directory</a>.</li>
+          <li>Inspect row angles in the <a class="guide-link" href="3d-model.html">Interactive 3D Auditorium Preview</a> before selecting seats A1–H12 on <a class="guide-link" href="booking3.html">Seat Selection</a>.</li>
+        </ul>
+      </div>
 
-    <h2 class="info-section-heading">📝 Step-By-Step Guides</h2>
-    <ul class="topic-list">
-      <li><a class="guide-link" href="faqs.html">How to Change Your Show Date or Time</a></li>
-      <li><a class="guide-link" href="faqs.html">Canceling vs. Rescheduling: What You Need to Know</a></li>
-      <li><a class="guide-link" href="booking3.html">Booking Multiple Seats with 30% Group Discount</a></li>
-      <li><a class="guide-link" href="generate_ticket.html">Printing E-Tickets from Your Browser</a></li>
-    </ul>
+      <div class="info-callout help-card-item" data-topics="promo">
+        <h3>3. Promo Codes &amp; 30% Group Discount</h3>
+        <ul class="topic-list">
+          <li>Reserve 5+ seats in a single order to unlock an automatic 30% group discount.</li>
+          <li>Claim active promo codes on the <a class="guide-link" href="offer.html">Offers</a> page and verify movie eligibility at checkout.</li>
+        </ul>
+      </div>
+
+      <div class="info-callout help-card-item" data-topics="refund">
+        <h3>4. Digital E-Tickets, PDF Export &amp; Cancellations</h3>
+        <ul class="topic-list">
+          <li>Open your <a class="guide-link" href="generate_ticket.html">Tickets Wallet</a> to print passes or export PDFs via your browser print dialog.</li>
+          <li>Signed-in members can cancel their own reserved seats anytime before showtime; see <a class="guide-link" href="faqs.html">FAQs</a> for full details.</li>
+        </ul>
+      </div>
+    </div>
 
     <h2 class="info-section-heading">📞 Need Personalized Help?</h2>
     <div class="info-contact-footer">
-      <p><strong>Live Chat:</strong> Available via the Live Chat dialog on the <a class="guide-link" href="about.html">About</a> page.</p>
+      <p><strong>Live Chat:</strong> Open the interactive Live Chat assistant on the <a class="guide-link" href="about.html">About</a> page.</p>
       <p><strong>Phone Support:</strong> +60 17-607 3401 (9:00 AM – 6:00 PM).</p>
       <p><strong>Email:</strong> <a class="guide-link" href="mailto:lijiaqi0807@gmail.com">lijiaqi0807@gmail.com</a> (response within 24 hrs).</p>
     </div>
   </main>
 
   <div id="bottom-container"></div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const pills = document.querySelectorAll('#help-topic-pills .btn-filter');
+      const cards = document.querySelectorAll('.help-card-item');
+      pills.forEach(function (pill) {
+        pill.addEventListener('click', function () {
+          pills.forEach(function (p) { p.classList.remove('active'); });
+          pill.classList.add('active');
+          const topic = pill.dataset.topic || 'all';
+          cards.forEach(function (card) {
+            card.style.display = (topic === 'all' || (card.dataset.topics || '').includes(topic)) ? '' : 'none';
+          });
+        });
+      });
+    });
+  </script>
 </body>
 </html>

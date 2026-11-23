@@ -13,62 +13,126 @@
 <body>
   <div id="header-container"></div>
 
-  <main class="info-page card">
-    <h1 class="info-page-title">Upcoming Releases 🎬✨</h1>
-    <p>Stay ahead of the curve — discover upcoming blockbusters and indie features scheduled at partner theaters.</p>
+  <main class="info-page card" style="max-width:1080px;">
+    <h1 class="info-page-title">Upcoming Releases 🎬</h1>
+    <p>Preview upcoming premiere features across our partner auditoriums, filter by screening format, and set release reminders before advance seat selection opens.</p>
 
-    <h2 class="info-section-heading">🌟 Key Features</h2>
-    <ul class="topic-list">
-      <li><strong class="guide-link">Release Calendar:</strong> View monthly premieres color-coded by format (Standard, IMAX®, 4DX®, VIP). Click or hover over a date to inspect scheduled openings.</li>
-      <li><strong class="guide-link">Movie Spotlight Cards:</strong> Inspect posters, release dates, genres, runtimes, and advance booking windows.</li>
-    </ul>
-
-    <h2 class="info-section-heading">🔔 Release Reminders</h2>
-    <div class="info-callout">
-      <strong>Email Alerts:</strong> Subscribe to our newsletter on the <a class="guide-link" href="offer.html">Offers</a> page to receive a 24-hour heads-up before advance tickets open.
+    <div class="filters" id="upcoming-format-filters" style="margin-top:20px;">
+      <button type="button" class="btn-filter active" data-format="all">All Formats</button>
+      <button type="button" class="btn-filter" data-format="IMAX">IMAX</button>
+      <button type="button" class="btn-filter" data-format="4DX">4DX</button>
+      <button type="button" class="btn-filter" data-format="Dolby Atmos">Dolby Atmos</button>
+      <button type="button" class="btn-filter" data-format="VIP">VIP Lounge</button>
     </div>
+
+    <div id="upcoming-cards-grid" class="movie-grid" style="margin-bottom:32px;"></div>
 
     <h2 class="info-section-heading">🎟️ Pre-Booking Perks</h2>
     <table class="info-table">
       <tbody>
         <tr>
-          <th>Early Bird Pricing</th>
-          <td>Save on advance screenings booked within the first 48 hours of ticket release.</td>
+          <th>Advance Seat Selection</th>
+          <td>Prime Rows D &amp; E open for online reservation 14 days prior to each premiere date.</td>
         </tr>
         <tr>
           <th>Group Reservations</th>
           <td>Automatic 30% group discount when reserving 5 or more seats in a single order.</td>
         </tr>
-      </tbody>
-    </table>
-
-    <h2 class="info-section-heading">📆 Upcoming Highlights</h2>
-    <table class="info-table">
-      <thead>
         <tr>
-          <th>Date</th>
-          <th>Title</th>
-          <th>Format</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>December 18, 2026</td>
-          <td>Galactic Odyssey</td>
-          <td>IMAX®</td>
-          <td>Pre-Book Opens 2 Weeks Prior</td>
+          <th>Promo Eligibility</th>
+          <td>Valid student and seasonal promo codes on the <a class="guide-link" href="offer.html">Offers</a> page apply to advance screenings.</td>
         </tr>
       </tbody>
     </table>
 
     <h2 class="info-section-heading">🤔 FAQs About Upcoming Releases</h2>
     <div class="faq-accordion">
-      <div class="faq-question active">Q: Can I pre-book for any upcoming movie?</div>
-      <div class="faq-answer">A: Advance seat selection opens two weeks prior to the premiere date for participating titles.</div>
+      <div class="faq-question active">Can I pre-book seats for upcoming premieres?</div>
+      <div class="faq-answer">Yes — advance seat selection opens two weeks before the premiere date across participating theaters.</div>
+
+      <div class="faq-question">How do release reminders work?</div>
+      <div class="faq-answer">Click "Set Reminder" on any upcoming title above to save it to your browser watchlist, or subscribe via the Offers newsletter.</div>
     </div>
   </main>
 
   <div id="bottom-container"></div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const CT = window.CineTicket;
+      const esc = CT.escapeHtml;
+      const grid = document.getElementById('upcoming-cards-grid');
+      const filterBtns = document.querySelectorAll('#upcoming-format-filters .btn-filter');
+
+      const releases = [
+        { id: 'up-1', title: 'Galactic Odyssey', date: '2026-12-18', genre: 'Sci-Fi', runtime: '2h 28m', format: 'IMAX', img: '../img/homepage/starwars_.jpg', status: 'Pre-Book Opens Dec 4' },
+        { id: 'up-2', title: 'Shadows of Velvet Manor', date: '2027-01-08', genre: 'Mystery', runtime: '2h 06m', format: 'Dolby Atmos', img: '../img/homepage/Knives_Out_poster.jpeg', status: 'Coming January 2027' },
+        { id: 'up-3', title: 'Emerald Jungle Quest', date: '2027-01-22', genre: 'Adventure', runtime: '1h 58m', format: '4DX', img: '../img/homepage/jumanji.jpg', status: 'Motion Hall Exclusive' },
+        { id: 'up-4', title: 'Northern Lights Symphony', date: '2027-02-14', genre: 'Animation', runtime: '1h 49m', format: 'VIP', img: '../img/homepage/frozen_2.jpeg', status: 'Valentine Premiere' },
+      ];
+
+      function getSavedReminders() {
+        try {
+          return JSON.parse(localStorage.getItem('upcomingReminders') || '[]');
+        } catch (_) {
+          return [];
+        }
+      }
+
+      function renderUpcoming(format) {
+        const saved = new Set(getSavedReminders());
+        const filtered = format === 'all' ? releases : releases.filter(function (r) { return r.format === format; });
+        grid.innerHTML = filtered.map(function (item) {
+          const reminded = saved.has(item.id);
+          return (
+            '<div class="movie-card">' +
+            '<div class="movie-badge">' + esc(item.format) + '</div>' +
+            '<img src="' + esc(CT.resolveAssetUrl(item.img)) + '" alt="' + esc(item.title) + '" class="movie-poster" style="height:260px;">' +
+            '<div class="movie-info">' +
+            '<div class="movie-title">' + esc(item.title) + '</div>' +
+            '<div class="movie-meta">' +
+            '<span><i class="fas fa-calendar-alt"></i> ' + esc(item.date) + '</span>' +
+            '<span><i class="fas fa-clock"></i> ' + esc(item.runtime) + '</span>' +
+            '<span><i class="fas fa-film"></i> ' + esc(item.genre) + '</span>' +
+            '</div>' +
+            '<p style="font-size:13px; margin-bottom:14px;">' + esc(item.status) + '</p>' +
+            '<button type="button" class="btn btn-primary btn-book remind-btn" data-id="' + esc(item.id) + '" data-title="' + esc(item.title) + '">' +
+            '<i class="fas ' + (reminded ? 'fa-check' : 'fa-bell') + '"></i> ' + (reminded ? 'Reminder Saved' : 'Set Reminder') +
+            '</button>' +
+            '</div>' +
+            '</div>'
+          );
+        }).join('');
+
+        grid.querySelectorAll('.remind-btn').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            const id = btn.getAttribute('data-id');
+            const title = btn.getAttribute('data-title');
+            const current = new Set(getSavedReminders());
+            if (current.has(id)) {
+              current.delete(id);
+              window.showToast('Removed reminder for ' + title, 'info');
+            } else {
+              current.add(id);
+              window.showToast('Release reminder saved for ' + title + '!', 'success');
+            }
+            localStorage.setItem('upcomingReminders', JSON.stringify(Array.from(current)));
+            const activeFormat = document.querySelector('#upcoming-format-filters .btn-filter.active')?.dataset.format || 'all';
+            renderUpcoming(activeFormat);
+          });
+        });
+      }
+
+      filterBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          filterBtns.forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          renderUpcoming(btn.dataset.format || 'all');
+        });
+      });
+
+      renderUpcoming('all');
+    });
+  </script>
 </body>
 </html>

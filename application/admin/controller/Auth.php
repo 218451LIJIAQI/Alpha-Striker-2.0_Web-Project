@@ -10,9 +10,8 @@ class Auth extends ApiController
     public function login()
     {
         try {
-            $data     = $this->payload();
             $username = $this->strParam('username');
-            $password = isset($data['password']) ? (string) $data['password'] : '';
+            $password = $this->rawPasswordParam('password');
 
             if ($username === '' || $password === '') {
                 return $this->fail('Username and password are required');
@@ -31,6 +30,7 @@ class Auth extends ApiController
                 return $this->fail('Invalid username or password', 401);
             }
 
+            Session::regenerate(true);
             $token = bin2hex(random_bytes(32));
             Session::set('admin_auth', true);
             Session::set('admin_token', $token);

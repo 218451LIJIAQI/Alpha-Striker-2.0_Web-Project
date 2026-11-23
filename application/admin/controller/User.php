@@ -43,10 +43,9 @@ class User extends BaseAdmin
     public function create()
     {
         try {
-            $payload  = $this->payload();
             $name     = $this->strParam('user_name');
             $email    = strtolower($this->strParam('email'));
-            $password = isset($payload['login_pwd']) ? (string) $payload['login_pwd'] : '';
+            $password = $this->rawPasswordParam('login_pwd');
 
             $error = $this->validateUserInput($name, $email, $password, true, 0);
             if ($error !== null) {
@@ -82,10 +81,9 @@ class User extends BaseAdmin
                 return $this->fail('User not found', 404);
             }
 
-            $payload  = $this->payload();
             $name     = $this->strParam('user_name');
             $email    = strtolower($this->strParam('email'));
-            $password = isset($payload['login_pwd']) ? (string) $payload['login_pwd'] : '';
+            $password = $this->rawPasswordParam('login_pwd');
 
             $error = $this->validateUserInput($name, $email, $password, false, $userId);
             if ($error !== null) {
@@ -119,8 +117,19 @@ class User extends BaseAdmin
                 return $this->fail('Valid user_code is required');
             }
 
-            if (!Db::name('user')->where('user_code', $userId)->delete()) {
+            if (!Db::name('user')->where('user_code', $userId)->find()) {
                 return $this->fail('User not found', 404);
+            }
+
+            Db::startTrans();
+            try {
+                Db::name('seat')->where('user_code', $userId)->update(['user_code' => null]);
+                Db::name('offer')->where('user_code', $userId)->update(['user_code' => null]);
+                Db::name('user')->where('user_code', $userId)->delete();
+                Db::commit();
+            } catch (\Throwable $txErr) {
+                Db::rollback();
+                throw $txErr;
             }
 
             return $this->ok(['user_code' => $userId], 'User deleted successfully');
@@ -137,11 +146,11 @@ class User extends BaseAdmin
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100) {
             return 'Valid email address is required';
         }
-        if ($requirePassword && strlen($password) < 6) {
-            return 'Password must be at least 6 characters';
+        if ($requirePassword && (strlen($password) < 6 || strlen($password) > 128)) {
+            return 'Password must be between 6 and 128 characters';
         }
-        if (!$requirePassword && $password !== '' && strlen($password) < 6) {
-            return 'New password must be at least 6 characters';
+        if (!$requirePassword && $password !== '' && (strlen($password) < 6 || strlen($password) > 128)) {
+            return 'New password must be between 6 and 128 characters';
         }
 
         $dupQuery = Db::name('user')->where('email', $email);

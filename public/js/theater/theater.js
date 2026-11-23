@@ -9,11 +9,50 @@ document.addEventListener('DOMContentLoaded', function () {
   const searchBtn = document.querySelector('.search-location button');
   const filterButtons = document.querySelectorAll('.filter-options button');
   let activeAmenity = '';
+  let requestSeq = 0;
 
   fetchTheaters('', '');
 
   function runSearch() {
     fetchTheaters(searchInput ? searchInput.value.trim() : '', activeAmenity);
+  }
+
+  async function fetchTheaters(address, amenity) {
+    const seq = ++requestSeq;
+    const CT = window.CineTicket;
+    const params = new URLSearchParams();
+    if (address) params.append('address', address);
+    if (amenity) params.append('amenity', amenity);
+    const query = params.toString();
+
+    CT.renderStateBlock(theaterList, 'loading', 'Loading partner theaters...', 'Checking locations, formats, and amenities.');
+
+    try {
+      const payload = await CT.fetchJson(
+        '/index.php/theater/theater/getTheaterList' + (query ? '?' + query : '')
+      );
+      if (seq !== requestSeq) return;
+      if (payload.success) {
+        renderTheaters(payload.data || []);
+      } else {
+        CT.renderStateBlock(
+          theaterList,
+          'error',
+          'Failed to load theaters',
+          payload.message || 'Unable to query cinema locations.',
+          function () { fetchTheaters(address, amenity); }
+        );
+      }
+    } catch (_) {
+      if (seq !== requestSeq) return;
+      CT.renderStateBlock(
+        theaterList,
+        'error',
+        'Unable to load theaters right now',
+        'Could not reach the theater directory service. Click Retry to try again.',
+        function () { fetchTheaters(address, amenity); }
+      );
+    }
   }
 
   searchBtn?.addEventListener('click', runSearch);
@@ -35,26 +74,6 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 });
 
-async function fetchTheaters(address, amenity) {
-  const params = new URLSearchParams();
-  if (address) params.append('address', address);
-  if (amenity) params.append('amenity', amenity);
-  const query = params.toString();
-
-  try {
-    const payload = await window.CineTicket.fetchJson(
-      '/index.php/theater/theater/getTheaterList' + (query ? '?' + query : '')
-    );
-    if (payload.success) {
-      renderTheaters(payload.data || []);
-    } else {
-      window.showToast(payload.message || 'Failed to load theaters', 'error');
-    }
-  } catch (_) {
-    window.showToast('Unable to load theaters right now', 'error');
-  }
-}
-
 function renderTheaters(theaters) {
   const theaterList = document.querySelector('.theater-list');
   if (!theaterList) return;
@@ -63,14 +82,16 @@ function renderTheaters(theaters) {
   const esc = CT.escapeHtml;
 
   if (!Array.isArray(theaters) || theaters.length === 0) {
-    theaterList.innerHTML =
-      '<div style="grid-column: 1 / -1; text-align: center; padding: 48px 20px;">' +
-      '<h3>No theaters matched your criteria</h3>' +
-      '<p style="margin-top: 8px; opacity: 0.75;">Try clearing your location filter or choosing All Theaters.</p>' +
-      '</div>';
+    CT.renderStateBlock(
+      theaterList,
+      'empty',
+      'No theaters matched your criteria',
+      'Try clearing your location filter or choosing All Theaters.'
+    );
     return;
   }
 
+  const fallbackImg = CT.resolveAssetUrl('img/logo.jpg');
   theaterList.innerHTML = '';
   theaters.forEach(function (theater) {
     const amenities = (theater.amenity || '')
@@ -97,6 +118,11 @@ function renderTheaters(theaters) {
       '</div>' +
       '<a href="theater-details.html?theater_code=' + encodeURIComponent(theater.theater_code) + '" class="view-details">View Theater Details</a>' +
       '</div>';
+
+    const imgEl = card.querySelector('.theater-image img');
+    imgEl.addEventListener('error', function () {
+      if (imgEl.src !== fallbackImg) imgEl.src = fallbackImg;
+    });
 
     theaterList.appendChild(card);
   });

@@ -6,6 +6,7 @@
   <title>Secure Checkout | Alpha Striker 2.0</title>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
+  <link rel="stylesheet" href="../css/common/footer.css">
   <link rel="stylesheet" href="../css/pay/pay.css">
   <script src="../js/common.js"></script>
   <script src="../js/pay/pay.js" defer></script>
@@ -17,10 +18,10 @@
     <div class="payment-header">
       <h1><i class="fas fa-credit-card"></i> Secure Payment</h1>
       <div class="progress-bar">
-        <div class="progress-step completed">
+        <a href="booking3.html" id="back-to-seats-link" class="progress-step completed" style="text-decoration:none;" title="Return to seat selection">
           <i class="fas fa-ticket-alt"></i>
           <span>Select Seats</span>
-        </div>
+        </a>
         <div class="progress-step active">
           <i class="fas fa-credit-card"></i>
           <span>Payment</span>
@@ -43,8 +44,8 @@
             </div>
           </div>
 
-          <div class="payment-methods-grid">
-            <div class="payment-method-card active" data-method="card">
+          <div class="payment-methods-grid" role="radiogroup" aria-label="Payment Method">
+            <div class="payment-method-card active" data-method="card" tabindex="0">
               <div class="method-icon"><i class="fas fa-credit-card"></i></div>
               <div class="method-info">
                 <h3>Credit / Debit Card</h3>
@@ -61,7 +62,7 @@
               </div>
             </div>
 
-            <div class="payment-method-card" data-method="paypal">
+            <div class="payment-method-card" data-method="paypal" tabindex="0">
               <div class="method-icon paypal"><i class="fab fa-paypal"></i></div>
               <div class="method-info">
                 <h3>PayPal</h3>
@@ -73,7 +74,7 @@
               </div>
             </div>
 
-            <div class="payment-method-card" data-method="applepay">
+            <div class="payment-method-card" data-method="applepay" tabindex="0">
               <div class="method-icon apple"><i class="fab fa-apple"></i></div>
               <div class="method-info">
                 <h3>Apple Pay</h3>
@@ -85,7 +86,7 @@
               </div>
             </div>
 
-            <div class="payment-method-card" data-method="googlepay">
+            <div class="payment-method-card" data-method="googlepay" tabindex="0">
               <div class="method-icon google"><i class="fab fa-google"></i></div>
               <div class="method-info">
                 <h3>Google Pay</h3>
@@ -139,9 +140,9 @@
               </button>
             </div>
             <div class="promo-suggestions">
-              <span class="promo-tag">STUDENT30</span>
-              <span class="promo-tag">WEDNESDAYSIP</span>
-              <span class="promo-tag">FAMILY4FUN</span>
+              <span class="promo-tag" tabindex="0" role="button">STUDENT30</span>
+              <span class="promo-tag" tabindex="0" role="button">WEDNESDAYSIP</span>
+              <span class="promo-tag" tabindex="0" role="button">FAMILY4FUN</span>
             </div>
           </div>
         </div>
@@ -194,7 +195,7 @@
             </div>
           </div>
 
-          <button type="button" class="pay-now-btn">
+          <button type="button" class="pay-now-btn" disabled>
             <i class="fas fa-lock"></i>
             <span>Secure Payment</span>
             <span id="final-amount">$0.00</span>
@@ -210,5 +211,6 @@
     </div>
   </div>
 
+  <div id="bottom-container"></div>
 </body>
 </html>

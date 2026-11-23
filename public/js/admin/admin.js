@@ -1,7 +1,8 @@
 /**
  * Shared Admin Console Runtime
  * Reuses CineTicket core utilities (escaping, asset paths, dark mode) and centralizes
- * authenticated API calls (X-Admin-Token), navigation, CRUD form/table helpers, and Canvas charts.
+ * authenticated API calls (X-Admin-Token), navigation, relation checklists, table states,
+ * duplicate-submit guards, and Canvas charts.
  */
 (function () {
   'use strict';
@@ -98,7 +99,7 @@
     ];
 
     mount.innerHTML =
-      '<nav class="admin-nav">' +
+      '<nav class="admin-nav" aria-label="Admin Navigation">' +
       '<div class="nav-left">' +
       '<a href="dashboard.html" class="admin-logo"><i class="fas fa-shield-alt"></i><span>CineTix Admin</span></a>' +
       '<div class="nav-links">' +
@@ -106,6 +107,7 @@
         const cls = item.key === activeKey ? 'active' : '';
         return '<a href="' + item.href + '" class="' + cls + '"><i class="' + item.icon + '"></i> ' + item.label + '</a>';
       }).join('') +
+      '<a href="../pages/homepage.html" title="Open Customer Box Office"><i class="fas fa-external-link-alt"></i> Storefront</a>' +
       '</div>' +
       '</div>' +
       '<div class="admin-nav-right">' +
@@ -125,28 +127,101 @@
     document.getElementById('admin-logout-btn')?.addEventListener('click', logoutAdmin);
   }
 
+  function renderTableState(tbody, colSpan, stateType, message, retryFn) {
+    if (!tbody) return;
+    const esc = CT.escapeHtml;
+    const cls = stateType === 'error' ? 'empty-state error-state' : 'empty-state';
+    tbody.innerHTML =
+      '<tr><td colspan="' + Number(colSpan) + '" class="' + cls + '">' +
+      '<div>' + esc(message) + '</div>' +
+      (typeof retryFn === 'function'
+        ? '<button type="button" class="edit-btn table-retry-btn" style="margin-top:10px;"><i class="fas fa-redo"></i> Retry</button>'
+        : '') +
+      '</td></tr>';
+
+    if (typeof retryFn === 'function') {
+      tbody.querySelector('.table-retry-btn')?.addEventListener('click', retryFn);
+    }
+  }
+
+  function renderRelationChecklist(container, items, idKey, labelKey, selectedIds, inputName) {
+    if (!container) return;
+    const esc = CT.escapeHtml;
+    const selectedSet = new Set((selectedIds || []).map(function (v) { return Number(v); }));
+
+    if (!Array.isArray(items) || !items.length) {
+      container.innerHTML = '<span class="form-hint">No records available to link.</span>';
+      return;
+    }
+
+    container.innerHTML =
+      '<div class="checklist-toolbar">' +
+      '<button type="button" class="checklist-toggle-btn" data-action="all">Select All</button>' +
+      '<button type="button" class="checklist-toggle-btn" data-action="none">Clear</button>' +
+      '</div>' +
+      '<div class="relation-checklist">' +
+      items.map(function (item) {
+        const id = Number(item[idKey]);
+        const checked = selectedSet.has(id) ? ' checked' : '';
+        return (
+          '<label class="relation-chip">' +
+          '<input type="checkbox" name="' + esc(inputName) + '" value="' + esc(id) + '"' + checked + '>' +
+          '<span>' + esc(item[labelKey]) + '</span>' +
+          '</label>'
+        );
+      }).join('') +
+      '</div>';
+
+    container.querySelectorAll('.checklist-toggle-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const checkAll = btn.getAttribute('data-action') === 'all';
+        container.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+          cb.checked = checkAll;
+        });
+      });
+    });
+  }
+
+  function getCheckedIds(container, inputName) {
+    if (!container) return [];
+    return Array.from(container.querySelectorAll('input[name="' + inputName + '"]:checked'))
+      .map(function (cb) { return parseInt(cb.value, 10); })
+      .filter(function (n) { return n > 0; });
+  }
+
   function bindDeleteActions(container, opts) {
     container.querySelectorAll(opts.selector || '.delete-btn').forEach(function (btn) {
       btn.addEventListener('click', async function () {
         const id = btn.getAttribute('data-id');
         if (!window.confirm(opts.confirmText(id))) return;
+        btn.disabled = true;
         const body = {};
         body[opts.idKey] = id;
-        const res = await apiFetch(opts.endpoint, { method: 'POST', body: body });
-        if (res.success) {
-          window.showToast(typeof opts.successText === 'function' ? opts.successText(id) : opts.successText, 'success');
-          opts.onSuccess();
-        } else {
-          window.showToast(res.message || 'Operation failed', 'error');
+        try {
+          const res = await apiFetch(opts.endpoint, { method: 'POST', body: body });
+          if (res.success) {
+            window.showToast(typeof opts.successText === 'function' ? opts.successText(id) : opts.successText, 'success');
+            opts.onSuccess();
+          } else {
+            btn.disabled = false;
+            window.showToast(res.message || 'Operation failed', 'error');
+          }
+        } catch (_) {
+          btn.disabled = false;
+          window.showToast('Network error while performing action', 'error');
         }
       });
     });
   }
 
   function bindImagePreview(inputEl, previewEl) {
+    if (!inputEl || !previewEl) return function () {};
+    previewEl.addEventListener('error', function () {
+      previewEl.style.display = 'none';
+    });
     function sync() {
       const val = inputEl.value.trim();
-      if (/\.(jpe?g|png|webp|gif|svg)(\?.*)?$/i.test(val) || val.startsWith('data:')) {
+      if (/\.(jpe?g|png|webp|gif|svg)(\?.*)?$/i.test(val) || /^data:image\//i.test(val)) {
         previewEl.src = CT.resolveAssetUrl(val);
         previewEl.style.display = 'block';
       } else {
@@ -154,16 +229,25 @@
       }
     }
     inputEl.addEventListener('change', sync);
+    inputEl.addEventListener('input', sync);
     return sync;
   }
 
   async function submitForm(endpoint, payload, redirectUrl, successMsg, fallbackErr) {
-    const res = await apiFetch(endpoint, { method: 'POST', body: payload });
-    if (res.success) {
-      window.showToast(successMsg, 'success');
-      setTimeout(function () { window.location.href = redirectUrl; }, 500);
-    } else {
+    const submitBtn = document.querySelector('.submit-btn');
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      const res = await apiFetch(endpoint, { method: 'POST', body: payload });
+      if (res.success) {
+        window.showToast(successMsg, 'success');
+        setTimeout(function () { window.location.href = redirectUrl; }, 450);
+        return;
+      }
+      if (submitBtn) submitBtn.disabled = false;
       window.showToast(res.message || fallbackErr, 'error');
+    } catch (_) {
+      if (submitBtn) submitBtn.disabled = false;
+      window.showToast('Network error — please try again', 'error');
     }
   }
 
@@ -246,7 +330,10 @@
     drawBarChart: drawBarChart,
     ensureAuthenticated: ensureAuthenticated,
     escapeHtml: CT.escapeHtml,
+    getCheckedIds: getCheckedIds,
     renderAdminNav: renderAdminNav,
+    renderRelationChecklist: renderRelationChecklist,
+    renderTableState: renderTableState,
     resolveAdminAsset: CT.resolveAssetUrl,
     submitForm: submitForm,
   };

@@ -16,12 +16,52 @@
   <div class="giftcard-wrapper">
     <section class="hero">
       <div class="container">
-        <h1>Gift Cards</h1>
-        <p>Share the magic of cinema with CineTix digital and physical gift cards for every occasion.</p>
+        <h1>CineTix Gift Cards</h1>
+        <p>Share the magic of cinema with digital and physical gift cards for every occasion.</p>
       </div>
     </section>
 
     <div class="container">
+      <section class="info-card-section giftcard-option" id="builder">
+        <h2>Configure a Digital E-Gift Card</h2>
+        <div class="giftcard-builder-grid">
+          <div>
+            <p style="margin-bottom:14px;">Choose a denomination and personalize your cinema gift preview:</p>
+            <div class="filters" id="gc-amounts" style="margin-bottom:18px;">
+              <button type="button" class="btn-filter" data-amount="25">$25</button>
+              <button type="button" class="btn-filter active" data-amount="50">$50</button>
+              <button type="button" class="btn-filter" data-amount="100">$100</button>
+              <button type="button" class="btn-filter" data-amount="150">$150</button>
+            </div>
+            <div style="display:grid; gap:12px; max-width:460px;">
+              <input type="text" id="gc-recipient" class="search-input" style="border:1px solid #cbd5e1; border-radius:10px; padding:11px 14px;" placeholder="Recipient Name (e.g. Alex Wong)" maxlength="50">
+              <input type="email" id="gc-email" class="search-input" style="border:1px solid #cbd5e1; border-radius:10px; padding:11px 14px;" placeholder="Recipient Email (e.g. alex@example.com)" maxlength="100">
+              <input type="text" id="gc-note" class="search-input" style="border:1px solid #cbd5e1; border-radius:10px; padding:11px 14px;" placeholder="Personal note (e.g. Enjoy movie night!)" maxlength="90">
+              <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:4px;">
+                <button type="button" class="btn btn-primary" id="gc-generate-btn"><i class="fas fa-gift"></i> Issue Demo Gift Pass</button>
+                <a href="offer.html" class="btn btn-filter" style="text-decoration:none;">Browse Active Promo Codes</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="giftcard-preview-card" id="gc-preview">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-weight:700; letter-spacing:1px;">CINETIX PREMIER PASS</span>
+              <span id="gc-preview-amount" style="font-size:28px; font-weight:700;">$50.00</span>
+            </div>
+            <div style="margin:22px 0;">
+              <div style="font-size:12px; opacity:0.8; text-transform:uppercase;">Prepared For</div>
+              <div id="gc-preview-recipient" style="font-size:20px; font-weight:600;">Movie Enthusiast</div>
+              <div id="gc-preview-note" style="font-size:14px; opacity:0.9; margin-top:6px;">Enjoy an unforgettable night at the movies!</div>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; border-top:1px solid rgba(255,255,255,0.22); padding-top:12px;">
+              <span id="gc-preview-code">GC-DEMO-2026</span>
+              <span>Valid 24 Months</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="info-card-section giftcard-option" id="what">
         <h2>What Are CineTix Gift Cards?</h2>
         <div class="giftcard-features">
@@ -35,23 +75,7 @@
           </div>
           <div class="giftcard-feature-item">
             <i class="fas fa-gift"></i>
-            <p>Flexible denominations from $15 to $200 with zero activation fees.</p>
-          </div>
-        </div>
-      </section>
-
-      <section class="info-card-section giftcard-option" id="redeem">
-        <h2>How to Redeem</h2>
-        <div class="giftcard-features">
-          <div class="giftcard-feature-item">
-            <i class="fas fa-laptop"></i>
-            <h3>Digital E-Code</h3>
-            <p>Apply your 12-character gift code directly on the web checkout screen.</p>
-          </div>
-          <div class="giftcard-feature-item">
-            <i class="fas fa-id-card"></i>
-            <h3>Physical Card</h3>
-            <p>Reveal the PIN on the back of your card to redeem online or in-theater.</p>
+            <p>Flexible denominations from $25 to $150 with zero activation fees.</p>
           </div>
         </div>
       </section>
@@ -60,18 +84,63 @@
         <h2>Gift Card FAQs</h2>
         <div class="faq-accordion">
           <div class="faq-question active">Can I combine Gift Cards with promo codes?</div>
-          <div class="faq-answer">Yes — enter an active promo code such as STUDENT30 first, then cover the remaining balance with your Gift Card.</div>
+          <div class="faq-answer">Yes — enter an active promo code such as STUDENT30 first, then cover the remaining balance at checkout.</div>
 
           <div class="faq-question">Do CineTix Gift Cards expire?</div>
-          <div class="faq-answer">Gift card balances remain valid for 24 months from the purchase date.</div>
+          <div class="faq-answer">Gift card balances remain valid for 24 months from the issue date.</div>
 
           <div class="faq-question">How do I arrange corporate bulk gift cards?</div>
-          <div class="faq-answer">Contact <a href="mailto:lijiaqi0807@gmail.com">lijiaqi0807@gmail.com</a> for custom quantities and group pricing.</div>
+          <div class="faq-answer">Contact <a class="guide-link" href="mailto:lijiaqi0807@gmail.com">lijiaqi0807@gmail.com</a> for custom quantities and group pricing.</div>
         </div>
       </section>
     </div>
   </div>
 
   <div id="bottom-container"></div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      let selectedAmount = 50;
+      const amountBtns = document.querySelectorAll('#gc-amounts .btn-filter');
+      const recipientIn = document.getElementById('gc-recipient');
+      const emailIn = document.getElementById('gc-email');
+      const noteIn = document.getElementById('gc-note');
+      const prevAmt = document.getElementById('gc-preview-amount');
+      const prevRec = document.getElementById('gc-preview-recipient');
+      const prevNote = document.getElementById('gc-preview-note');
+      const prevCode = document.getElementById('gc-preview-code');
+
+      function syncPreview() {
+        prevAmt.textContent = '$' + selectedAmount.toFixed(2);
+        prevRec.textContent = recipientIn.value.trim() || 'Movie Enthusiast';
+        prevNote.textContent = noteIn.value.trim() || 'Enjoy an unforgettable night at the movies!';
+      }
+
+      amountBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          amountBtns.forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          selectedAmount = parseFloat(btn.dataset.amount) || 50;
+          syncPreview();
+        });
+      });
+
+      recipientIn.addEventListener('input', syncPreview);
+      noteIn.addEventListener('input', syncPreview);
+
+      document.getElementById('gc-generate-btn').addEventListener('click', function () {
+        const email = emailIn.value.trim();
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          window.showToast('Please enter a valid recipient email address', 'warning');
+          emailIn.focus();
+          return;
+        }
+        const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+        const code = 'GC-' + selectedAmount + '-' + suffix;
+        prevCode.textContent = code;
+        window.showToast('Demo Gift Card ' + code + ' ($' + selectedAmount + ') prepared for ' + email + '!', 'success');
+      });
+    });
+  </script>
 </body>
 </html>

@@ -56,6 +56,7 @@
     const CT = window.CineTicket;
     const esc = CT.escapeHtml;
     const theaterId = parseInt(theater.theater_code, 10) || 1;
+    const vrHref = '3d-model.html?theater_code=' + encodeURIComponent(theaterId);
     const amenities = (theater.amenity || '')
       .split(',')
       .map(function (a) { return a.trim(); })
@@ -91,7 +92,7 @@
         '</div>';
 
       document.getElementById('hero-vr-btn')?.addEventListener('click', function () {
-        window.location.href = '3d-model.html';
+        window.location.href = vrHref;
       });
     }
 
@@ -115,26 +116,33 @@
     const moviesList = document.getElementById('movies-list');
     if (moviesList) {
       const movies = Array.isArray(theater.movies) ? theater.movies : [];
-      moviesList.innerHTML = !movies.length
-        ? '<p>Schedule updating — check back soon for upcoming screenings.</p>'
-        : movies.map(function (movie) {
-            const price = movie.money !== undefined ? '$' + parseFloat(movie.money).toFixed(2) : '$39.00';
-            const bookingHref = 'booking3.html?movie_code=' + encodeURIComponent(movie.movie_code) + '&theater_code=' + encodeURIComponent(theaterId);
-            return (
-              '<div class="movie-card detail-card schedule-card">' +
-              '<img src="' + esc(CT.resolveAssetUrl(movie.img)) + '" alt="' + esc(movie.movie_name) + '">' +
-              '<div class="schedule-card-body">' +
-              '<h3>' + esc(movie.movie_name) + '</h3>' +
-              '<div class="schedule-card-meta">' +
-              '<span><i class="fas fa-film"></i> ' + esc(movie.movie_type) + '</span>' +
-              '<span><i class="fas fa-clock"></i> ' + esc(movie.times) + '</span>' +
-              '</div>' +
-              '<div class="schedule-card-price">' + esc(String(movie.daily_showtimes || 4)) + ' showtimes daily • ' + esc(price) + '</div>' +
-              '<a href="' + esc(bookingHref) + '" class="btn-primary schedule-book-btn">Book Seats</a>' +
-              '</div>' +
-              '</div>'
-            );
-          }).join('');
+      if (!movies.length) {
+        CT.renderStateBlock(
+          moviesList,
+          'empty',
+          'No active screenings at this location today',
+          'Check back soon or browse other partner theaters for showtimes.'
+        );
+      } else {
+        moviesList.innerHTML = movies.map(function (movie) {
+          const price = movie.money !== undefined ? '$' + parseFloat(movie.money).toFixed(2) : '$39.00';
+          const bookingHref = 'booking3.html?movie_code=' + encodeURIComponent(movie.movie_code) + '&theater_code=' + encodeURIComponent(theaterId);
+          return (
+            '<div class="movie-card detail-card schedule-card">' +
+            '<img src="' + esc(CT.resolveAssetUrl(movie.img)) + '" alt="' + esc(movie.movie_name) + '">' +
+            '<div class="schedule-card-body">' +
+            '<h3>' + esc(movie.movie_name) + '</h3>' +
+            '<div class="schedule-card-meta">' +
+            '<span><i class="fas fa-film"></i> ' + esc(movie.movie_type) + '</span>' +
+            '<span><i class="fas fa-clock"></i> ' + esc(movie.times) + '</span>' +
+            '</div>' +
+            '<div class="schedule-card-price">' + esc(String(movie.daily_showtimes || 4)) + ' showtimes daily • ' + esc(price) + '</div>' +
+            '<a href="' + esc(bookingHref) + '" class="btn-primary schedule-book-btn">Book Seats</a>' +
+            '</div>' +
+            '</div>'
+          );
+        }).join('');
+      }
     }
 
     const amenitiesGrid = document.getElementById('amenities-grid');
@@ -248,26 +256,45 @@
         '<div class="detail-card vr-tour-card">' +
         '<h3>Interactive 3D Auditorium Preview</h3>' +
         '<p>Inspect sightlines from every row before locking in your seats.</p>' +
-        '<a href="3d-model.html" class="btn-primary vr-launch-link"><i class="fas fa-vr-cardboard"></i> Launch 3D Seat Preview</a>' +
+        '<a href="' + esc(vrHref) + '" class="btn-primary vr-launch-link"><i class="fas fa-vr-cardboard"></i> Launch 3D Seat Preview</a>' +
         '</div>';
     }
   }
 
-  document.addEventListener('DOMContentLoaded', async function () {
+  document.addEventListener('DOMContentLoaded', function () {
     initTabs();
+    const CT = window.CineTicket;
     const theaterCode = new URLSearchParams(window.location.search).get('theater_code') || '1';
+    const moviesList = document.getElementById('movies-list');
 
-    try {
-      const payload = await window.CineTicket.fetchJson(
-        '/index.php/theater/theater/getTheaterDetails?theater_code=' + encodeURIComponent(theaterCode)
-      );
-      if (payload.success && payload.data) {
-        renderTheaterPage(payload.data);
-      } else {
-        window.showToast(payload.message || 'Theater not found', 'error');
+    async function loadDetails() {
+      CT.renderStateBlock(moviesList, 'loading', 'Loading theater schedule...', 'Fetching auditorium details and today\'s screenings.');
+      try {
+        const payload = await CT.fetchJson(
+          '/index.php/theater/theater/getTheaterDetails?theater_code=' + encodeURIComponent(theaterCode)
+        );
+        if (payload.success && payload.data) {
+          renderTheaterPage(payload.data);
+        } else {
+          CT.renderStateBlock(
+            moviesList,
+            'error',
+            'Theater details unavailable',
+            payload.message || 'The requested theater could not be found.',
+            loadDetails
+          );
+        }
+      } catch (_) {
+        CT.renderStateBlock(
+          moviesList,
+          'error',
+          'Failed to load theater details',
+          'Could not connect to the cinema schedule service.',
+          loadDetails
+        );
       }
-    } catch (_) {
-      window.showToast('Failed to load theater details', 'error');
     }
+
+    loadDetails();
   });
 })();

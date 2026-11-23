@@ -17,7 +17,7 @@
     <div class="page-header">
       <div>
         <h1><i class="fas fa-edit"></i> Edit Promotional Offer</h1>
-        <p>Update promo code, discount value, category, or validity date.</p>
+        <p>Update promo code, discount value, category, eligible movies, or validity date.</p>
       </div>
     </div>
 
@@ -40,12 +40,12 @@
 
         <div class="form-group">
           <label for="promo_code" class="form-label">Promo Code *</label>
-          <input type="text" id="promo_code" name="promo_code" class="form-input" required maxlength="100" style="text-transform:uppercase;">
+          <input type="text" id="promo_code" name="promo_code" class="form-input" required maxlength="50" style="text-transform:uppercase;">
         </div>
 
         <div class="form-group">
           <label for="money" class="form-label">Discount Amount ($) *</label>
-          <input type="number" id="money" name="money" class="form-input" step="0.01" min="0" required>
+          <input type="number" id="money" name="money" class="form-input" step="0.01" min="0.01" max="9999.99" required>
         </div>
 
         <div class="form-group">
@@ -61,11 +61,19 @@
         <div class="form-group full-width">
           <label for="img" class="form-label">Image Path or URL *</label>
           <input type="text" id="img" name="img" class="form-input" required maxlength="500">
+          <div class="preview-container">
+            <img id="offer-preview" class="preview-img" alt="Offer Preview">
+          </div>
         </div>
 
         <div class="form-group full-width">
           <label for="offer_description" class="form-label">Description *</label>
           <textarea id="offer_description" name="offer_description" class="form-input" required maxlength="500"></textarea>
+        </div>
+
+        <div class="form-group full-width">
+          <label class="form-label">Eligible Movies *</label>
+          <div id="movie-checklist"></div>
         </div>
       </div>
 
@@ -87,7 +95,15 @@
         return;
       }
 
-      const detailRes = await AdminApp.apiFetch('/index.php/admin/offer/getOfferByCode?offer_code=' + encodeURIComponent(offerCode));
+      const imgInput = document.getElementById('img');
+      const syncPreview = AdminApp.bindImagePreview(imgInput, document.getElementById('offer-preview'));
+      const checklistEl = document.getElementById('movie-checklist');
+
+      const [detailRes, moviesRes] = await Promise.all([
+        AdminApp.apiFetch('/index.php/admin/offer/getOfferByCode?offer_code=' + encodeURIComponent(offerCode)),
+        AdminApp.apiFetch('/index.php/admin/movie/index'),
+      ]);
+
       if (!detailRes.success || !detailRes.data) {
         window.showToast(detailRes.message || 'Offer not found', 'error');
         setTimeout(function () { window.location.href = 'offers.html'; }, 700);
@@ -101,11 +117,20 @@
       document.getElementById('money').value = o.money !== undefined ? o.money : '5.00';
       document.getElementById('offer_validity').value = o.offer_validity || '';
       document.getElementById('badge').value = o.badge || '';
-      document.getElementById('img').value = o.img || '';
+      imgInput.value = o.img || '';
       document.getElementById('offer_description').value = o.offer_description || '';
+      syncPreview();
+
+      const movies = moviesRes.success && Array.isArray(moviesRes.data) ? moviesRes.data : [];
+      AdminApp.renderRelationChecklist(checklistEl, movies, 'movie_code', 'movie_name', o.movie_codes || [], 'movie_codes');
 
       document.getElementById('edit-offer-form').addEventListener('submit', function (e) {
         e.preventDefault();
+        const checkedMovies = AdminApp.getCheckedIds(checklistEl, 'movie_codes');
+        if (movies.length > 0 && checkedMovies.length === 0) {
+          window.showToast('Please select at least one eligible movie', 'warning');
+          return;
+        }
         AdminApp.submitForm('/index.php/admin/offer/update', {
           offer_code: offerCode,
           offer_title: document.getElementById('offer_title').value.trim(),
@@ -114,8 +139,9 @@
           money: document.getElementById('money').value,
           offer_validity: document.getElementById('offer_validity').value,
           badge: document.getElementById('badge').value.trim(),
-          img: document.getElementById('img').value.trim(),
+          img: imgInput.value.trim(),
           offer_description: document.getElementById('offer_description').value.trim(),
+          movie_codes: checkedMovies,
         }, 'offers.html', 'Offer updated successfully', 'Failed to update offer');
       });
     });
