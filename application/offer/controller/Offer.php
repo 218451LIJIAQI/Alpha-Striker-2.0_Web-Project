@@ -14,6 +14,7 @@ class Offer extends ApiController
             $movieCode     = $this->idParam('movie_code');
             $sessionUserId = (int) Session::get('user_id', 0);
             $today         = date('Y-m-d');
+            $targetDate    = $this->targetDateParam('date');
 
             $query = Db::name('offer')
                 ->field('offer_code, offer_title, offer_description, promo_code, offer_validity, img, badge, money, offer_type, user_code')
@@ -33,12 +34,13 @@ class Offer extends ApiController
 
             $offers = $query->select();
             if (empty($offers)) {
-                return $this->ok([]);
+                [$empty, $meta] = $this->paginateAndSort([], ['id_asc' => null], 'id_asc');
+                return $this->ok($empty, 'OK', ['meta' => $meta]);
             }
 
             $offerIds  = array_values(array_unique(array_column($offers, 'offer_code')));
             $linkQuery = Db::table('movie_offer')->where('offer_code', 'in', $offerIds);
-            $linkRows  = $this->applyDateWindow($linkQuery, 'valid_from', 'valid_to', $today)->select();
+            $linkRows  = $this->applyDateWindow($linkQuery, 'valid_from', 'valid_to', $targetDate)->select();
             $movieMap  = [];
             foreach ($linkRows as $lr) {
                 $oid = (int) $lr['offer_code'];
@@ -48,7 +50,7 @@ class Offer extends ApiController
             $filtered = [];
             foreach ($offers as $offer) {
                 $validity = trim((string) ($offer['offer_validity'] ?? ''));
-                if ($this->isValidIsoDate($validity) && $validity < $today) {
+                if ($this->isValidIsoDate($validity) && ($validity < $today || $validity < $targetDate)) {
                     continue;
                 }
 
@@ -65,7 +67,17 @@ class Offer extends ApiController
                 $filtered[] = $offer;
             }
 
-            return $this->ok($filtered);
+            [$paged, $meta] = $this->paginateAndSort(
+                $filtered,
+                [
+                    'id_asc'        => function ($a, $b) { return ((int) $a['offer_code']) <=> ((int) $b['offer_code']); },
+                    'discount_desc' => function ($a, $b) { return ((float) $b['money']) <=> ((float) $a['money']); },
+                    'validity_asc'  => function ($a, $b) { return strcmp((string) ($a['offer_validity'] ?? ''), (string) ($b['offer_validity'] ?? '')); },
+                ],
+                'id_asc'
+            );
+
+            return $this->ok($paged, 'OK', ['meta' => $meta]);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to load offers', $e);
         }

@@ -137,7 +137,8 @@ body.dark-mode .promo-status-note.success, body.dark-mode .discount-text,
 body.dark-mode .security-notice, body.dark-mode .trust-item i,
 body.dark-mode .success-checkmark i, body.dark-mode .call-tips li::before { color: #4ade80; }
 
-body.dark-mode .promo-status-note.error { color: #fca5a5; }
+body.dark-mode .promo-status-note.error,
+body.dark-mode .field-error-hint { color: #fca5a5; }
 
 body.dark-mode .giftcard-balance-result.success {
   background-color: rgba(34, 197, 94, 0.16);
@@ -248,7 +249,7 @@ body.dark-mode .promo-clear-btn, body.dark-mode .clear-seats-btn, body.dark-mode
   border-color: #3b4968;
 }
 
-body.dark-mode .edit-btn { background-color: rgba(59, 130, 246, 0.18); color: #93c5fd; }
+body.dark-mode .edit-btn { background-color: rgba(251, 191, 36, 0.16); color: #fde68a; }
 
 body.dark-mode .delete-btn, body.dark-mode .refund-btn, body.dark-mode .expired-pill {
   background-color: rgba(239, 68, 68, 0.2);
@@ -383,12 +384,21 @@ body.dark-mode .user-info-section { background-color: #111726; border-color: #2b
 body.dark-mode .dropdown-item:hover { background-color: #1e273d; color: #fda4af; }
 
 body.dark-mode .view-details {
-  background-color: #2563eb;
-  color: #ffffff;
+  background-color: #27324a;
+  border: 1px solid #3b4968;
+  color: #f8fafc;
 }
 
 body.dark-mode .view-details:hover {
-  background-color: #1d4ed8;
+  background-color: #be123c;
+  border-color: #f43f5e;
+  color: #ffffff;
+}
+
+body.dark-mode .view-details2.is-completed {
+  background-color: #1e273d;
+  border-color: #3b4968;
+  color: #cbd5e1;
 }
 
 body.dark-mode .view-details2 {

@@ -1,8 +1,9 @@
 /**
  * CineTix (Alpha Striker 2.0) — Shared Frontend Runtime
- * Centralizes path resolution, XSS-safe escaping, calendar/email/password/redirect validation,
+ * Centralizes path resolution, XSS-safe escaping, calendar/screening-time/email/password/redirect validation,
  * JSON API requests, server-synced & multi-tab user session state, reversible light/dark theme switching,
- * integer-cent pricing/expiry helpers, pill/tab/state-card UI primitives, focus-restoring modals, and shared header/footer.
+ * integer-cent pricing/expiry helpers, persistent field-error helpers, pill/tab/state-card UI primitives,
+ * WAI-ARIA focus-trapped modals & keyboard-navigable menus, and shared header/footer.
  */
 (function () {
   'use strict';
@@ -13,6 +14,8 @@
   const MAX_PASSWORD_BYTES = 72;
   const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const SEAT_CODE_PATTERN = /^[A-H](?:[1-9]|1[0-2])$/;
+  const FOCUSABLE_SELECTOR =
+    'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
   let lastDialogTrigger = null;
 
@@ -41,12 +44,16 @@
       return currentDepthPrefix() + 'img/logo.jpg';
     }
     const trimmed = rawPath.trim();
-    if (
-      trimmed.startsWith('http://') ||
-      trimmed.startsWith('https://') ||
-      trimmed.startsWith('data:') ||
-      trimmed.startsWith('/')
-    ) {
+    if (!trimmed || /[\x00-\x1f\x7f]/.test(trimmed)) {
+      return currentDepthPrefix() + 'img/logo.jpg';
+    }
+    if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+      if (/^(?:https?:\/\/|data:image\/)/i.test(trimmed)) {
+        return trimmed;
+      }
+      return currentDepthPrefix() + 'img/logo.jpg';
+    }
+    if (trimmed.startsWith('/')) {
       return trimmed;
     }
     return currentDepthPrefix() + trimmed.replace(/^(\.\.\/|\.\/)+/, '');
@@ -119,17 +126,58 @@
     return probe.getFullYear() === year && probe.getMonth() === month - 1 && probe.getDate() === day;
   }
 
+  function parseScreeningMinutes(timeValue) {
+    const str = String(timeValue || '').trim();
+    if (!str) return -1;
+    const m12 = /^(\d{1,2}):(\d{2})\s*([AaPp][Mm])$/.exec(str);
+    if (m12) {
+      const hour = parseInt(m12[1], 10);
+      const min = parseInt(m12[2], 10);
+      if (hour < 1 || hour > 12 || min > 59) return -1;
+      const hour24 = (hour % 12) + (m12[3].toUpperCase() === 'PM' ? 12 : 0);
+      return hour24 * 60 + min;
+    }
+    const m24 = /^([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/.exec(str);
+    if (m24) {
+      return parseInt(m24[1], 10) * 60 + parseInt(m24[2], 10);
+    }
+    return -1;
+  }
+
+  function isScreeningCancelable(dateStr, timeStr, referenceDate) {
+    const iso = String(dateStr || '').trim();
+    if (!isValidIsoDate(iso)) return false;
+    const now = referenceDate instanceof Date ? referenceDate : new Date();
+    const curIso = toIsoDate(now);
+    if (iso < curIso) return false;
+    if (iso > curIso) return true;
+    const mins = parseScreeningMinutes(timeStr);
+    if (mins < 0) return false;
+    const curMins = now.getHours() * 60 + now.getMinutes();
+    return mins > curMins;
+  }
+
   function isValidEmail(value) {
     const str = String(value || '').trim();
     return str.length > 0 && str.length <= 100 && EMAIL_PATTERN.test(str);
   }
 
+  function compareSeatCodes(a, b) {
+    const sa = String(a || '').trim().toUpperCase();
+    const sb = String(b || '').trim().toUpperCase();
+    if (sa === sb) return 0;
+    const ma = /^([A-Z]+)(\d+)$/.exec(sa);
+    const mb = /^([A-Z]+)(\d+)$/.exec(sb);
+    if (ma && mb) {
+      return ma[1] === mb[1]
+        ? parseInt(ma[2], 10) - parseInt(mb[2], 10)
+        : ma[1].localeCompare(mb[1]);
+    }
+    return sa.localeCompare(sb);
+  }
+
   function sortSeatCodes(list) {
-    return list.sort(function (a, b) {
-      return a[0] === b[0]
-        ? parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10)
-        : a.localeCompare(b);
-    });
+    return list.sort(compareSeatCodes);
   }
 
   function parseSeatCodes(raw, maxSeats) {
@@ -145,6 +193,78 @@
     });
     sortSeatCodes(unique);
     return maxSeats > 0 ? unique.slice(0, maxSeats) : unique;
+  }
+
+  function clearFieldError(inputEl) {
+    if (!inputEl) return;
+    if (inputEl.classList) {
+      inputEl.classList.remove('input-error');
+    }
+    if (typeof inputEl.removeAttribute === 'function') {
+      inputEl.removeAttribute('aria-invalid');
+    } else if (typeof inputEl.setAttribute === 'function') {
+      inputEl.setAttribute('aria-invalid', 'false');
+    }
+    const container =
+      (typeof inputEl.closest === 'function' && inputEl.closest('.form-group, .input-group, .promo-form')) ||
+      inputEl.parentNode;
+    if (container && typeof container.querySelector === 'function') {
+      const targetId = inputEl.id ? '[data-error-for="' + inputEl.id + '"]' : '.field-error-hint';
+      const hint = container.querySelector(targetId);
+      if (hint && typeof hint.remove === 'function') {
+        hint.remove();
+      }
+    }
+  }
+
+  function flagFieldError(inputEl, message) {
+    if (!inputEl) return;
+    if (inputEl.classList) {
+      inputEl.classList.add('input-error');
+    }
+    if (typeof inputEl.setAttribute === 'function') {
+      inputEl.setAttribute('aria-invalid', 'true');
+    }
+    if (typeof inputEl.focus === 'function') {
+      inputEl.focus();
+    }
+    if (inputEl.dataset && !inputEl.dataset.errClearBound && typeof inputEl.addEventListener === 'function') {
+      inputEl.dataset.errClearBound = '1';
+      inputEl.addEventListener('input', function () { clearFieldError(inputEl); });
+      inputEl.addEventListener('change', function () { clearFieldError(inputEl); });
+    }
+    if (message) {
+      const container =
+        (typeof inputEl.closest === 'function' && inputEl.closest('.form-group, .input-group')) ||
+        null;
+      if (container && typeof container.querySelector === 'function' && typeof container.appendChild === 'function') {
+        const selector = inputEl.id ? '[data-error-for="' + inputEl.id + '"]' : '.field-error-hint';
+        let hint = container.querySelector(selector);
+        if (!hint && typeof document.createElement === 'function') {
+          hint = document.createElement('div');
+          hint.className = 'field-error-hint';
+          if (typeof hint.setAttribute === 'function') {
+            hint.setAttribute('role', 'alert');
+            if (inputEl.id) hint.setAttribute('data-error-for', inputEl.id);
+          }
+          container.appendChild(hint);
+        }
+        if (hint) {
+          hint.textContent = String(message);
+        }
+      }
+    }
+  }
+
+  function bindFieldErrorClear(scopeEl) {
+    const root = scopeEl || document;
+    if (!root || typeof root.querySelectorAll !== 'function') return;
+    root.querySelectorAll('input, select, textarea').forEach(function (field) {
+      if (field.dataset && field.dataset.errClearBound) return;
+      if (field.dataset) field.dataset.errClearBound = '1';
+      field.addEventListener('input', function () { clearFieldError(field); });
+      field.addEventListener('change', function () { clearFieldError(field); });
+    });
   }
 
   function splitStars(score, fallback) {
@@ -312,6 +432,28 @@
     }
   }
 
+  function getActiveModalDialog() {
+    if (typeof document.querySelector !== 'function') return null;
+    const popup = document.querySelector('.contact-popup');
+    if (popup) return popup;
+
+    const modals = document.querySelectorAll('.contact-modal');
+    for (let i = 0; i < modals.length; i++) {
+      const m = modals[i];
+      if (m.style && m.style.display && m.style.display !== 'none') return m;
+    }
+
+    const chatDialog = document.getElementById('chat-dialog');
+    if (chatDialog && chatDialog.style && chatDialog.style.display && chatDialog.style.display !== 'none') {
+      return chatDialog;
+    }
+
+    const backdrop = document.querySelector('.modal-backdrop:not(.is-hidden)');
+    if (backdrop) return backdrop;
+
+    return null;
+  }
+
   async function fetchJson(url, options) {
     const opts = Object.assign({ credentials: 'same-origin' }, options || {});
     const headers = Object.assign({}, opts.headers || {});
@@ -465,9 +607,13 @@
   }
 
   function toggleDarkMode() {
-    const nextDark = !document.documentElement.classList.contains('dark-mode');
+    const rootEl = document.documentElement;
+    const nextDark = !rootEl.classList.contains('dark-mode');
     localStorage.setItem('darkMode', String(nextDark));
+    rootEl.classList.add('theme-switching');
     applyTheme(nextDark);
+    void rootEl.offsetHeight;
+    rootEl.classList.remove('theme-switching');
   }
 
   initTheme();
@@ -476,7 +622,7 @@
     success: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.2"><polyline points="20 6 9 17 4 12"></polyline></svg>',
     error: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>',
     warning: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
-    info: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>',
+    info: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#991b1b" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>',
   };
 
   const TOAST_TITLES = {
@@ -486,11 +632,58 @@
     info: 'Notice',
   };
 
+  const activeToasts = [];
+
+  function repositionToasts() {
+    for (let i = activeToasts.length - 1; i >= 0; i -= 1) {
+      const candidate = activeToasts[i];
+      if (!candidate || candidate.removed || !candidate.parentNode) {
+        activeToasts.splice(i, 1);
+      }
+    }
+    let offsetTop = 84;
+    for (let i = 0; i < activeToasts.length; i += 1) {
+      const toastEl = activeToasts[i];
+      if (!toastEl.style) toastEl.style = {};
+      toastEl.style.top = offsetTop + 'px';
+      const measuredHeight = Number(toastEl.offsetHeight) > 0 ? Number(toastEl.offsetHeight) : 76;
+      offsetTop += measuredHeight + 12;
+    }
+  }
+
+  function dismissToast(toastEl) {
+    if (!toastEl) return;
+    const idx = activeToasts.indexOf(toastEl);
+    if (idx >= 0) activeToasts.splice(idx, 1);
+    if (toastEl.parentNode && typeof toastEl.remove === 'function') {
+      toastEl.remove();
+    }
+    repositionToasts();
+  }
+
   function showToast(message, type, title) {
     const resolvedType = type || 'info';
     const resolvedTitle = title || TOAST_TITLES[resolvedType] || 'Notice';
 
+    for (let i = activeToasts.length - 1; i >= 0; i -= 1) {
+      if (activeToasts[i] && activeToasts[i].dataset && activeToasts[i].dataset.toastKey === resolvedType + ':' + message) {
+        dismissToast(activeToasts[i]);
+      }
+    }
+    while (activeToasts.length >= 2) {
+      dismissToast(activeToasts[0]);
+    }
+
+    let initialTop = 84;
+    for (let i = 0; i < activeToasts.length; i += 1) {
+      const h = Number(activeToasts[i].offsetHeight) > 0 ? Number(activeToasts[i].offsetHeight) : 76;
+      initialTop += h + 12;
+    }
+
     const el = document.createElement('div');
+    if (!el.style) el.style = {};
+    el.style.top = initialTop + 'px';
+    if (el.dataset) el.dataset.toastKey = resolvedType + ':' + message;
     el.className = 'user-notification ' + escapeHtml(resolvedType);
     if (typeof el.setAttribute === 'function') {
       el.setAttribute('role', resolvedType === 'error' ? 'alert' : 'status');
@@ -507,12 +700,14 @@
       '</div>';
 
     el.querySelector('.notification-close').addEventListener('click', function () {
-      el.remove();
+      dismissToast(el);
     });
 
     document.body.appendChild(el);
+    activeToasts.push(el);
+    repositionToasts();
     setTimeout(function () {
-      if (el.parentNode) el.remove();
+      dismissToast(el);
     }, 3600);
   }
 
@@ -609,6 +804,14 @@
     const headerContainer = document.getElementById('header-container');
     if (!headerContainer) return;
 
+    const prevActiveId =
+      document.activeElement &&
+      typeof headerContainer.contains === 'function' &&
+      headerContainer.contains(document.activeElement)
+        ? document.activeElement.id
+        : '';
+    const wasDropdownOpen = Boolean(document.getElementById('userDropdown')?.classList.contains('show'));
+
     ensureStylesheet('common-header-css', 'css/common/header.css');
     const user = AuthStore.getUser();
     const logoSrc = resolveAssetUrl('img/logo.jpg');
@@ -686,6 +889,11 @@
       'pay.html': 'homepage.html',
       'paysuccess.html': 'homepage.html',
       'theater-details.html': 'theater.html',
+      'giftcards.html': 'offer.html',
+      'help.html': 'about.html',
+      'faqs.html': 'about.html',
+      'privacy.html': 'about.html',
+      'team.html': 'about.html',
     };
     const effectiveFile = navMap[currentFile] || currentFile;
     document.querySelectorAll('.header .nav-link').forEach(function (link) {
@@ -698,11 +906,32 @@
       }
     });
 
+    const headerTicketsLink = document.getElementById('header-tickets-link');
+    if (headerTicketsLink) {
+      const isWallet = currentFile === 'generate_ticket.html';
+      headerTicketsLink.classList.toggle('active', isWallet);
+      if (isWallet) headerTicketsLink.setAttribute('aria-current', 'page');
+      else headerTicketsLink.removeAttribute('aria-current');
+    }
+
     document.getElementById('theme-toggle-btn')?.addEventListener('click', toggleDarkMode);
 
     const profileTrigger = document.getElementById('user-profile-trigger');
     const dropdown = document.getElementById('userDropdown');
     if (profileTrigger && dropdown) {
+      const getMenuItems = function () {
+        return Array.from(dropdown.querySelectorAll('.dropdown-item'));
+      };
+      const openMenuAt = function (targetIdx) {
+        const items = getMenuItems();
+        dropdown.classList.add('show');
+        profileTrigger.setAttribute('aria-expanded', 'true');
+        if (items.length) {
+          const idx = ((targetIdx % items.length) + items.length) % items.length;
+          items[idx].focus();
+        }
+      };
+
       profileTrigger.addEventListener('click', function (e) {
         e.stopPropagation();
         const nextOpen = !dropdown.classList.contains('show');
@@ -712,9 +941,31 @@
       profileTrigger.addEventListener('keydown', function (e) {
         if (e.key === 'ArrowDown') {
           e.preventDefault();
-          dropdown.classList.add('show');
-          profileTrigger.setAttribute('aria-expanded', 'true');
-          dropdown.querySelector('.dropdown-item')?.focus();
+          openMenuAt(0);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          openMenuAt(-1);
+        }
+      });
+      dropdown.addEventListener('keydown', function (e) {
+        const items = getMenuItems();
+        if (!items.length) return;
+        const curIdx = items.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          items[(curIdx + 1) % items.length].focus();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          items[(curIdx <= 0 ? items.length - 1 : curIdx - 1)].focus();
+        } else if (e.key === 'Home') {
+          e.preventDefault();
+          items[0].focus();
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          items[items.length - 1].focus();
+        } else if (e.key === 'Tab') {
+          dropdown.classList.remove('show');
+          profileTrigger.setAttribute('aria-expanded', 'false');
         }
       });
     }
@@ -725,6 +976,14 @@
       await AuthStore.logout();
       window.location.href = rootUrl('login.html');
     });
+
+    if (wasDropdownOpen && dropdown && profileTrigger) {
+      dropdown.classList.add('show');
+      profileTrigger.setAttribute('aria-expanded', 'true');
+    }
+    if (prevActiveId) {
+      document.getElementById(prevActiveId)?.focus();
+    }
   }
 
   function renderFooter() {
@@ -833,6 +1092,31 @@
   });
 
   document.addEventListener('keydown', function (event) {
+    if (event.key === 'Tab') {
+      const activeModal = getActiveModalDialog();
+      if (activeModal && typeof activeModal.querySelectorAll === 'function') {
+        const focusables = Array.from(activeModal.querySelectorAll(FOCUSABLE_SELECTOR)).filter(function (el) {
+          return !el.closest('.is-hidden');
+        });
+        if (focusables.length > 0) {
+          const first = focusables[0];
+          const last = focusables[focusables.length - 1];
+          const active = document.activeElement;
+          const inside = focusables.indexOf(active) !== -1;
+          if (event.shiftKey) {
+            if (!inside || active === first) {
+              event.preventDefault();
+              last.focus();
+            }
+          } else if (!inside || active === last) {
+            event.preventDefault();
+            first.focus();
+          }
+        }
+      }
+      return;
+    }
+
     if (event.key !== 'Escape') return;
 
     const dd = document.getElementById('userDropdown');
@@ -886,17 +1170,23 @@
   window.CineTicket = {
     AuthStore: AuthStore,
     activatePill: activatePill,
+    bindFieldErrorClear: bindFieldErrorClear,
     bindTabList: bindTabList,
     calcGroupDiscount: calcGroupDiscount,
     calculateCheckoutPricing: calculateCheckoutPricing,
+    clearFieldError: clearFieldError,
+    compareSeatCodes: compareSeatCodes,
     escapeHtml: escapeHtml,
     fetchJson: fetchJson,
+    flagFieldError: flagFieldError,
     formatStars: formatStars,
     isCardExpiryValid: isCardExpiryValid,
+    isScreeningCancelable: isScreeningCancelable,
     isValidEmail: isValidEmail,
     isValidIsoDate: isValidIsoDate,
     isValidPasswordBytes: isValidPasswordBytes,
     pageUrl: pageUrl,
+    parseScreeningMinutes: parseScreeningMinutes,
     parseSeatCodes: parseSeatCodes,
     rememberDialogTrigger: rememberDialogTrigger,
     renderStarIcons: renderStarIcons,

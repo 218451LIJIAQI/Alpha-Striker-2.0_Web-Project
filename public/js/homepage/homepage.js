@@ -1,5 +1,6 @@
 /**
  * Movies Catalog & Search Controller (Homepage)
+ * Supports URL query deep-linking (?genre=, ?q=), refresh recovery, and browser Back/Forward (popstate) sync.
  */
 (function () {
   'use strict';
@@ -7,11 +8,28 @@
   let requestSeq = 0;
   let activeGenre = 'all';
 
+  function syncUrlQuery(genre, keyword) {
+    if (!window.history || typeof window.history.pushState !== 'function') return;
+    const params = new URLSearchParams();
+    if (keyword) {
+      params.set('q', keyword);
+    } else if (genre && genre !== 'all') {
+      params.set('genre', genre);
+    }
+    const qs = params.toString();
+    const nextUrl = window.location.pathname + (qs ? '?' + qs : '') + (window.location.hash || '');
+    const curUrl = window.location.pathname + (window.location.search || '') + (window.location.hash || '');
+    if (nextUrl !== curUrl) {
+      window.history.pushState(null, '', nextUrl);
+    }
+  }
+
   function setGenreActive(targetGenre) {
     activeGenre = targetGenre || 'all';
+    const lowerTarget = activeGenre.toLowerCase();
     window.CineTicket.activatePill(
       document.querySelectorAll('.filters .btn-filter'),
-      function (btn) { return (btn.dataset.genre || 'all') === activeGenre; }
+      function (btn) { return (btn.dataset.genre || 'all').toLowerCase() === lowerTarget; }
     );
   }
 
@@ -23,6 +41,7 @@
       setGenreActive(genre);
       const searchInput = document.querySelector('.search-input');
       if (searchInput) searchInput.value = '';
+      syncUrlQuery(genre, '');
       fetchMovies(genre);
     });
   }
@@ -97,6 +116,7 @@
     const searchInput = document.querySelector('.search-input');
     if (searchInput) searchInput.value = '';
     setGenreActive('all');
+    syncUrlQuery('all', '');
     fetchMovies('all');
   }
 
@@ -166,14 +186,11 @@
     const searchBtn = document.querySelector('.search-btn');
 
     document.querySelectorAll('.filters .btn-filter').forEach(bindGenreButton);
-    setGenreActive('all');
-    fetchMovies('all');
-
     document.getElementById('view-all-movies-btn')?.addEventListener('click', fetchAllMovies);
 
-    async function triggerSearch() {
-      const keyword = searchInput ? searchInput.value.trim() : '';
+    async function runKeywordSearch(keyword, updateHistory) {
       setGenreActive('all');
+      if (updateHistory !== false) syncUrlQuery('all', keyword);
       if (!keyword) {
         fetchMovies('all');
         return;
@@ -190,20 +207,39 @@
         } else {
           const msg = payload.message || 'Search failed';
           window.showToast(msg, 'error');
-          renderCatalogError(msg, triggerSearch);
+          renderCatalogError(msg, function () { runKeywordSearch(keyword, false); });
         }
       } catch (_) {
         if (seq !== requestSeq) return;
         window.showToast('Unable to search movies right now', 'error');
-        renderCatalogError('Search request could not reach the server right now.', triggerSearch);
+        renderCatalogError('Search request could not reach the server right now.', function () { runKeywordSearch(keyword, false); });
       }
     }
 
-    searchBtn?.addEventListener('click', triggerSearch);
+    function applyFromUrl() {
+      const qs = new URLSearchParams(window.location.search);
+      const q = (qs.get('q') || '').trim();
+      const g = (qs.get('genre') || 'all').trim() || 'all';
+      if (q) {
+        if (searchInput) searchInput.value = q;
+        runKeywordSearch(q, false);
+      } else {
+        if (searchInput) searchInput.value = '';
+        setGenreActive(g);
+        fetchMovies(g);
+      }
+    }
+
+    applyFromUrl();
+    window.addEventListener('popstate', applyFromUrl);
+
+    searchBtn?.addEventListener('click', function () {
+      runKeywordSearch(searchInput ? searchInput.value.trim() : '', true);
+    });
     searchInput?.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') {
         e.preventDefault();
-        triggerSearch();
+        runKeywordSearch(searchInput.value.trim(), true);
       }
     });
   });

@@ -323,8 +323,12 @@
             <h4><i class="fas fa-phone-square" aria-hidden="true"></i> Request a Callback</h4>
             <p>Too busy to call right now? Schedule a callback at your convenience.</p>
             <div class="callback-form">
-              <input type="tel" placeholder="Your phone number" class="callback-input" aria-label="Your phone number">
-              <select class="callback-time" aria-label="Preferred callback window">
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="sr-only" for="callback-phone-input">Your phone number</label>
+                <input type="tel" id="callback-phone-input" placeholder="Your phone number" class="callback-input" aria-label="Your phone number">
+              </div>
+              <label class="sr-only" for="callback-time-select">Preferred callback window</label>
+              <select id="callback-time-select" class="callback-time" aria-label="Preferred callback window">
                 <option>Within 1 hour</option>
                 <option>Within 2 hours</option>
                 <option>This evening</option>
@@ -560,6 +564,7 @@
 
       <div class="chat-input-section">
         <div class="chat-input">
+          <label class="sr-only" for="chat-input-field">Type your chat message</label>
           <input type="text" placeholder="Type your message..." id="chat-input-field" aria-label="Type your chat message">
           <button type="button" class="send-message" aria-label="Send message">
             <i class="fas fa-paper-plane" aria-hidden="true"></i>

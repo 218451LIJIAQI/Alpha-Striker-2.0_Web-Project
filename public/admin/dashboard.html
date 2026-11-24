@@ -23,6 +23,8 @@
       </div>
     </div>
 
+    <div id="dashboard-error-banner" class="table-container is-hidden" role="alert"></div>
+
     <section class="stats-container" aria-label="Key Box Office Metrics">
       <div class="stat-card">
         <div class="stat-icon"><i class="fas fa-film" aria-hidden="true"></i></div>
@@ -121,58 +123,73 @@
         window.print();
       });
 
-      const palette = ['#be123c', '#d97706', '#1d4ed8', '#15803d', '#0f766e', '#7c3aed', '#0284c7'];
-      const todayIso = window.CineTicket.todayIso();
+      const palette = ['#be123c', '#d97706', '#0f766e', '#15803d', '#9f1239', '#b45309', '#475569'];
+      const errorBanner = document.getElementById('dashboard-error-banner');
+      let genreCounts = {};
+      let bookingCounts = {};
 
-      try {
-        const [moviesRes, offersRes, seatsRes, usersRes, theatersRes] = await Promise.all([
-          AdminApp.apiFetch('/index.php/admin/movie/index'),
-          AdminApp.apiFetch('/index.php/admin/offer/index'),
-          AdminApp.apiFetch('/index.php/admin/seat/index'),
-          AdminApp.apiFetch('/index.php/admin/user/index'),
-          AdminApp.apiFetch('/index.php/admin/theater/index'),
-        ]);
-
-        const list = function (res) { return res.success && Array.isArray(res.data) ? res.data : []; };
-        const movies = list(moviesRes);
-        const offers = list(offersRes);
-        const activeOffers = offers.filter(function (o) {
-          return !o.offer_validity || String(o.offer_validity) >= todayIso;
-        });
-        const seats = list(seatsRes);
-
-        document.getElementById('stat-movies').textContent = String(movies.length);
-        document.getElementById('stat-offers').textContent = String(activeOffers.length);
-        if (activeOffers.length !== offers.length) {
-          document.getElementById('stat-offers-label').textContent = 'Active Offers (' + offers.length + ' total)';
-        }
-        document.getElementById('stat-seats').textContent = String(seats.length);
-        document.getElementById('stat-users').textContent = String(list(usersRes).length);
-        document.getElementById('stat-theaters').textContent = String(list(theatersRes).length);
-
-        const genreCounts = {};
-        movies.forEach(function (m) {
-          const g = m.movie_type || 'Other';
-          genreCounts[g] = (genreCounts[g] || 0) + 1;
-        });
-
-        const bookingCounts = {};
-        seats.forEach(function (s) {
-          const title = (s.movie && s.movie.movie_name) ? s.movie.movie_name : ('Movie #' + s.movie_code);
-          bookingCounts[title] = (bookingCounts[title] || 0) + 1;
-        });
-
-        function renderCharts() {
-          AdminApp.drawBarChart(document.getElementById('genre-chart'), Object.keys(genreCounts), Object.values(genreCounts), palette);
-          AdminApp.drawBarChart(document.getElementById('booking-chart'), Object.keys(bookingCounts), Object.values(bookingCounts), palette);
-        }
-
-        renderCharts();
-        window.addEventListener('resize', renderCharts);
-        window.addEventListener('cinetix:themechange', renderCharts);
-      } catch (_) {
-        window.showToast('Failed to load dashboard metrics', 'error');
+      function renderCharts() {
+        AdminApp.drawBarChart(document.getElementById('genre-chart'), Object.keys(genreCounts), Object.values(genreCounts), palette);
+        AdminApp.drawBarChart(document.getElementById('booking-chart'), Object.keys(bookingCounts), Object.values(bookingCounts), palette);
       }
+
+      async function loadDashboard() {
+        const todayIso = window.CineTicket.todayIso();
+        errorBanner.classList.add('is-hidden');
+        try {
+          const [moviesRes, offersRes, seatsRes, usersRes, theatersRes] = await Promise.all([
+            AdminApp.apiFetch('/index.php/admin/movie/index'),
+            AdminApp.apiFetch('/index.php/admin/offer/index'),
+            AdminApp.apiFetch('/index.php/admin/seat/index'),
+            AdminApp.apiFetch('/index.php/admin/user/index'),
+            AdminApp.apiFetch('/index.php/admin/theater/index'),
+          ]);
+
+          const list = function (res) { return res.success && Array.isArray(res.data) ? res.data : []; };
+          const movies = list(moviesRes);
+          const offers = list(offersRes);
+          const activeOffers = offers.filter(function (o) {
+            return !o.offer_validity || String(o.offer_validity) >= todayIso;
+          });
+          const seats = list(seatsRes);
+
+          document.getElementById('stat-movies').textContent = String(movies.length);
+          document.getElementById('stat-offers').textContent = String(activeOffers.length);
+          document.getElementById('stat-offers-label').textContent = activeOffers.length !== offers.length
+            ? ('Active Offers (' + offers.length + ' total)')
+            : 'Active Offers';
+          document.getElementById('stat-seats').textContent = String(seats.length);
+          document.getElementById('stat-users').textContent = String(list(usersRes).length);
+          document.getElementById('stat-theaters').textContent = String(list(theatersRes).length);
+
+          genreCounts = {};
+          movies.forEach(function (m) {
+            const g = m.movie_type || 'Other';
+            genreCounts[g] = (genreCounts[g] || 0) + 1;
+          });
+
+          bookingCounts = {};
+          seats.forEach(function (s) {
+            const title = (s.movie && s.movie.movie_name) ? s.movie.movie_name : ('Movie #' + s.movie_code);
+            bookingCounts[title] = (bookingCounts[title] || 0) + 1;
+          });
+
+          renderCharts();
+        } catch (_) {
+          errorBanner.classList.remove('is-hidden');
+          errorBanner.innerHTML =
+            '<div class="empty-state table-error-state">' +
+            '<strong>Unable to load dashboard metrics.</strong> ' +
+            '<button type="button" class="toolbar-btn retry-table-btn" id="retry-dashboard-btn"><i class="fas fa-undo" aria-hidden="true"></i> Retry</button>' +
+            '</div>';
+          document.getElementById('retry-dashboard-btn')?.addEventListener('click', loadDashboard);
+          window.showToast('Failed to load dashboard metrics', 'error');
+        }
+      }
+
+      await loadDashboard();
+      window.addEventListener('resize', renderCharts);
+      window.addEventListener('cinetix:themechange', renderCharts);
     });
   </script>
 </body>

@@ -1,7 +1,7 @@
 /**
  * Shared Admin Console Runtime
  * Centralizes authenticated API calls (X-Admin-Token), cross-tab session guard, navigation,
- * relation checklists, search/filter/sort/reset/pagination/bulk-action/CSV(formula-safe)/print table controller,
+ * relation checklists, accessible search/filter/sort/reset/pagination/atomic-bulk-action/CSV(formula-safe)/print table controller,
  * load-error retry handling, anti-double-submit CRUD helpers, and Canvas charts.
  */
 (function () {
@@ -20,7 +20,6 @@
   function clearAdminSession() {
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
-    localStorage.removeItem('adminRemember');
   }
 
   if (typeof window.addEventListener === 'function') {
@@ -269,7 +268,7 @@
     });
     function sync() {
       const val = inputEl.value.trim();
-      if (/\.(jpe?g|png|webp|gif|svg)(\?.*)?$/i.test(val) || val.startsWith('data:')) {
+      if (/\.(jpe?g|png|webp|gif|svg)(\?.*)?$/i.test(val) || /^data:image\//i.test(val)) {
         previewEl.src = CT.resolveAssetUrl(val);
         previewEl.style.display = 'block';
       } else {
@@ -279,6 +278,22 @@
     inputEl.addEventListener('change', sync);
     inputEl.addEventListener('input', sync);
     return sync;
+  }
+
+  function renderFormLoadError(formEl, message, backHref, backLabel, onRetry) {
+    if (!formEl) return;
+    formEl.innerHTML =
+      '<div class="empty-state table-error-state" role="alert">' +
+      '<strong>Unable to load record:</strong> ' + CT.escapeHtml(message || 'Record could not be retrieved.') +
+      '<div class="form-actions" style="justify-content:center;border-top:0;padding-top:14px;margin-top:10px;">' +
+      (typeof onRetry === 'function'
+        ? '<button type="button" class="submit-btn" data-role="retry-form"><i class="fas fa-undo" aria-hidden="true"></i> Retry</button>'
+        : '') +
+      '<a href="' + CT.escapeHtml(backHref || 'dashboard.html') + '" class="cancel-btn">' + CT.escapeHtml(backLabel || 'Back to List') + '</a>' +
+      '</div></div>';
+    if (typeof onRetry === 'function') {
+      formEl.querySelector('[data-role="retry-form"]')?.addEventListener('click', onRetry);
+    }
   }
 
   async function submitForm(endpoint, payload, redirectUrl, successMsg, fallbackErr, submitBtn) {
@@ -301,12 +316,14 @@
   }
 
   /**
-   * Reusable client-side search, filter, sort, reset, pagination, bulk-action, error/retry & CSV/Print controller.
+   * Reusable client-side search, filter, whitelisted sort, reset, pagination, atomic bulk-action, error/retry & CSV/Print controller.
    */
   function createTableController(config) {
     const toolbarEl = document.getElementById(config.toolbarId);
     const tbody = document.getElementById(config.tbodyId);
     const defaultSortKey = (config.sorts && config.sorts[0] && config.sorts[0].key) || 'default';
+    const allowedSortKeys = new Set((config.sorts || []).map(function (s) { return s.key; }));
+    const idPrefix = String(config.toolbarId || 'admin-toolbar').replace(/[^A-Za-z0-9_-]/g, '');
     let allItems = [];
     let filteredCache = [];
     let loadError = '';
@@ -340,8 +357,13 @@
     }
 
     if (toolbarEl) {
+      const searchInputId = idPrefix + '-search';
+      const filterSelectId = idPrefix + '-filter';
+      const sortSelectId = idPrefix + '-sort';
+
       const filterSelectHtml = Array.isArray(config.filters) && config.filters.length
-        ? '<select class="toolbar-select" data-role="filter" aria-label="Filter records">' +
+        ? '<label class="sr-only" for="' + CT.escapeHtml(filterSelectId) + '">Filter records</label>' +
+          '<select id="' + CT.escapeHtml(filterSelectId) + '" class="toolbar-select" data-role="filter" aria-label="Filter records">' +
           config.filters.map(function (f) {
             return '<option value="' + CT.escapeHtml(f.value) + '">' + CT.escapeHtml(f.label) + '</option>';
           }).join('') +
@@ -349,7 +371,8 @@
         : '';
 
       const sortSelectHtml = Array.isArray(config.sorts) && config.sorts.length
-        ? '<select class="toolbar-select" data-role="sort" aria-label="Sort records">' +
+        ? '<label class="sr-only" for="' + CT.escapeHtml(sortSelectId) + '">Sort records</label>' +
+          '<select id="' + CT.escapeHtml(sortSelectId) + '" class="toolbar-select" data-role="sort" aria-label="Sort records">' +
           config.sorts.map(function (s) {
             return '<option value="' + CT.escapeHtml(s.key) + '">' + CT.escapeHtml(s.label) + '</option>';
           }).join('') +
@@ -367,7 +390,8 @@
 
       toolbarEl.innerHTML =
         '<div class="admin-toolbar-left">' +
-        '<input type="search" class="toolbar-search" placeholder="' + CT.escapeHtml(config.searchPlaceholder || 'Search records...') + '" aria-label="Search table">' +
+        '<label class="sr-only" for="' + CT.escapeHtml(searchInputId) + '">Search records</label>' +
+        '<input id="' + CT.escapeHtml(searchInputId) + '" type="search" class="toolbar-search" placeholder="' + CT.escapeHtml(config.searchPlaceholder || 'Search records...') + '" aria-label="Search table">' +
         filterSelectHtml +
         sortSelectHtml +
         resetBtnHtml +
@@ -394,7 +418,8 @@
         render();
       });
       sortEl?.addEventListener('change', function (e) {
-        sortKey = e.target.value;
+        const nextSort = e.target.value;
+        sortKey = allowedSortKeys.has(nextSort) ? nextSort : defaultSortKey;
         page = 1;
         render();
       });
@@ -431,13 +456,26 @@
         btn.disabled = true;
         let okCount = 0;
         try {
-          for (let i = 0; i < ids.length; i++) {
-            const payload = {};
-            payload[bulkCfg.idKey] = ids[i];
-            const res = await apiFetch(bulkCfg.endpoint, { method: 'POST', body: payload });
+          if (bulkCfg.batchKey) {
+            const batchPayload = {};
+            batchPayload[bulkCfg.batchKey] = ids;
+            const res = await apiFetch(bulkCfg.endpoint, { method: 'POST', body: batchPayload });
             if (res && res.success) {
-              okCount += 1;
-              selectedIds.delete(ids[i]);
+              okCount = (res.data && Number(res.data.deleted_count)) || ids.length;
+              ids.forEach(function (id) { selectedIds.delete(id); });
+            } else if (res && res.message) {
+              window.showToast(res.message, 'error');
+              return;
+            }
+          } else {
+            for (let i = 0; i < ids.length; i++) {
+              const payload = {};
+              payload[bulkCfg.idKey] = ids[i];
+              const res = await apiFetch(bulkCfg.endpoint, { method: 'POST', body: payload });
+              if (res && res.success) {
+                okCount += 1;
+                selectedIds.delete(ids[i]);
+              }
             }
           }
           if (okCount > 0) {
@@ -703,7 +741,7 @@
     populateUserSelect: populateUserSelect,
     renderAdminNav: renderAdminNav,
     renderCheckList: renderCheckList,
-    resolveAdminAsset: CT.resolveAssetUrl,
+    renderFormLoadError: renderFormLoadError,
     sanitizeCsvCell: sanitizeCsvCell,
     submitForm: submitForm,
   };

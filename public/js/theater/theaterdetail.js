@@ -27,13 +27,46 @@
   }
 
   function initTabs() {
+    const tabBtns = Array.from(document.querySelectorAll('.tab-btn'));
     const tabContents = document.querySelectorAll('.tab-content');
-    window.CineTicket.bindTabList(document.querySelectorAll('.tab-btn'), function (btn) {
-      const target = btn.getAttribute('data-tab');
+    if (!tabBtns.length) return;
+
+    function activateTabKey(tabKey, updateUrl) {
+      const btn = tabBtns.find(function (b) { return b.getAttribute('data-tab') === tabKey; }) || tabBtns[0];
+      const resolvedKey = btn.getAttribute('data-tab') || 'overview';
+      tabContents.forEach(function (c) {
+        c.classList.toggle('active', c.id === resolvedKey + '-tab');
+      });
+      syncTabAria(btn);
+      if (updateUrl && window.history && typeof window.history.replaceState === 'function') {
+        const qs = new URLSearchParams(window.location.search);
+        if (resolvedKey === 'overview') qs.delete('tab');
+        else qs.set('tab', resolvedKey);
+        const query = qs.toString();
+        window.history.replaceState(null, '', window.location.pathname + (query ? '?' + query : '') + (window.location.hash || ''));
+      }
+    }
+
+    const syncTabAria = window.CineTicket.bindTabList(tabBtns, function (btn) {
+      const target = btn.getAttribute('data-tab') || 'overview';
       tabContents.forEach(function (c) {
         c.classList.toggle('active', c.id === target + '-tab');
       });
+      if (window.history && typeof window.history.replaceState === 'function') {
+        const qs = new URLSearchParams(window.location.search);
+        if (target === 'overview') qs.delete('tab');
+        else qs.set('tab', target);
+        const query = qs.toString();
+        window.history.replaceState(null, '', window.location.pathname + (query ? '?' + query : '') + (window.location.hash || ''));
+      }
     });
+
+    const syncFromUrl = function () {
+      const reqTab = new URLSearchParams(window.location.search).get('tab') || 'overview';
+      activateTabKey(reqTab, false);
+    };
+    syncFromUrl();
+    window.addEventListener('popstate', syncFromUrl);
   }
 
   function renderAmenityCards(items, esc) {

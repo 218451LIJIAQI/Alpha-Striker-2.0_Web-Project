@@ -21,7 +21,8 @@ class Theater extends BaseAdmin
         try {
             $theaters = Db::name('theater')->order('theater_code', 'asc')->select();
             if (empty($theaters)) {
-                return $this->ok([]);
+                [$empty, $meta] = $this->paginateAndSort([], ['id_asc' => null], 'id_asc');
+                return $this->ok($empty, 'OK', ['meta' => $meta]);
             }
 
             $movieMap = $this->mapRelationIds('theater_movie', 'theater_code', 'movie_code');
@@ -33,7 +34,33 @@ class Theater extends BaseAdmin
             }
             unset($t);
 
-            return $this->ok($theaters);
+            $keyword = strtolower($this->strParam('keyword'));
+            $format  = strtolower($this->strParam('filter', 'all'));
+
+            [$paged, $meta] = $this->paginateAndSort(
+                $theaters,
+                [
+                    'id_asc'      => function ($a, $b) { return ((int) $a['theater_code']) <=> ((int) $b['theater_code']); },
+                    'id_desc'     => function ($a, $b) { return ((int) $b['theater_code']) <=> ((int) $a['theater_code']); },
+                    'name_asc'    => function ($a, $b) { return strcasecmp((string) $a['theater_name'], (string) $b['theater_name']); },
+                    'rating_desc' => function ($a, $b) { return ((float) $b['star']) <=> ((float) $a['star']); },
+                ],
+                'id_asc',
+                function ($t) use ($keyword, $format) {
+                    if ($format !== '' && $format !== 'all' && strpos(strtolower((string) ($t['amenity'] ?? '')), $format) === false) {
+                        return false;
+                    }
+                    if ($keyword !== '') {
+                        $hay = strtolower('#' . $t['theater_code'] . ' ' . ($t['theater_name'] ?? '') . ' ' . ($t['theater_id'] ?? '') . ' ' . ($t['address'] ?? '') . ' ' . ($t['amenity'] ?? ''));
+                        if (strpos($hay, $keyword) === false) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+            );
+
+            return $this->ok($paged, 'OK', ['meta' => $meta]);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to query theaters', $e);
         }
@@ -156,24 +183,32 @@ class Theater extends BaseAdmin
     public function delete($theater_code = '')
     {
         try {
-            $theaterId = $this->idParam('theater_code', $theater_code);
-            if ($theaterId <= 0) {
+            $targetIds = $this->resolveTargetIds('theater_code', 'theater_codes', $theater_code);
+            if (empty($targetIds)) {
                 return $this->fail('Valid theater_code is required');
             }
 
             Db::startTrans();
             try {
-                if (!Db::name('theater')->where('theater_code', $theaterId)->find()) {
+                $existingIds = array_map(
+                    'intval',
+                    Db::name('theater')->where('theater_code', 'in', $targetIds)->lock(true)->column('theater_code') ?: []
+                );
+                if (empty($existingIds)) {
                     Db::rollback();
                     return $this->fail('Theater not found', 404);
                 }
 
-                Db::table('theater_movie')->where('theater_code', $theaterId)->delete();
-                Db::name('seat')->where('theater_code', $theaterId)->delete();
-                Db::name('theater')->where('theater_code', $theaterId)->delete();
+                Db::table('theater_movie')->where('theater_code', 'in', $existingIds)->delete();
+                Db::name('seat')->where('theater_code', 'in', $existingIds)->delete();
+                Db::name('theater')->where('theater_code', 'in', $existingIds)->delete();
 
                 Db::commit();
-                return $this->ok(['theater_code' => $theaterId], 'Theater deleted successfully');
+                return $this->ok([
+                    'theater_code'  => $existingIds[0],
+                    'deleted_ids'   => $existingIds,
+                    'deleted_count' => count($existingIds),
+                ], 'Theater deleted successfully');
             } catch (\Throwable $txErr) {
                 Db::rollback();
                 throw $txErr;
@@ -201,7 +236,7 @@ class Theater extends BaseAdmin
         if ($address === '' || $this->textLen($address) > 500) {
             return [null, 'Theater address (1-500 characters) is required'];
         }
-        if ($img === '' || $this->textLen($img) > 500) {
+        if (!$this->isValidAssetPath($img)) {
             return [null, 'Theater image path or URL (1-500 characters) is required'];
         }
         if ($amenity !== '' && $this->textLen($amenity) > 500) {

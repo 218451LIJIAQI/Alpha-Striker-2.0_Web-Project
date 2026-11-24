@@ -123,6 +123,25 @@
         });
       }
 
+      function applyFormatFilter(fmt, updateUrl) {
+        const matchedBtn = Array.from(filterBtns).find(function (b) { return b.dataset.format === fmt; });
+        const resolved = matchedBtn ? fmt : 'all';
+        CT.activatePill(filterBtns, function (b) { return b.dataset.format === resolved; });
+        cards.forEach(function (card) {
+          card.classList.toggle('is-hidden', resolved !== 'all' && card.dataset.format !== resolved);
+        });
+        if (updateUrl && window.history && typeof window.history.pushState === 'function') {
+          const qs = new URLSearchParams();
+          if (resolved !== 'all') qs.set('format', resolved);
+          const q = qs.toString();
+          const nextUrl = window.location.pathname + (q ? '?' + q : '');
+          const curUrl = window.location.pathname + (window.location.search || '');
+          if (nextUrl !== curUrl) {
+            window.history.pushState(null, '', nextUrl);
+          }
+        }
+      }
+
       document.querySelectorAll('.remind-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
           const id = btn.dataset.id;
@@ -144,14 +163,15 @@
 
       filterBtns.forEach(function (btn) {
         btn.addEventListener('click', function () {
-          CT.activatePill(filterBtns, btn);
-          const fmt = btn.dataset.format || 'all';
-          cards.forEach(function (card) {
-            card.classList.toggle('is-hidden', fmt !== 'all' && card.dataset.format !== fmt);
-          });
+          applyFormatFilter(btn.dataset.format || 'all', true);
         });
       });
 
+      const syncFromUrl = function () {
+        applyFormatFilter(new URLSearchParams(window.location.search).get('format') || 'all', false);
+      };
+      syncFromUrl();
+      window.addEventListener('popstate', syncFromUrl);
       syncReminderButtons();
     });
   </script>

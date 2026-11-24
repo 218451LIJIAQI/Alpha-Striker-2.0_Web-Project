@@ -15,7 +15,25 @@ class User extends BaseAdmin
                 ->order('user_code', 'asc')
                 ->select();
 
-            return $this->ok($users);
+            $keyword = strtolower($this->strParam('keyword'));
+            [$paged, $meta] = $this->paginateAndSort(
+                $users,
+                [
+                    'id_asc'   => function ($a, $b) { return ((int) $a['user_code']) <=> ((int) $b['user_code']); },
+                    'id_desc'  => function ($a, $b) { return ((int) $b['user_code']) <=> ((int) $a['user_code']); },
+                    'name_asc' => function ($a, $b) { return strcasecmp((string) $a['user_name'], (string) $b['user_name']); },
+                ],
+                'id_asc',
+                function ($u) use ($keyword) {
+                    if ($keyword === '') {
+                        return true;
+                    }
+                    $hay = strtolower('#' . $u['user_code'] . ' ' . ($u['user_name'] ?? '') . ' ' . ($u['email'] ?? ''));
+                    return strpos($hay, $keyword) !== false;
+                }
+            );
+
+            return $this->ok($paged, 'OK', ['meta' => $meta]);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to query users', $e);
         }
@@ -128,24 +146,32 @@ class User extends BaseAdmin
     public function delete($user_code = '')
     {
         try {
-            $userId = $this->idParam('user_code', $user_code);
-            if ($userId <= 0) {
+            $targetIds = $this->resolveTargetIds('user_code', 'user_codes', $user_code);
+            if (empty($targetIds)) {
                 return $this->fail('Valid user_code is required');
             }
 
             Db::startTrans();
             try {
-                if (!Db::name('user')->where('user_code', $userId)->find()) {
+                $existingIds = array_map(
+                    'intval',
+                    Db::name('user')->where('user_code', 'in', $targetIds)->lock(true)->column('user_code') ?: []
+                );
+                if (empty($existingIds)) {
                     Db::rollback();
                     return $this->fail('User not found', 404);
                 }
 
-                Db::name('seat')->where('user_code', $userId)->update(['user_code' => null]);
-                Db::name('offer')->where('user_code', $userId)->update(['user_code' => null]);
-                Db::name('user')->where('user_code', $userId)->delete();
+                Db::name('seat')->where('user_code', 'in', $existingIds)->update(['user_code' => null]);
+                Db::name('offer')->where('user_code', 'in', $existingIds)->update(['user_code' => null]);
+                Db::name('user')->where('user_code', 'in', $existingIds)->delete();
 
                 Db::commit();
-                return $this->ok(['user_code' => $userId], 'User deleted successfully');
+                return $this->ok([
+                    'user_code'     => $existingIds[0],
+                    'deleted_ids'   => $existingIds,
+                    'deleted_count' => count($existingIds),
+                ], 'User deleted successfully');
             } catch (\Throwable $txErr) {
                 Db::rollback();
                 throw $txErr;

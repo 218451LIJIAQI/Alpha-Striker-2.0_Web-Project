@@ -53,6 +53,24 @@ html, body {
 
 .is-hidden { display: none !important; }
 
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Unified Field-Level Validation Error State */
 .input-error,
 input[aria-invalid="true"],
@@ -60,6 +78,14 @@ select[aria-invalid="true"],
 textarea[aria-invalid="true"] {
   border-color: var(--brand-danger);
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.16);
+}
+
+.field-error-hint {
+  margin-top: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--brand-danger);
+  line-height: 1.35;
 }
 
 .noscript-fallback,
@@ -318,7 +344,8 @@ select:focus-visible, textarea:focus-visible, [role="button"]:focus-visible,
   transition: background-color 0.18s ease, border-color 0.18s ease;
 }
 
-.user-profile:hover { background-color: rgba(255, 255, 255, 0.18); border-color: rgba(251, 191, 36, 0.45); }
+.user-profile:hover,
+.user-profile.active { background-color: rgba(255, 255, 255, 0.18); border-color: rgba(251, 191, 36, 0.65); }
 
 .user-name {
   font-weight: 600;
@@ -568,7 +595,7 @@ html.dark-mode .dark-mode-toggle .sun-icon, body.dark-mode .dark-mode-toggle .su
 /* Unified Toast Notification */
 .user-notification {
   position: fixed;
-  top: 20px;
+  top: 84px;
   right: 20px;
   background: var(--surface-bg);
   color: var(--text-main);
@@ -576,6 +603,7 @@ html.dark-mode .dark-mode-toggle .sun-icon, body.dark-mode .dark-mode-toggle .su
   box-shadow: var(--shadow-elevated);
   border: 1px solid var(--border-color);
   z-index: 10000;
+  transition: top 0.18s ease-out;
   animation: toastSlideIn 0.22s ease-out;
   max-width: 370px;
   min-width: 260px;

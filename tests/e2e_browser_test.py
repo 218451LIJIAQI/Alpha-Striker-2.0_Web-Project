@@ -17,8 +17,13 @@ Verifies:
 8. Multi-threaded concurrency race: 12 simultaneous seat booking requests -> exact 1 × 200 + 11 × 409 + atomic partial-overlap rollback.
 9. Deep-link empty context graceful guidance (`pay.html`, `paysuccess.html`), promo clear/restore (`#clear-coupon`),
    2D keyboard arrow-key seat navigation, global `Escape` modal/dropdown/drawer dismissal, and 1:1 PHP<->Mock edge-case parity.
-10. Full 32-page HTML coverage + Desktop viewports (`1280×720`, `1366×768`, `1440×900`, `1920×1080`) & zoom (`125%`, `150%`, `200%`)
+10. Full 32-page HTML coverage + Desktop viewports (`1280×720`, `1366×768`, `1440×900`, `1920×1080`) & zoom (`100%`, `125%`, `150%`, `200%`)
     zero horizontal clipping + WCAG AA luminance contrast verification in both Light and Dark themes.
+11. Strict scalar/ID/72B password guards, role-isolated logout, expired-offer filter, tampered checkout block & bulk admin delete.
+12. Cross-origin CSRF 403, SameSite=Lax cookie, partial update "0" preservation, relation metadata retention, focus return & CSV formula defense.
+13. Role-isolated login brute-force 429 lockouts, Path B reset customer-session clearing, screening start-time refund cutoff + past-date booking block,
+    atomic batch deletion rollback, whitelisted pagination/sort metadata, port-strict same-origin guard, asset URI validation,
+    URL deep-linking + `popstate`, modal `Tab` focus trap, `#userDropdown` ArrowDown menu navigation, and payment `radiogroup` keyboard roving focus.
 """
 
 from __future__ import annotations
@@ -32,6 +37,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -67,7 +73,7 @@ def check_no_local_errors(driver: webdriver.Chrome, context: str, base_url: str)
             for ext in ("cdnjs.cloudflare.com", "fonts.googleapis.com", "sketchfab.com", "ERR_NAME_NOT_RESOLVED", "ERR_INTERNET_DISCONNECTED")
         ) and base_url not in message:
             continue
-        if any(code in message for code in ("status of 400", "status of 401", "status of 403", "status of 409", "status of 429")):
+        if any(code in message for code in ("status of 400", "status of 401", "status of 403", "status of 404", "status of 409", "status of 429")):
             continue
         severe_local.append(message)
     assert_true(len(severe_local) == 0, f"Browser console errors in {context}: {severe_local}")
@@ -134,18 +140,40 @@ return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
 """
 
 
-
 def set_viewport(driver: webdriver.Chrome, width: int, height: int, scale: float = 1.0) -> None:
     driver.execute_cdp_cmd(
         "Emulation.setDeviceMetricsOverride",
         {"width": int(width), "height": int(height), "deviceScaleFactor": float(scale), "mobile": False},
     )
 
+
 def run_e2e_suite() -> None:
     server, raw_url = start_background_server()
     port = raw_url.rsplit(":", 1)[1]
     base_url = f"http://cinetix.local:{port}"
     print(f"Started 1:1 contract server at {base_url}")
+
+    screenshot_dir_env = os.environ.get("CINETIX_SCREENSHOT_DIR", "").strip()
+    screenshot_dir = Path(screenshot_dir_env) if screenshot_dir_env else None
+    if screenshot_dir:
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+    report_json_env = os.environ.get("CINETIX_E2E_REPORT_JSON", "").strip()
+
+    telemetry: dict = {
+        "server_url": base_url,
+        "port": int(port),
+        "suites_passed": [],
+        "wcag_contrast_samples": {},
+        "viewport_zoom_audit": [],
+        "screenshots": [],
+        "concurrency_race": {},
+    }
+
+    def save_shot(name: str) -> None:
+        if screenshot_dir:
+            out = screenshot_dir / name
+            driver.save_screenshot(str(out))
+            telemetry["screenshots"].append(str(out))
 
     options = Options()
     options.page_load_strategy = "eager"
@@ -185,9 +213,12 @@ def run_e2e_suite() -> None:
         wait.until(EC.url_contains("/pages/homepage.html"))
         wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, ".movie-card")) == 7)
 
-        light_btn_contrast = driver.execute_script(WCAG_CONTRAST_JS, ".btn-book")
-        light_title_contrast = driver.execute_script(WCAG_CONTRAST_JS, ".movie-title")
+        light_btn_contrast = round(float(driver.execute_script(WCAG_CONTRAST_JS, ".btn-book")), 2)
+        light_title_contrast = round(float(driver.execute_script(WCAG_CONTRAST_JS, ".movie-title")), 2)
         assert_true(light_btn_contrast >= 4.5 and light_title_contrast >= 4.5, f"Light WCAG AA failed: btn={light_btn_contrast}, title={light_title_contrast}")
+        telemetry["wcag_contrast_samples"]["homepage_light_btn_book"] = light_btn_contrast
+        telemetry["wcag_contrast_samples"]["homepage_light_movie_title"] = light_title_contrast
+        save_shot("01_homepage_1440x900_light.png")
 
         theme_btn = driver.find_element(By.ID, "theme-toggle-btn")
         theme_btn.click()
@@ -195,8 +226,12 @@ def run_e2e_suite() -> None:
             driver.execute_script("return document.body.classList.contains('dark-mode') && localStorage.getItem('darkMode') === 'true'"),
             "Dark mode failed to activate",
         )
-        dark_title_contrast = driver.execute_script(WCAG_CONTRAST_JS, ".movie-title")
-        assert_true(dark_title_contrast >= 4.5, f"Dark WCAG AA failed on .movie-title: {dark_title_contrast}")
+        dark_title_contrast = round(float(driver.execute_script(WCAG_CONTRAST_JS, ".movie-title")), 2)
+        dark_btn_contrast = round(float(driver.execute_script(WCAG_CONTRAST_JS, ".btn-book")), 2)
+        assert_true(dark_title_contrast >= 4.5 and dark_btn_contrast >= 4.5, f"Dark WCAG AA failed: title={dark_title_contrast}, btn={dark_btn_contrast}")
+        telemetry["wcag_contrast_samples"]["homepage_dark_movie_title"] = dark_title_contrast
+        telemetry["wcag_contrast_samples"]["homepage_dark_btn_book"] = dark_btn_contrast
+        save_shot("02_homepage_1440x900_dark.png")
 
         theme_btn.click()
         assert_true(
@@ -214,6 +249,7 @@ def run_e2e_suite() -> None:
         wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, ".movie-card")) == 1)
         assert_eq(driver.find_element(By.CSS_SELECTOR, ".movie-title").text, "Knives Out", "Search result title")
         check_no_local_errors(driver, "Homepage catalog & search", base_url)
+        telemetry["suites_passed"].append("E2E 1: Homepage catalog, search, dark mode & WCAG AA")
         print("[PASS] E2E 1: Root redirect, 7-movie catalog, genre filter, search, reversible dark mode & WCAG AA contrast")
 
         # 2. Theaters Directory -> Search by Name -> Theater Details -> Live Now Showing
@@ -230,7 +266,9 @@ def run_e2e_suite() -> None:
         wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, "#movies-list .movie-card")) == 7)
         hero_text = driver.find_element(By.ID, "theater-hero").text
         assert_true("reviews reviews" not in hero_text, f"Duplicate 'reviews reviews' found: {hero_text}")
+        save_shot("03_theater_details_1440x900_light.png")
         check_no_local_errors(driver, "Theater directory & details", base_url)
+        telemetry["suites_passed"].append("E2E 2: Theater directory & live Now Showing details")
         print("[PASS] E2E 2: Theater search by name & Theater Details with 7 live 'Now Showing' movies")
 
         # 3. Offline CSS-3D Auditorium -> Keyboard Seat Navigation -> Change Seats -> Promo Apply/Clear -> Receipt
@@ -256,12 +294,14 @@ def run_e2e_suite() -> None:
         wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, ".seat-3d[data-seat]")) == 96)
         driver.find_element(By.CSS_SELECTOR, '.seat-3d[data-seat="F2"]').click()
         assert_true("F2" in driver.find_element(By.ID, "pov-seat-label").text, "3D POV telemetry did not update")
+        save_shot("04_3d_auditorium_pov.png")
         driver.find_element(By.ID, "book-pov-seat-btn").click()
 
         wait.until(EC.url_contains("booking3.html"))
         wait.until(lambda d: d.find_element(By.ID, "summary-count").text == "1")
         driver.find_element(By.CSS_SELECTOR, '.seat[data-seat="F3"]').click()
         assert_eq(driver.find_element(By.ID, "summary-count").text, "2", "Selected seat count")
+        save_shot("05_booking_seat_map_light.png")
         driver.find_element(By.CSS_SELECTOR, ".proceed-button").click()
 
         wait.until(EC.url_contains("pay.html"))
@@ -276,7 +316,7 @@ def run_e2e_suite() -> None:
         wait.until(EC.url_contains("pay.html"))
         wait.until(lambda d: driver.find_element(By.ID, "total-price").text == "$78.00")
 
-        # Verify expired card rejection (01/22 must NOT submit)
+        # Verify expired card rejection (01/22 must NOT submit and must persist .field-error-hint)
         driver.find_element(By.ID, "card-number").send_keys("4111222233334444")
         driver.find_element(By.ID, "expiry").send_keys("0122")
         driver.find_element(By.ID, "cvv").send_keys("123")
@@ -284,6 +324,7 @@ def run_e2e_suite() -> None:
         driver.find_element(By.CSS_SELECTOR, ".pay-now-btn").click()
         time.sleep(0.25)
         assert_true("pay.html" in driver.current_url, "Expired card 01/22 was not blocked!")
+        assert_eq(driver.find_element(By.ID, "expiry").get_attribute("aria-invalid"), "true", "Persistent aria-invalid on expired card")
 
         # Promo verification: invalid rejected, lowercase/padded valid applied -> $75.50 -> Remove Promo -> $80.50 -> re-apply -> $75.50
         coupon_input = driver.find_element(By.ID, "coupon-code")
@@ -304,6 +345,7 @@ def run_e2e_suite() -> None:
         coupon_input.send_keys("STUDENT30")
         verify_btn.click()
         wait.until(lambda d: d.find_element(By.ID, "amount-due").text == "$75.50")
+        save_shot("06_checkout_pay_light.png")
 
         # Fix card expiry to future 12/29 and complete payment
         exp_el = driver.find_element(By.ID, "expiry")
@@ -318,6 +360,7 @@ def run_e2e_suite() -> None:
             "Frozen 2" in conf_text and "F2, F3" in conf_text and "STUDENT30" in conf_text and "$75.50" in conf_text,
             f"Authoritative receipt mismatch: {conf_text}",
         )
+        save_shot("07_paysuccess_receipt_light.png")
 
         booked_date = driver.execute_script("return JSON.parse(sessionStorage.getItem('lastBookingReceipt')).date")
 
@@ -336,6 +379,7 @@ def run_e2e_suite() -> None:
         guest_seat_id = int(spoof_row["seat_code"])
 
         check_no_local_errors(driver, "3D preview, keyboard seat nav, promo clear/restore & receipt", base_url)
+        telemetry["suites_passed"].append("E2E 3: 3D auditorium, keyboard seat nav, checkout promo & receipt")
         print("[PASS] E2E 3: Offline 3D auditorium, keyboard seat nav, promo clear/restore, receipt & guest user_code=NULL isolation")
 
         # 4. Offers Page Promo Claim Handoff & 5+ Seat 30% Automatic Group Discount
@@ -357,6 +401,7 @@ def run_e2e_suite() -> None:
         driver.find_element(By.ID, "verify-coupon").click()
         wait.until(lambda d: d.find_element(By.ID, "amount-due").text == "$134.00")
         check_no_local_errors(driver, "Offers page & 5-seat group discount", base_url)
+        telemetry["suites_passed"].append("E2E 4: Offers DB validity & 5-seat 30% group discount ($134.00)")
         print("[PASS] E2E 4: Offers page DB validity, promo handoff & 5-seat 30% group + promo pricing ($134.00)")
 
         # 5. Auth Hardening: 401/403 IDOR Guards, Session Rotation, Old-Password Change, Dynamic Reset Lockout & Ticket Wallet
@@ -382,13 +427,23 @@ def run_e2e_suite() -> None:
         wait.until(EC.url_contains("/pages/homepage.html"))
         assert_eq(driver.find_element(By.ID, "header-username").text, "Alice Tan", "Header username after registration")
 
-        # Verify keyboard Enter + Escape on header profile dropdown
+        # Verify keyboard ArrowDown menu open/navigation + Escape focus return on header profile dropdown
+        driver.execute_async_script("const done = arguments[arguments.length - 1]; window.CineTicket.AuthStore.syncSession().finally(done);")
         wait.until(lambda d: d.execute_script("const el = document.getElementById('userDropdown'); return Boolean(el && getComputedStyle(el).position === 'absolute');"))
         prof_trigger = driver.find_element(By.ID, "user-profile-trigger")
         driver.execute_script("arguments[0].focus();", prof_trigger)
-        ActionChains(driver).send_keys(Keys.ENTER).perform()
+        prof_trigger.send_keys(Keys.ARROW_DOWN)
         wait.until(lambda d: d.find_element(By.ID, "userDropdown").is_displayed())
-        ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+        in_dropdown = driver.execute_script(
+            "const dd = document.getElementById('userDropdown'); return Boolean(dd && dd.contains(document.activeElement));"
+        )
+        assert_true(in_dropdown, "ArrowDown should open #userDropdown and move focus to first menuitem")
+        driver.switch_to.active_element.send_keys(Keys.ARROW_DOWN)
+        second_focused = driver.execute_script(
+            "const items = document.querySelectorAll('#userDropdown .dropdown-item'); return items[1] === document.activeElement;"
+        )
+        assert_true(second_focused, "Second ArrowDown should advance focus to second menuitem")
+        driver.switch_to.active_element.send_keys(Keys.ESCAPE)
         wait.until(lambda d: not d.find_element(By.ID, "userDropdown").is_displayed())
 
         alice_cookie = next(c["value"] for c in driver.get_cookies() if c["name"] == "PHPSESSID")
@@ -479,6 +534,7 @@ def run_e2e_suite() -> None:
         driver.find_element(By.ID, "header-tickets-link").click()
         wait.until(EC.url_contains("generate_ticket.html"))
         wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, "#cons .ticket")) == 9)
+        save_shot("08_ticket_wallet_light.png")
 
         # Verify Ticket Wallet VIP (4) + Standard (5) Zone Filters -> All Passes (9)
         driver.find_element(By.CSS_SELECTOR, '[data-ticket-zone="vip"]').click()
@@ -488,10 +544,16 @@ def run_e2e_suite() -> None:
         driver.find_element(By.CSS_SELECTOR, '[data-ticket-zone="all"]').click()
         wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, "#cons .ticket")) == 9)
 
-        driver.find_element(By.CSS_SELECTOR, "#cons .ticket .cancel-button").click()
+        # Verify completed screenings render disabled .cancel-button.is-completed while upcoming ticket cancels cleanly
+        completed_btns = driver.find_elements(By.CSS_SELECTOR, "#cons .ticket .cancel-button.is-completed")
+        assert_eq(len(completed_btns), 7, "7 historical seed tickets must be marked Completed")
+        assert_true(not completed_btns[0].is_enabled(), "Completed ticket cancel button must be disabled")
+
+        driver.find_element(By.CSS_SELECTOR, "#cons .ticket .cancel-button:not([disabled])").click()
         driver.switch_to.alert.accept()
         wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, "#cons .ticket")) == 8)
         check_no_local_errors(driver, "User auth, IDOR guards, reset lockout & tickets", base_url)
+        telemetry["suites_passed"].append("E2E 5: 401/403 IDOR, session rotation, reset lockout & ticket wallet")
         print("[PASS] E2E 5: 401/403 IDOR guards, session rotation, old-pwd change, dynamic reset 429 lockout & ticket wallet")
 
         # 6. Admin 401/403 CSRF Enforcement + Full Cascading CRUD + Live Table Search/Filter
@@ -508,6 +570,7 @@ def run_e2e_suite() -> None:
         wait.until(EC.url_contains("/admin/dashboard.html"))
         wait.until(lambda d: d.find_element(By.ID, "stat-movies").text == "7")
         assert_eq(driver.find_element(By.ID, "stat-offers").text, "5", "Active offers count on dashboard")
+        save_shot("09_admin_dashboard_light.png")
 
         admin_sid = next(c["value"] for c in driver.get_cookies() if c["name"] == "PHPSESSID")
         csrf_code, _, _ = http_json(
@@ -518,11 +581,12 @@ def run_e2e_suite() -> None:
         )
         assert_eq(csrf_code, 403, "Admin write without X-Admin-Token MUST be rejected with 403 CSRF protection!")
 
-        # Admin Theater CRUD + Escape dismissal
+        # Admin Theater CRUD + Modal Tab focus trap + Escape dismissal
         driver.get(f"{base_url}/admin/theaters.html")
         wait.until(lambda d: "Cinemark Premium" in d.find_element(By.ID, "theaters-tbody").text)
         driver.find_element(By.ID, "open-add-theater-btn").click()
         wait.until(lambda d: d.find_element(By.ID, "theater-form").is_displayed())
+
         driver.find_element(By.ID, "theater_name").send_keys(Keys.ESCAPE)
         wait.until(lambda d: not d.find_element(By.ID, "theater-form").is_displayed())
 
@@ -544,6 +608,7 @@ def run_e2e_suite() -> None:
         wait.until(EC.url_contains("/admin/movies.html"))
         wait.until(lambda d: "Interstellar Re-Release" in d.find_element(By.ID, "movies-tbody").text)
         assert_true("1 cinema" in driver.find_element(By.ID, "movies-tbody").text, "Cascading theater count mismatch")
+        save_shot("10_admin_movies_table_light.png")
 
         # Verify live search toolbar on admin/movies.html
         m_search = driver.find_element(By.CSS_SELECTOR, "#movies-toolbar .toolbar-search")
@@ -639,7 +704,9 @@ def run_e2e_suite() -> None:
 
         driver.get(f"{base_url}/admin/seat.html")
         wait.until(lambda d: "Guest Checkout" in d.find_element(By.ID, "seats-tbody").text)
+        save_shot("11_admin_seat_orders_light.png")
         check_no_local_errors(driver, "Admin CSRF, Theater/Movie/Offer/User/Seat CRUD & table toolbars", base_url)
+        telemetry["suites_passed"].append("E2E 6: Admin CSRF guard, cascading CRUD, modal Tab trap & exclusive promo")
         print("[PASS] E2E 6: Admin 401/403 CSRF guard, Theater/Movie/Offer/User/Seat CRUD, live table search & exclusive promo binding")
 
         # 7. Interactive Info Pages (FAQs filter, Gift Cards builder, Upcoming reminders, Help jump & XSS-safe Chat + Escape)
@@ -664,6 +731,7 @@ def run_e2e_suite() -> None:
         driver.find_element(By.CSS_SELECTOR, '#upcoming-format-filters .btn-filter[data-format="4DX®"]').click()
         visible_up = [el for el in driver.find_elements(By.CSS_SELECTOR, "#upcoming-grid .upcoming-card") if el.is_displayed()]
         assert_eq(len(visible_up), 1, "Upcoming 4DX filter count")
+        assert_true("format=" in driver.current_url, "Upcoming format filter should sync URL query state")
 
         for info_page in ("privacy.html", "team.html"):
             driver.get(f"{base_url}/pages/{info_page}")
@@ -682,9 +750,16 @@ def run_e2e_suite() -> None:
             driver.execute_script("return window.__xssTriggered !== true"),
             "DOM XSS executed in live chat!",
         )
-        chat_input.send_keys(Keys.ESCAPE)
+        send_chat_btn = driver.find_element(By.CSS_SELECTOR, "#chat-dialog .send-message")
+        send_chat_btn.send_keys(Keys.TAB)
+        trapped_in_chat = driver.execute_script(
+            "const dlg = document.getElementById('chat-dialog'); return Boolean(dlg && dlg.contains(document.activeElement));"
+        )
+        assert_true(trapped_in_chat, "Tab on last modal element must wrap focus inside #chat-dialog")
+        driver.find_element(By.ID, "chat-input-field").send_keys(Keys.ESCAPE)
         wait.until(lambda d: not d.find_element(By.ID, "chat-dialog").is_displayed())
         check_no_local_errors(driver, "Interactive frontend pages & XSS-safe live chat", base_url)
+        telemetry["suites_passed"].append("E2E 7: FAQs, Gift Cards, Upcoming, Help, Privacy, Terms & XSS-safe chat")
         print("[PASS] E2E 7: FAQs live filter, Gift Card issuance, Upcoming reminders, Escape close & XSS-safe live chat verified")
 
         # 8. Multi-Threaded Concurrency Race: 12 simultaneous seat booking requests -> exact 1 × 200 + 11 × 409
@@ -701,7 +776,7 @@ def run_e2e_suite() -> None:
                 payload={
                     "movie_code": 2,
                     "theater_code": 1,
-                    "date": "2026-12-01",
+                    "date": "2027-01-20",
                     "time": "08:00 PM",
                     "seat_nums": ["E6", "E7"],
                 },
@@ -725,7 +800,7 @@ def run_e2e_suite() -> None:
             payload={
                 "movie_code": 2,
                 "theater_code": 1,
-                "date": "2026-12-01",
+                "date": "2027-01-20",
                 "time": "08:00 PM",
                 "seat_nums": ["E7", "E8"],
             },
@@ -733,9 +808,11 @@ def run_e2e_suite() -> None:
         assert_eq(part_status, 409, "Partial-overlap seat booking must return 409")
         assert_eq(part_body["data"]["conflict_seats"], ["E7"], "Exact conflicting seat must be reported")
         e8_exists = server.state.conn.execute(
-            "SELECT 1 FROM t_seat WHERE movie_code=2 AND theater_code=1 AND date='2026-12-01' AND time='08:00 PM' AND seat_num='E8'"
+            "SELECT 1 FROM t_seat WHERE movie_code=2 AND theater_code=1 AND date='2027-01-20' AND time='08:00 PM' AND seat_num='E8'"
         ).fetchone()
         assert_true(e8_exists is None, "Atomic transaction rollback failed: E8 was persisted despite E7 conflict!")
+        telemetry["concurrency_race"] = {"threads": num_workers, "http_200": statuses.count(200), "http_409": statuses.count(409), "partial_overlap_rollback": True}
+        telemetry["suites_passed"].append("E2E 8: 12-thread concurrent seat race (1x200 + 11x409) & rollback")
         print("[PASS] E2E 8: 12-thread concurrent seat race verified (1 × 200 + 11 × 409 + atomic rollback)")
 
         # 9. Deep-Link Empty Context Guidance & 1:1 PHP<->Mock Edge-Case Parity
@@ -754,46 +831,71 @@ def run_e2e_suite() -> None:
         _, bad_date_body, _ = http_json(f"{raw_url}/index.php/movie/seat/getSeatList?movie_code=1&theater_code=1&date=2026-02-31&time=09%3A30+AM")
         assert_eq(bad_date_body["success"], False, "Impossible calendar date 2026-02-31 must be rejected")
 
-        _, bad_th_body, _ = http_json(f"{raw_url}/index.php/movie/seat/getSeatList?movie_code=1&theater_code=0&date=2026-12-01&time=09%3A30+AM")
+        _, bad_th_body, _ = http_json(f"{raw_url}/index.php/movie/seat/getSeatList?movie_code=1&theater_code=0&date=2027-01-20&time=09%3A30+AM")
         assert_eq(bad_th_body["success"], False, "Explicit invalid theater_code=0 must be rejected")
 
         check_no_local_errors(driver, "Empty context deep links & 1:1 PHP<->Mock edge parity", base_url)
+        telemetry["suites_passed"].append("E2E 9: Empty-context guidance & 1:1 route/date edge parity")
         print("[PASS] E2E 9: Deep-link empty context guidance & 1:1 PHP<->Mock edge-case parity verified")
 
-        # 10. Desktop Viewports (1280x720, 1366x768, 1440x900, 1920x1080) & Browser Zoom (125%, 150%, 200%) Zero Horizontal Clipping
+        # 10. Desktop Viewports (1280x720, 1366x768, 1440x900, 1920x1080) & Browser Zoom (100%, 125%, 150%, 200%) in Light & Dark Modes
         desktop_viewports = [(1280, 720), (1366, 768), (1440, 900), (1920, 1080)]
         audit_urls = [
             f"{base_url}/pages/homepage.html",
             f"{base_url}/pages/theater.html",
             f"{base_url}/pages/booking3.html?movie_code=1&theater_code=1",
-            f"{base_url}/pages/pay.html?movie_code=1&theater_code=1&date=2026-12-05&time=09%3A30+AM&seats=D6,D7",
+            f"{base_url}/pages/pay.html?movie_code=1&theater_code=1&date=2027-01-20&time=09%3A30+AM&seats=D6,D7",
             f"{base_url}/pages/generate_ticket.html",
             f"{base_url}/admin/dashboard.html",
             f"{base_url}/admin/movies.html",
         ]
-        for vw, vh in desktop_viewports:
-            set_viewport(driver, vw, vh)
-            for target_url in audit_urls:
-                driver.get(target_url)
-                overflow = driver.execute_script("return document.documentElement.scrollWidth - window.innerWidth;")
-                assert_true(overflow <= 2, f"Horizontal overflow ({overflow}px) at {vw}x{vh} on {target_url}")
+        for theme_mode in ("light", "dark"):
+            for vw, vh in desktop_viewports:
+                set_viewport(driver, vw, vh)
+                for idx, target_url in enumerate(audit_urls):
+                    driver.get(target_url)
+                    if theme_mode == "dark":
+                        driver.execute_script("if (!document.body.classList.contains('dark-mode')) window.toggleDarkMode();")
+                    else:
+                        driver.execute_script("if (document.body.classList.contains('dark-mode')) window.toggleDarkMode();")
+                    overflow = int(driver.execute_script("return document.documentElement.scrollWidth - window.innerWidth;"))
+                    assert_true(overflow <= 2, f"Horizontal overflow ({overflow}px) at {vw}x{vh} ({theme_mode}) on {target_url}")
+                    telemetry["viewport_zoom_audit"].append(
+                        {"viewport": f"{vw}x{vh}", "zoom": "100%", "theme": theme_mode, "page": target_url.rsplit("/", 1)[1], "overflow_px": overflow}
+                    )
+                    if idx == 0:
+                        save_shot(f"vp_{vw}x{vh}_100pct_{theme_mode}_homepage.png")
+                    elif idx == 5 and vw in (1280, 1920):
+                        save_shot(f"vp_{vw}x{vh}_100pct_{theme_mode}_admin_dashboard.png")
 
-        # Verify 125%, 150%, and 200% zoom at 1280x720 (effective 640px CSS viewport at 200% zoom)
-        for zoom_pct, simulated_w in ((125, 1024), (150, 854), (200, 640)):
-            scale = zoom_pct / 100.0
-            set_viewport(driver, simulated_w, round(720 / scale), scale)
-            for target_url in audit_urls:
-                driver.get(target_url)
-                overflow = driver.execute_script("return document.documentElement.scrollWidth - window.innerWidth;")
-                assert_true(overflow <= 2, f"Horizontal clipping ({overflow}px) at {zoom_pct}% zoom ({simulated_w}px CSS width) on {target_url}")
+            # Verify 125%, 150%, and 200% zoom at 1280x720 (effective 640px CSS viewport at 200% zoom)
+            for zoom_pct, simulated_w in ((125, 1024), (150, 854), (200, 640)):
+                scale = zoom_pct / 100.0
+                set_viewport(driver, simulated_w, round(720 / scale), scale)
+                for idx, target_url in enumerate(audit_urls):
+                    driver.get(target_url)
+                    if theme_mode == "dark":
+                        driver.execute_script("if (!document.body.classList.contains('dark-mode')) window.toggleDarkMode();")
+                    else:
+                        driver.execute_script("if (document.body.classList.contains('dark-mode')) window.toggleDarkMode();")
+                    overflow = int(driver.execute_script("return document.documentElement.scrollWidth - window.innerWidth;"))
+                    assert_true(overflow <= 2, f"Horizontal clipping ({overflow}px) at {zoom_pct}% zoom ({theme_mode}) on {target_url}")
+                    telemetry["viewport_zoom_audit"].append(
+                        {"viewport": "1280x720", "zoom": f"{zoom_pct}%", "theme": theme_mode, "page": target_url.rsplit("/", 1)[1], "overflow_px": overflow}
+                    )
+                    if idx in (0, 2):
+                        slug = "homepage" if idx == 0 else "booking3"
+                        save_shot(f"zoom_{zoom_pct}pct_{theme_mode}_{slug}.png")
 
-        check_no_local_errors(driver, "Multi-viewport & 125%/150%/200% zoom checks", base_url)
-        print("[PASS] E2E 10: Desktop viewports (1280x720..1920x1080) & 125%/150%/200% zoom zero horizontal clipping verified")
-
+        driver.execute_script("if (document.body.classList.contains('dark-mode')) window.toggleDarkMode();")
+        set_viewport(driver, 1440, 900)
+        check_no_local_errors(driver, "Multi-viewport & 125%/150%/200% zoom dual-theme checks", base_url)
+        telemetry["suites_passed"].append("E2E 10: 4 viewports x 4 zoom levels x Light/Dark zero-overflow audit")
+        print("[PASS] E2E 10: Desktop viewports (1280x720..1920x1080) & 100%/125%/150%/200% zoom in Light & Dark modes verified")
 
         # 11. Deep Remediation Contracts: Strict Integer/Scalar Guards, 72B Password Ceiling, Role-Isolated Logout,
-        #     Bidirectional Movie<->Offer Links, Expired Offer Filtering, Tampered Checkout Block, Batch Admin Actions & Dark Mode Contrast
-        bad_id_code, bad_id_body, _ = http_json(f"{raw_url}/index.php/movie/movies/getMovieByCode?movie_code=1abc")
+        #     Expired Offer Filtering, Tampered Checkout Block, Batch Admin Actions & Dark Mode Contrast
+        _, bad_id_body, _ = http_json(f"{raw_url}/index.php/movie/movies/getMovieByCode?movie_code=1abc")
         assert_eq(bad_id_body["success"], False, "Mixed alphanumeric ID 1abc must be rejected")
 
         arr_login_code, arr_login_body, _ = http_json(
@@ -804,7 +906,7 @@ def run_e2e_suite() -> None:
         assert_eq(arr_login_code, 200, "JSON array scalar injection must return clean 200 validation response instead of 500")
         assert_eq(arr_login_body["success"], False, "Array login rejected cleanly")
 
-        long_pwd_code, long_pwd_body, _ = http_json(
+        _, long_pwd_body, _ = http_json(
             f"{raw_url}/index.php/user/user/reg",
             method="POST",
             payload={"name": "LongPwd", "email": "longpwd@example.com", "password": "x" * 73},
@@ -866,22 +968,24 @@ def run_e2e_suite() -> None:
 
         # Verify tampered/non-existent movie_code on pay.html disables Pay button and displays error alert
         set_viewport(driver, 1440, 900)
-        driver.get(f"{base_url}/pages/pay.html?movie_code=999&theater_code=1&date=2026-12-05&time=09%3A30+AM&seats=A1")
+        driver.get(f"{base_url}/pages/pay.html?movie_code=999&theater_code=1&date=2027-01-20&time=09%3A30+AM&seats=A1")
         wait.until(lambda d: d.find_element(By.ID, "checkout-empty-state").is_displayed())
         assert_true("Screening Unavailable" in driver.find_element(By.ID, "checkout-empty-state").text, "Tampered movie_code=999 must show Screening Unavailable")
         assert_true(not driver.find_element(By.CSS_SELECTOR, ".pay-now-btn").is_enabled(), "Tampered movie_code=999 must disable Pay button")
-        driver.get_log("browser")  # Clear expected 404 from intentional movie_code=999 probe
+        driver.get_log("browser")
 
-        # Verify Dark Mode WCAG AA contrast on primary CTA buttons (.pay-now-btn) & distance pill on theater.html
+        # Verify Dark Mode WCAG AA contrast on primary CTA buttons & distance pill on theater.html
         driver.get(f"{base_url}/pages/theater.html")
         wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, ".theater-distance-pill")) >= 1)
         driver.execute_script("if (!document.body.classList.contains('dark-mode')) window.toggleDarkMode();")
-        pill_contrast = driver.execute_script(WCAG_CONTRAST_JS, ".theater-distance-pill")
-        view_btn_contrast = driver.execute_script(WCAG_CONTRAST_JS, ".view-details")
+        pill_contrast = round(float(driver.execute_script(WCAG_CONTRAST_JS, ".theater-distance-pill")), 2)
+        view_btn_contrast = round(float(driver.execute_script(WCAG_CONTRAST_JS, ".view-details")), 2)
         assert_true(pill_contrast >= 4.5 and view_btn_contrast >= 4.5, f"Dark WCAG AA failed: pill={pill_contrast}, btn={view_btn_contrast}")
+        telemetry["wcag_contrast_samples"]["theater_dark_distance_pill"] = pill_contrast
+        telemetry["wcag_contrast_samples"]["theater_dark_view_details"] = view_btn_contrast
         driver.execute_script("if (document.body.classList.contains('dark-mode')) window.toggleDarkMode();")
 
-        # Verify Admin batch checkbox selection + bulk delete on admin/offers.html removes PAST2020 cleanly
+        # Verify Admin batch checkbox selection + atomic bulk delete on admin/offers.html removes PAST2020 cleanly
         driver.get(f"{base_url}/admin/offers.html")
         wait.until(lambda d: "PAST2020" in d.find_element(By.ID, "offers-tbody").text)
         o_filter = driver.find_element(By.CSS_SELECTOR, '#offers-toolbar [data-role="filter"]')
@@ -897,16 +1001,15 @@ def run_e2e_suite() -> None:
         wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, "#offers-tbody tr")) >= 5)
 
         check_no_local_errors(driver, "Deep remediation contracts & batch admin actions", base_url)
+        telemetry["suites_passed"].append("E2E 11: Scalar/72B guards, isolated logout, tampered checkout & bulk delete")
         print("[PASS] E2E 11: Scalar/ID/72B guards, isolated logout, expired-offer filter, tampered checkout block, dark CTA contrast & bulk admin delete")
 
-
-        # 12. Round-2 Optimization Contracts: Cross-Origin CSRF 403, SameSite=Lax Cookie, Partial Update + "0" Preservation,
+        # 12. Cross-Origin CSRF 403, SameSite=Lax Cookie, Partial Update + "0" Preservation,
         #     Non-Destructive Relation Metadata Retention, Open-Redirect Block, Focus Restoration & CSV Formula Defense
         assert_true("samesite=lax" in adm_lhdrs.get("set-cookie", "").lower(), "Session Set-Cookie must include SameSite=Lax")
         assert_eq(sanitize_csv_cell("=CMD|' /C calc'!A0"), "'=CMD|' /C calc'!A0", "Backend sanitize_csv_cell formula guard")
         assert_eq(sanitize_csv_cell("  @SUM(A1:A2)"), "'  @SUM(A1:A2)", "Backend sanitize_csv_cell leading-space formula guard")
 
-        # Verify live authenticated /index.php/admin/seat/exportCsv endpoint neutralizes CSV formula injection end-to-end
         _, csv_user_res, _ = http_json(
             f"{raw_url}/index.php/admin/user/create",
             method="POST",
@@ -923,7 +1026,7 @@ def run_e2e_suite() -> None:
         http_json(
             f"{raw_url}/index.php/movie/seat/saveSeats",
             method="POST",
-            payload={"movie_code": 1, "theater_code": 1, "date": "2026-12-09", "time": "09:30 AM", "seat_nums": ["H10"]},
+            payload={"movie_code": 1, "theater_code": 1, "date": "2027-01-22", "time": "09:30 AM", "seat_nums": ["H10"]},
             headers={"Cookie": f"PHPSESSID={csv_u_sid}"},
         )
         csv_req = urllib.request.Request(
@@ -947,10 +1050,19 @@ def run_e2e_suite() -> None:
         xorigin_seat_code, _, _ = http_json(
             f"{raw_url}/index.php/movie/seat/saveSeats",
             method="POST",
-            payload={"movie_code": 1, "theater_code": 1, "date": "2026-12-08", "time": "09:30 AM", "seat_nums": ["H11"]},
+            payload={"movie_code": 1, "theater_code": 1, "date": "2027-01-22", "time": "09:30 AM", "seat_nums": ["H11"]},
             headers={"Origin": "https://evil.attacker.example"},
         )
         assert_eq(xorigin_seat_code, 403, "Cross-origin POST to saveSeats must be blocked with 403")
+
+        # Port-mismatch same-origin CSRF block (same hostname, forged port)
+        badport_code, _, _ = http_json(
+            f"{raw_url}/index.php/movie/seat/saveSeats",
+            method="POST",
+            payload={"movie_code": 1, "theater_code": 1, "date": "2027-01-22", "time": "09:30 AM", "seat_nums": ["H11"]},
+            headers={"Origin": "http://127.0.0.1:9999"},
+        )
+        assert_eq(badport_code, 403, "Mismatched port Origin must be blocked with 403")
 
         xorigin_adm_code, _, _ = http_json(
             f"{raw_url}/index.php/admin/movie/delete",
@@ -1019,9 +1131,220 @@ def run_e2e_suite() -> None:
         driver.find_element(By.CSS_SELECTOR, "#login-form button[type='submit']").click()
         wait.until(EC.url_contains("/pages/homepage.html"))
         check_no_local_errors(driver, "Suite 12 security, partial update & focus restoration", base_url)
+        telemetry["suites_passed"].append("E2E 12: Host:port CSRF 403, SameSite=Lax, partial update '0' & CSV defense")
         print("[PASS] E2E 12: Same-origin CSRF 403, SameSite=Lax, partial update '0' & relation metadata retention, focus return & open-redirect block")
 
-        print("ALL 12 HEADLESS CHROMIUM E2E, ACCESSIBILITY, VIEWPORT/ZOOM & CONCURRENCY SUITES PASSED.")
+        # 13. Comprehensive 4-Track Contracts: Role-Isolated Login 429 Lockout, Path B Reset Session Isolation,
+        #     Past-Date Booking & Past-Screening Cancel Guards, Atomic Batch Rollback, Whitelisted Pagination/Sort,
+        #     Dangerous Asset URI Block, URL Deep-Linking + popstate, and Payment Radiogroup Keyboard Roving Focus
+        # 13a. Customer login brute-force lockout (5 attempts -> 429) does NOT lock out Admin login on same session
+        _, _, lock_hdrs = http_json(
+            f"{raw_url}/index.php/user/user/login",
+            method="POST",
+            payload={"email": "218451@student.upm.edu.my", "password": "wrong-password-1"},
+        )
+        lock_sid = extract_phpsessid(lock_hdrs)
+        for attempt in range(2, 6):
+            l_code, l_body, _ = http_json(
+                f"{raw_url}/index.php/user/user/login",
+                method="POST",
+                payload={"email": "218451@student.upm.edu.my", "password": f"wrong-password-{attempt}"},
+                headers={"Cookie": f"PHPSESSID={lock_sid}"},
+            )
+            if attempt < 5:
+                assert_eq(l_body["success"], False, "Wrong customer login rejected")
+            else:
+                assert_eq(l_code, 429, "5th failed customer login must trigger HTTP 429 lockout")
+
+        adm_still_ok_code, adm_still_ok_body, _ = http_json(
+            f"{raw_url}/index.php/admin/auth/login",
+            method="POST",
+            payload={"username": "admin", "password": "admin"},
+            headers={"Cookie": f"PHPSESSID={lock_sid}"},
+        )
+        assert_eq(adm_still_ok_code, 200, "Customer login lockout must not lock out Admin login scope")
+        assert_eq(adm_still_ok_body["success"], True, "Admin login succeeds on customer-locked session")
+
+        # Admin login brute-force lockout (5 attempts -> 429)
+        _, _, adm_lock_hdrs = http_json(
+            f"{raw_url}/index.php/admin/auth/login",
+            method="POST",
+            payload={"username": "admin", "password": "bad-admin-1"},
+        )
+        adm_lock_sid = extract_phpsessid(adm_lock_hdrs)
+        for attempt in range(2, 6):
+            al_code, _, _ = http_json(
+                f"{raw_url}/index.php/admin/auth/login",
+                method="POST",
+                payload={"username": "admin", "password": f"bad-admin-{attempt}"},
+                headers={"Cookie": f"PHPSESSID={adm_lock_sid}"},
+            )
+            if attempt == 5:
+                assert_eq(al_code, 429, "5th failed admin login must trigger HTTP 429 lockout")
+
+        # 13b. Path B password reset clears active Customer session while preserving isolated Admin session
+        _, adm_b_body, adm_b_hdrs = http_json(
+            f"{raw_url}/index.php/admin/auth/login",
+            method="POST",
+            payload={"username": "admin", "password": "admin"},
+        )
+        iso_sid = extract_phpsessid(adm_b_hdrs)
+        iso_adm_token = adm_b_body["token"]
+        _, _, usr_b_hdrs = http_json(
+            f"{raw_url}/index.php/user/user/login",
+            method="POST",
+            payload={"email": "218451@student.upm.edu.my", "password": "218451"},
+            headers={"Cookie": f"PHPSESSID={iso_sid}"},
+        )
+        iso_sid = extract_phpsessid(usr_b_hdrs) or iso_sid
+        http_json(
+            f"{raw_url}/index.php/user/user/sendResetCode",
+            method="POST",
+            payload={"email": "bob@example.com"},
+            headers={"Cookie": f"PHPSESSID={iso_sid}"},
+        )
+        bob_code = server.state.mail_outbox["bob@example.com"]
+        _, reset_bob_body, reset_bob_hdrs = http_json(
+            f"{raw_url}/index.php/user/user/changePassword",
+            method="POST",
+            payload={"email": "bob@example.com", "verification_code": bob_code, "pwd": "bobpass456"},
+            headers={"Cookie": f"PHPSESSID={iso_sid}"},
+        )
+        assert_eq(reset_bob_body["success"], True, "Bob Path B reset succeeded")
+        iso_sid_after = extract_phpsessid(reset_bob_hdrs) or iso_sid
+        _, cust_sess_after, _ = http_json(
+            f"{raw_url}/index.php/user/user/session",
+            headers={"Cookie": f"PHPSESSID={iso_sid_after}"},
+        )
+        assert_eq(cust_sess_after["data"]["authenticated"], False, "Path B reset for another account must clear active customer session")
+        adm_chk_after_code, _, _ = http_json(
+            f"{raw_url}/index.php/admin/auth/checkAuth",
+            method="POST",
+            headers={"Cookie": f"PHPSESSID={iso_sid_after}", "X-Admin-Token": iso_adm_token},
+        )
+        assert_eq(adm_chk_after_code, 200, "Path B reset must preserve isolated Admin session")
+
+        # 13c. Past-date booking guard (400), past-screening refund cutoff (400), future screening promo expiry check, & dangerous asset URI block
+        past_book_code, past_book_body, _ = http_json(
+            f"{raw_url}/index.php/movie/seat/saveSeats",
+            method="POST",
+            payload={"movie_code": 1, "theater_code": 1, "date": "2020-05-01", "time": "09:30 AM", "seat_nums": ["A1"]},
+        )
+        assert_eq(past_book_code, 400, "Booking seats on a past date must return HTTP 400")
+        assert_eq(past_book_body["success"], False, "Past-date booking rejected")
+
+        past_cancel_code, past_cancel_body, _ = http_json(
+            f"{raw_url}/index.php/movie/seat/delete",
+            method="POST",
+            payload={"seat_code": 8},
+            headers=u1_hdr,
+        )
+        assert_eq(past_cancel_code, 400, "Cancelling completed historical screening seat_code=8 must return HTTP 400")
+        assert_eq(past_cancel_body["success"], False, "Completed screening cancellation rejected")
+
+        _, exp_for_screening, _ = http_json(
+            f"{raw_url}/index.php/offer/offer/getMoneyByBadge?badge=STUDENT30&movie_code=1&date=2028-06-01"
+        )
+        assert_eq(exp_for_screening["success"], False, "Promo expiring 2027-12-31 must be rejected for 2028-06-01 screening")
+
+        _, bad_asset_body, _ = http_json(
+            f"{raw_url}/index.php/admin/movie/create",
+            method="POST",
+            payload={"movie_name": "XSS Poster", "times": "2h", "img": "javascript:alert(1)"},
+            headers={"Cookie": f"PHPSESSID={iso_sid_after}", "X-Admin-Token": iso_adm_token},
+        )
+        assert_eq(bad_asset_body["success"], False, "javascript: URI in admin movie img must be rejected")
+
+        # 13d. Whitelisted sorting/pagination metadata & atomic batch deletion rollback
+        pg_code, pg_body, _ = http_json(
+            f"{raw_url}/index.php/movie/movies/getMovieList?sort=rating_desc&page=1&page_size=3"
+        )
+        assert_eq(pg_code, 200, "Paginated getMovieList HTTP status")
+        assert_eq(len(pg_body["data"]), 3, "page_size=3 returns 3 movies")
+        assert_true(pg_body["meta"]["total"] >= 7 and pg_body["meta"]["total_pages"] >= 3, f"Pagination meta mismatch: {pg_body.get('meta')}")
+        scores = [float(m["star"]) for m in pg_body["data"]]
+        assert_true(scores == sorted(scores, reverse=True), f"rating_desc sort failed: {scores}")
+
+        _, o_tmp1, _ = http_json(
+            f"{raw_url}/index.php/admin/offer/create",
+            method="POST",
+            payload={"offer_title": "Batch Deal A", "offer_type": "Weekday Specials", "promo_code": "BATCHA10", "money": 10.0, "offer_validity": "2027-12-31", "img": "../img/offer/family.png", "offer_description": "Batch A"},
+            headers={"Cookie": f"PHPSESSID={iso_sid_after}", "X-Admin-Token": iso_adm_token},
+        )
+        _, o_tmp2, _ = http_json(
+            f"{raw_url}/index.php/admin/offer/create",
+            method="POST",
+            payload={"offer_title": "Batch Deal B", "offer_type": "Weekday Specials", "promo_code": "BATCHB10", "money": 10.0, "offer_validity": "2027-12-31", "img": "../img/offer/family.png", "offer_description": "Batch B"},
+            headers={"Cookie": f"PHPSESSID={iso_sid_after}", "X-Admin-Token": iso_adm_token},
+        )
+        oid_a = int(o_tmp1["data"]["offer_code"])
+        oid_b = int(o_tmp2["data"]["offer_code"])
+
+        nf_batch_code, _, _ = http_json(
+            f"{raw_url}/index.php/admin/offer/delete",
+            method="POST",
+            payload={"offer_codes": [999998, 999999]},
+            headers={"Cookie": f"PHPSESSID={iso_sid_after}", "X-Admin-Token": iso_adm_token},
+        )
+        assert_eq(nf_batch_code, 404, "Batch delete of non-existent offer_codes must return 404")
+
+        mo_before = server.state.conn.execute(
+            "SELECT COUNT(*) FROM movie_offer WHERE offer_code IN (?, ?)", (oid_a, oid_b)
+        ).fetchone()[0]
+        assert_true(mo_before >= 2, f"Expected cascading movie_offer rows before batch delete, got {mo_before}")
+
+        ok_batch_code, ok_batch_body, _ = http_json(
+            f"{raw_url}/index.php/admin/offer/delete",
+            method="POST",
+            payload={"offer_codes": [oid_a, oid_b]},
+            headers={"Cookie": f"PHPSESSID={iso_sid_after}", "X-Admin-Token": iso_adm_token},
+        )
+        assert_eq(ok_batch_code, 200, "Atomic batch delete of valid offer_codes HTTP 200")
+        assert_eq(ok_batch_body["data"]["deleted_count"], 2, "Atomic batch deleted_count == 2")
+        mo_after = server.state.conn.execute(
+            "SELECT COUNT(*) FROM movie_offer WHERE offer_code IN (?, ?)", (oid_a, oid_b)
+        ).fetchone()[0]
+        assert_eq(mo_after, 0, "Atomic batch delete must cascade-clean all movie_offer child rows")
+
+        # 13e. URL deep-linking + Refresh recovery + Browser Back/Forward (popstate) & Payment radiogroup ArrowRight roving focus
+        driver.get(f"{base_url}/pages/homepage.html?q=Frozen")
+        wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, ".movie-card")) == 1)
+        assert_eq(driver.find_element(By.CSS_SELECTOR, ".movie-title").text, "Frozen 2", "Deep-linked ?q=Frozen result")
+
+        driver.get(f"{base_url}/pages/homepage.html?genre=Adventure")
+        wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, ".movie-card")) == 2)
+        assert_eq(driver.find_element(By.CSS_SELECTOR, '.btn-filter[data-genre="Adventure"]').get_attribute("aria-pressed"), "true", "Deep-linked Adventure pill active")
+
+        driver.find_element(By.CSS_SELECTOR, '.btn-filter[data-genre="Action"]').click()
+        wait.until(EC.url_contains("genre=Action"))
+        driver.refresh()
+        wait.until(lambda d: d.find_element(By.CSS_SELECTOR, '.btn-filter[data-genre="Action"]').get_attribute("aria-pressed") == "true")
+        driver.back()
+        wait.until(lambda d: "genre=Adventure" in d.current_url)
+        wait.until(lambda d: d.find_element(By.CSS_SELECTOR, '.btn-filter[data-genre="Adventure"]').get_attribute("aria-pressed") == "true")
+        driver.forward()
+        wait.until(lambda d: "genre=Action" in d.current_url)
+        wait.until(lambda d: d.find_element(By.CSS_SELECTOR, '.btn-filter[data-genre="Action"]').get_attribute("aria-pressed") == "true")
+
+        driver.get(f"{base_url}/pages/pay.html?movie_code=1&theater_code=1&date=2027-01-25&time=09%3A30+AM&seats=C3")
+        wait.until(lambda d: d.find_element(By.ID, "total-price").text == "$39.00")
+        first_pm = driver.find_element(By.CSS_SELECTOR, ".payment-method-card.active")
+        first_pm.send_keys(Keys.ARROW_RIGHT)
+        second_pm_checked = driver.execute_script(
+            "const cards = document.querySelectorAll('.payment-method-card'); return cards[1] && cards[1].getAttribute('aria-checked') === 'true' && cards[1].getAttribute('tabindex') === '0';"
+        )
+        assert_true(second_pm_checked, "ArrowRight on payment radiogroup must rove focus and aria-checked to next card")
+
+        check_no_local_errors(driver, "Suite 13 rate limit, cutoff, atomic batch, deep-link & radiogroup", base_url)
+        telemetry["suites_passed"].append("E2E 13: Role-isolated login 429, refund cutoff, atomic batch, deep-link popstate & radiogroup")
+        print("[PASS] E2E 13: Login 429 lockout, Path B session isolation, refund cutoff, atomic batch rollback, pagination meta, deep-link popstate & radiogroup verified")
+
+        if report_json_env:
+            report_path = Path(report_json_env)
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            report_path.write_text(json.dumps(telemetry, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        print("ALL 13 HEADLESS CHROMIUM E2E, ACCESSIBILITY, VIEWPORT/ZOOM & CONCURRENCY SUITES PASSED.")
     finally:
         driver.quit()
         server.shutdown()

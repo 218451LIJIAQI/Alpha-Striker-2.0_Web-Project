@@ -42,9 +42,19 @@
       '<button type="button" class="send-email-btn submit-category-form">Submit Request</button>';
 
     container.querySelector('.submit-category-form').addEventListener('click', function () {
-      const email = container.querySelector('.cat-email').value.trim();
-      const details = container.querySelector('.cat-details').value.trim();
-      if (!CT.isValidEmail(email) || !details) {
+      const emailEl = container.querySelector('.cat-email');
+      const detailsEl = container.querySelector('.cat-details');
+      const email = emailEl ? emailEl.value.trim() : '';
+      const details = detailsEl ? detailsEl.value.trim() : '';
+      [emailEl, detailsEl].forEach(CT.clearFieldError);
+
+      if (!CT.isValidEmail(email)) {
+        CT.flagFieldError(emailEl, 'Please enter a valid contact email');
+        window.showToast('Please provide a valid email and inquiry details', 'warning');
+        return;
+      }
+      if (!details) {
+        CT.flagFieldError(detailsEl, 'Please describe your inquiry');
         window.showToast('Please provide a valid email and inquiry details', 'warning');
         return;
       }
@@ -111,7 +121,7 @@
   function buildSupportReply(query) {
     const q = query.toLowerCase();
     if (q.includes('cancel') || q.includes('refund')) {
-      return 'You can cancel any reserved seat directly from the Tickets page in the top navigation bar.';
+      return 'Upcoming tickets can be cancelled anytime before screening start from the Tickets page in the top navigation bar.';
     }
     if (q.includes('promo') || q.includes('discount') || q.includes('offer')) {
       return 'Visit the Offers tab to copy any active promo code for instant savings, or book 5+ seats for 30% group savings!';
@@ -183,10 +193,11 @@
       const phone = phoneInput ? phoneInput.value.trim() : '';
 
       if (!phone) {
+        CT.flagFieldError(phoneInput, 'Please enter your phone number');
         window.showToast('Please enter your phone number', 'warning');
-        phoneInput?.focus();
         return;
       }
+      CT.clearFieldError(phoneInput);
 
       const slot = timeSelect ? timeSelect.value : 'next available window';
       window.showToast('Callback scheduled (' + slot + ') for ' + phone, 'success');
@@ -203,26 +214,42 @@
     });
 
     document.querySelector('.send-email-btn')?.addEventListener('click', function () {
-      const category = document.querySelector('.support-category')?.value || '';
+      const categoryEl = document.querySelector('.support-category');
       const nameInput = document.getElementById('support-name-input');
       const emailInput = document.getElementById('support-email-input');
       const subjectInput = document.getElementById('support-subject-input');
       const messageInput = document.getElementById('support-message-input');
 
+      [categoryEl, nameInput, emailInput, subjectInput, messageInput].forEach(CT.clearFieldError);
+
+      const category = categoryEl?.value || '';
       const name = nameInput ? nameInput.value.trim() : '';
       const email = emailInput ? emailInput.value.trim() : '';
       const subject = subjectInput ? subjectInput.value.trim() : '';
       const message = messageInput ? messageInput.value.trim() : '';
 
       if (!category || category === 'Select your inquiry type') {
+        CT.flagFieldError(categoryEl, 'Please select an inquiry type');
         window.showToast('Please select an inquiry type', 'warning');
         return;
       }
-      if (!name || !CT.isValidEmail(email)) {
+      if (!name) {
+        CT.flagFieldError(nameInput, 'Please enter your name');
         window.showToast('Please enter your name and a valid email address', 'warning');
         return;
       }
-      if (!subject || !message) {
+      if (!CT.isValidEmail(email)) {
+        CT.flagFieldError(emailInput, 'Please enter a valid email address');
+        window.showToast('Please enter your name and a valid email address', 'warning');
+        return;
+      }
+      if (!subject) {
+        CT.flagFieldError(subjectInput, 'Please enter a subject');
+        window.showToast('Please enter both a subject and message', 'warning');
+        return;
+      }
+      if (!message) {
+        CT.flagFieldError(messageInput, 'Please enter your message');
         window.showToast('Please enter both a subject and message', 'warning');
         return;
       }

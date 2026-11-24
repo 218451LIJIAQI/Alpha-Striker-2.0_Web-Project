@@ -113,7 +113,7 @@
   border: none;
   background: var(--brand-primary);
   color: #ffffff;
-  box-shadow: 0 6px 18px rgba(29, 78, 216, 0.34);
+  box-shadow: 0 6px 18px rgba(190, 18, 60, 0.3);
 }
 
 .btn-primary:hover { background: var(--brand-primary-hover); transform: translateY(-2px); }

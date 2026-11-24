@@ -20,7 +20,19 @@ class Movies extends ApiController
                 $query->where('movie_type', $genre);
             }
 
-            return $this->ok($query->select());
+            $rows = $query->select();
+            [$paged, $meta] = $this->paginateAndSort(
+                $rows,
+                [
+                    'id_asc'      => function ($a, $b) { return ((int) $a['movie_code']) <=> ((int) $b['movie_code']); },
+                    'title_asc'   => function ($a, $b) { return strcasecmp((string) $a['movie_name'], (string) $b['movie_name']); },
+                    'rating_desc' => function ($a, $b) { return ((float) $b['star']) <=> ((float) $a['star']); },
+                    'price_asc'   => function ($a, $b) { return ((float) $a['money']) <=> ((float) $b['money']); },
+                ],
+                'id_asc'
+            );
+
+            return $this->ok($paged, 'OK', ['meta' => $meta]);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to load movie list', $e);
         }
@@ -39,7 +51,18 @@ class Movies extends ApiController
                 $query->where('movie_name|movie_type|tag', 'like', "%{$escaped}%");
             }
 
-            return $this->ok($query->select());
+            $rows = $query->select();
+            [$paged, $meta] = $this->paginateAndSort(
+                $rows,
+                [
+                    'id_asc'      => function ($a, $b) { return ((int) $a['movie_code']) <=> ((int) $b['movie_code']); },
+                    'title_asc'   => function ($a, $b) { return strcasecmp((string) $a['movie_name'], (string) $b['movie_name']); },
+                    'rating_desc' => function ($a, $b) { return ((float) $b['star']) <=> ((float) $a['star']); },
+                ],
+                'id_asc'
+            );
+
+            return $this->ok($paged, 'OK', ['meta' => $meta]);
         } catch (\Throwable $e) {
             return $this->serverError('Movie search failed', $e);
         }
@@ -62,9 +85,9 @@ class Movies extends ApiController
                 return $this->fail('Movie not found', 404);
             }
 
-            $today        = date('Y-m-d');
+            $targetDate   = $this->targetDateParam('date');
             $schedQuery   = Db::table('theater_movie')->where('movie_code', $movieId);
-            $theaterCodes = $this->applyDateWindow($schedQuery, 'start_date', 'end_date', $today)
+            $theaterCodes = $this->applyDateWindow($schedQuery, 'start_date', 'end_date', $targetDate)
                 ->order('theater_code', 'asc')
                 ->column('theater_code');
 

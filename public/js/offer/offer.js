@@ -1,10 +1,23 @@
 /**
  * Promotional Offers & Promo Code Controller
+ * Supports URL query deep-linking (?type=), refresh recovery, popstate sync, and persistent field error highlighting.
  */
 (function () {
   'use strict';
 
   let requestSeq = 0;
+
+  function syncOfferUrl(offerType) {
+    if (!window.history || typeof window.history.pushState !== 'function') return;
+    const params = new URLSearchParams();
+    if (offerType) params.set('type', offerType);
+    const qs = params.toString();
+    const nextUrl = window.location.pathname + (qs ? '?' + qs : '');
+    const curUrl = window.location.pathname + (window.location.search || '');
+    if (nextUrl !== curUrl) {
+      window.history.pushState(null, '', nextUrl);
+    }
+  }
 
   function renderOfferError(message, onRetry) {
     const containers = document.querySelectorAll('.offers-container');
@@ -165,26 +178,40 @@
     const tabButtons = document.querySelectorAll('.filter-tabs button');
     let activeType = '';
 
+    function syncOfferPills() {
+      CT.activatePill(tabButtons, function (btn, idx) {
+        if (!activeType) return idx === 0;
+        return btn.textContent.trim().toLowerCase() === activeType.toLowerCase();
+      });
+    }
+
     function resetAllOffers() {
       activeType = '';
-      CT.activatePill(tabButtons, function (_, idx) { return idx === 0; });
+      syncOfferPills();
+      syncOfferUrl('');
       fetchOffers('', resetAllOffers);
     }
 
-    CT.activatePill(tabButtons, function (_, idx) { return idx === 0; });
+    function applyFromUrl() {
+      activeType = (new URLSearchParams(window.location.search).get('type') || '').trim();
+      syncOfferPills();
+      fetchOffers(activeType, resetAllOffers);
+    }
 
     await CT.AuthStore.syncSession();
-    fetchOffers('', resetAllOffers);
+    applyFromUrl();
 
+    window.addEventListener('popstate', applyFromUrl);
     window.addEventListener('cinetix:authchange', function () {
       fetchOffers(activeType, resetAllOffers);
     });
 
     tabButtons.forEach(function (button) {
       button.addEventListener('click', function () {
-        CT.activatePill(tabButtons, button);
         const label = button.textContent.trim();
         activeType = label === 'All Offers' ? '' : label;
+        syncOfferPills();
+        syncOfferUrl(activeType);
         fetchOffers(activeType, resetAllOffers);
       });
     });
@@ -195,10 +222,11 @@
       const emailInput = form.querySelector('input[type="email"]');
       const email = emailInput ? emailInput.value.trim() : '';
       if (!CT.isValidEmail(email)) {
+        CT.flagFieldError(emailInput, 'Please enter a valid email address');
         window.showToast('Please enter a valid email address', 'warning');
-        emailInput?.focus();
         return;
       }
+      CT.clearFieldError(emailInput);
       emailInput.value = '';
       window.showToast('Subscribed! Exclusive cinema offers will be sent to ' + email, 'success');
     });

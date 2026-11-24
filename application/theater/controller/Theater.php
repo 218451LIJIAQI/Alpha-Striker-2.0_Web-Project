@@ -9,22 +9,23 @@ class Theater extends ApiController
     public function getTheaterList()
     {
         try {
-            $keyword   = $this->strParam('address');
-            $amenity   = $this->strParam('amenity');
-            $movieCode = $this->idParam('movie_code');
+            $keyword    = $this->strParam('address');
+            $amenity    = $this->strParam('amenity');
+            $movieCode  = $this->idParam('movie_code');
+            $targetDate = $this->targetDateParam('date');
 
             $query = Db::name('theater')
                 ->field('theater_code, theater_name, address, amenity, star, img, reviews, distance')
                 ->order('theater_code', 'asc');
 
             if ($movieCode > 0) {
-                $today             = date('Y-m-d');
                 $schedQuery        = Db::table('theater_movie')->where('movie_code', $movieCode);
-                $scheduledTheaters = $this->applyDateWindow($schedQuery, 'start_date', 'end_date', $today)
+                $scheduledTheaters = $this->applyDateWindow($schedQuery, 'start_date', 'end_date', $targetDate)
                     ->column('theater_code');
 
                 if (empty($scheduledTheaters)) {
-                    return $this->ok([]);
+                    [$empty, $meta] = $this->paginateAndSort([], ['id_asc' => null], 'id_asc');
+                    return $this->ok($empty, 'OK', ['meta' => $meta]);
                 }
                 $query->where('theater_code', 'in', $scheduledTheaters);
             }
@@ -39,7 +40,18 @@ class Theater extends ApiController
                 $query->where('amenity', 'like', "%{$escapedAmenity}%");
             }
 
-            return $this->ok($query->select());
+            $rows = $query->select();
+            [$paged, $meta] = $this->paginateAndSort(
+                $rows,
+                [
+                    'id_asc'      => function ($a, $b) { return ((int) $a['theater_code']) <=> ((int) $b['theater_code']); },
+                    'name_asc'    => function ($a, $b) { return strcasecmp((string) $a['theater_name'], (string) $b['theater_name']); },
+                    'rating_desc' => function ($a, $b) { return ((float) $b['star']) <=> ((float) $a['star']); },
+                ],
+                'id_asc'
+            );
+
+            return $this->ok($paged, 'OK', ['meta' => $meta]);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to load theater list', $e);
         }
@@ -58,13 +70,13 @@ class Theater extends ApiController
                 return $this->fail('Theater does not exist', 404);
             }
 
-            $today      = date('Y-m-d');
+            $targetDate = $this->targetDateParam('date');
             $movieQuery = Db::table('theater_movie')
                 ->alias('tm')
                 ->join('t_movies m', 'tm.movie_code = m.movie_code')
                 ->where('tm.theater_code', $theaterCode);
 
-            $theater['movies'] = $this->applyDateWindow($movieQuery, 'tm.start_date', 'tm.end_date', $today)
+            $theater['movies'] = $this->applyDateWindow($movieQuery, 'tm.start_date', 'tm.end_date', $targetDate)
                 ->field('m.movie_code, m.movie_name, m.star, m.tag, m.money, m.movie_type, m.img, m.times, tm.daily_showtimes')
                 ->order('m.movie_code', 'asc')
                 ->select();

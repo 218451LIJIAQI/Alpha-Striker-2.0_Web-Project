@@ -8,7 +8,48 @@ class Seat extends BaseAdmin
     public function index()
     {
         try {
-            return $this->ok($this->loadEnrichedSeats());
+            $seats   = $this->loadEnrichedSeats();
+            $keyword = strtolower($this->strParam('keyword'));
+            $filter  = strtolower($this->strParam('filter', 'all'));
+
+            [$paged, $meta] = $this->paginateAndSort(
+                $seats,
+                [
+                    'id_desc'  => function ($a, $b) { return ((int) $b['seat_code']) <=> ((int) $a['seat_code']); },
+                    'id_asc'   => function ($a, $b) { return ((int) $a['seat_code']) <=> ((int) $b['seat_code']); },
+                    'date_asc' => function ($a, $b) { return $this->compareScreeningRows($a, $b); },
+                    'seat_asc' => function ($a, $b) { return $this->compareSeatCodes($a['seat_num'] ?? '', $b['seat_num'] ?? ''); },
+                ],
+                'id_desc',
+                function ($s) use ($keyword, $filter) {
+                    $isVip     = ((int) ($s['seat_zone'] ?? 1)) === 2;
+                    $hasMember = !empty($s['user']['user_name']);
+                    if ($filter === 'vip' && !$isVip) {
+                        return false;
+                    }
+                    if ($filter === 'std' && $isVip) {
+                        return false;
+                    }
+                    if ($filter === 'member' && !$hasMember) {
+                        return false;
+                    }
+                    if ($filter === 'guest' && $hasMember) {
+                        return false;
+                    }
+                    if ($keyword !== '') {
+                        $m   = $s['movie']['movie_name'] ?? ('Movie #' . $s['movie_code']);
+                        $t   = $s['theater']['theater_name'] ?? ('Theater #' . ($s['theater_code'] ?? 1));
+                        $u   = $hasMember ? ($s['user']['user_name'] . ' ' . ($s['user']['email'] ?? '')) : 'guest';
+                        $hay = strtolower('#' . $s['seat_code'] . ' ' . $m . ' ' . $t . ' ' . $u . ' ' . ($s['date'] ?? '') . ' ' . ($s['time'] ?? '') . ' ' . ($s['seat_num'] ?? ''));
+                        if (strpos($hay, $keyword) === false) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+            );
+
+            return $this->ok($paged, 'OK', ['meta' => $meta]);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to query seat bookings', $e);
         }
@@ -48,16 +89,34 @@ class Seat extends BaseAdmin
     public function delete($seat_code = '')
     {
         try {
-            $seatId = $this->idParam('seat_code', $seat_code);
-            if ($seatId <= 0) {
+            $targetIds = $this->resolveTargetIds('seat_code', 'seat_codes', $seat_code);
+            if (empty($targetIds)) {
                 return $this->fail('Valid seat_code is required');
             }
 
-            if (!Db::name('seat')->where('seat_code', $seatId)->delete()) {
-                return $this->fail('Seat booking not found', 404);
-            }
+            Db::startTrans();
+            try {
+                $existingIds = array_map(
+                    'intval',
+                    Db::name('seat')->where('seat_code', 'in', $targetIds)->lock(true)->column('seat_code') ?: []
+                );
+                if (empty($existingIds)) {
+                    Db::rollback();
+                    return $this->fail('Seat booking not found', 404);
+                }
 
-            return $this->ok(['seat_code' => $seatId], 'Seat booking deleted');
+                Db::name('seat')->where('seat_code', 'in', $existingIds)->delete();
+                Db::commit();
+
+                return $this->ok([
+                    'seat_code'     => $existingIds[0],
+                    'deleted_ids'   => $existingIds,
+                    'deleted_count' => count($existingIds),
+                ], 'Seat booking deleted');
+            } catch (\Throwable $txErr) {
+                Db::rollback();
+                throw $txErr;
+            }
         } catch (\Throwable $e) {
             return $this->serverError('Failed to delete seat booking', $e);
         }

@@ -26,7 +26,10 @@
       <table>
         <thead>
           <tr>
-            <th class="check-col"><input type="checkbox" data-role="check-all" aria-label="Select all users on page"></th>
+            <th class="check-col">
+              <label class="sr-only" for="users-check-all">Select all users on page</label>
+              <input type="checkbox" id="users-check-all" data-role="check-all" aria-label="Select all users on page">
+            </th>
             <th>User ID</th>
             <th>Display Name</th>
             <th>Email Address</th>
@@ -64,6 +67,7 @@
           label: 'Delete Selected',
           endpoint: '/index.php/admin/user/delete',
           idKey: 'user_code',
+          batchKey: 'user_codes',
           confirmText: function (n) { return 'Delete ' + n + ' selected user account(s)?'; },
           successPrefix: 'Deleted',
         },
@@ -86,7 +90,7 @@
         renderRow: function (u) {
           return (
             '<tr>' +
-            '<td class="check-col"><input type="checkbox" class="row-check" value="' + esc(u.user_code) + '" aria-label="Select user #' + esc(u.user_code) + '"></td>' +
+            '<td class="check-col"><label><span class="sr-only">Select user #' + esc(u.user_code) + '</span><input type="checkbox" class="row-check" value="' + esc(u.user_code) + '" aria-label="Select user #' + esc(u.user_code) + '"></label></td>' +
             '<td class="tabular-nums">#' + esc(u.user_code) + '</td>' +
             '<td><strong>' + esc(u.user_name) + '</strong></td>' +
             '<td>' + esc(u.email) + '</td>' +

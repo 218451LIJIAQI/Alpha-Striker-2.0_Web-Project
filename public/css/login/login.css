@@ -2,7 +2,7 @@
 
 body {
   background-color: var(--surface-canvas);
-  background-image: radial-gradient(circle at 50% 0%, rgba(29, 78, 216, 0.09) 0%, transparent 65%);
+  background-image: radial-gradient(circle at 50% 0%, rgba(190, 18, 60, 0.08) 0%, transparent 65%);
   color: var(--text-main);
   min-height: 100vh;
   display: flex;
@@ -176,7 +176,7 @@ body {
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-.form-input:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14); }
+.form-input:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 3px rgba(190, 18, 60, 0.15); }
 
 .auth-container .btn-primary {
   width: 100%;

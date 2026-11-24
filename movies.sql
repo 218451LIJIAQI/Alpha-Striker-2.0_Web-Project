@@ -174,7 +174,7 @@ INSERT INTO `t_offer` (`offer_code`, `offer_title`, `offer_type`, `offer_descrip
 (4, 'Family Fun Package', 'VIP Experiences', 'Save $5.00 on family bookings and get 20% off our family popcorn combo at concessions.', 'FAMILY4FUN', '2027-12-31', '../img/offer/family.png', 'POPULAR', 5.00, NULL, NULL, '2025-05-20 00:25:28', NULL, NULL),
 (5, 'Birthday Celebration Package', 'VIP Experiences', 'Celebrate your birthday with $5.00 off any screening and a special concession treat.', 'BDAYMOVIE', '2027-12-31', '../img/offer/birthday.jpg', 'EXCLUSIVE', 5.00, NULL, NULL, '2025-05-20 00:25:28', NULL, NULL);
 
-/* Seed sample seat bookings (ISO YYYY-MM-DD dates) */
+/* Seed sample seat bookings (historical completed screenings + upcoming cancelable passes) */
 INSERT INTO `t_seat` (`seat_code`, `movie_code`, `user_code`, `date`, `time`, `seat_num`, `seat_zone`, `theater_code`, `create_code`, `create_time`, `update_code`, `update_time`) VALUES
 (8,  2, 1, '2026-11-23', '09:30 AM', 'A4', 1, 1, NULL, '2026-11-20 02:30:41', NULL, NULL),
 (9,  2, 1, '2026-11-23', '09:30 AM', 'E7', 2, 1, NULL, '2026-11-20 02:30:41', NULL, NULL),
@@ -183,8 +183,8 @@ INSERT INTO `t_seat` (`seat_code`, `movie_code`, `user_code`, `date`, `time`, `s
 (12, 3, 1, '2026-11-23', '09:30 AM', 'D8', 2, 3, NULL, '2026-11-20 02:48:22', NULL, NULL),
 (13, 1, 1, '2026-11-23', '12:00 PM', 'C4', 1, 1, NULL, '2026-11-20 20:11:25', NULL, NULL),
 (14, 1, 1, '2026-11-23', '12:00 PM', 'D5', 2, 1, NULL, '2026-11-20 20:11:25', NULL, NULL),
-(15, 2, 1, '2026-11-24', '12:00 PM', 'D6', 2, 2, NULL, '2026-11-20 20:26:09', NULL, NULL),
-(16, 2, 1, '2026-11-24', '12:00 PM', 'C9', 1, 2, NULL, '2026-11-20 20:26:09', NULL, NULL);
+(15, 2, 1, '2027-01-15', '08:00 PM', 'D6', 2, 2, NULL, '2026-11-20 20:26:09', NULL, NULL),
+(16, 2, 1, '2027-01-15', '08:00 PM', 'C9', 1, 2, NULL, '2026-11-20 20:26:09', NULL, NULL);
 
 /* Consolidated theater_movie schedule (all 6 theaters x 7 movies) */
 INSERT INTO `theater_movie` (`theater_code`, `movie_code`, `start_date`, `end_date`, `daily_showtimes`, `created_time`) VALUES

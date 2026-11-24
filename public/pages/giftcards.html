@@ -24,7 +24,7 @@
       <section class="info-card-section giftcard-option" id="giftcard-builder">
         <h2>Customize &amp; Issue a Digital Gift Card</h2>
         <div class="giftcard-builder-grid">
-          <form id="giftcard-issue-form" class="giftcard-form-stack">
+          <form id="giftcard-issue-form" class="giftcard-form-stack" novalidate>
             <div>
               <strong>Select Denomination</strong>
               <div class="topic-chips-row" id="giftcard-amounts" role="group" aria-label="Gift Card Denomination">
@@ -35,26 +35,26 @@
               </div>
             </div>
 
-            <div>
+            <div class="form-group">
               <label for="gc-theme"><strong>Card Theme</strong></label>
               <select id="gc-theme">
-                <option value="classic">Cinema Premiere (Sapphire / Crimson)</option>
+                <option value="classic">Cinema Premiere (Velvet Crimson)</option>
                 <option value="birthday">Birthday Celebration</option>
                 <option value="vip">VIP Gold Lounge</option>
               </select>
             </div>
 
-            <div>
+            <div class="form-group">
               <label for="gc-recipient"><strong>Recipient Name *</strong></label>
               <input type="text" id="gc-recipient" placeholder="e.g. Jordan Lee" required maxlength="60">
             </div>
 
-            <div>
+            <div class="form-group">
               <label for="gc-email"><strong>Recipient Email *</strong></label>
               <input type="email" id="gc-email" placeholder="friend@example.com" required maxlength="100">
             </div>
 
-            <div>
+            <div class="form-group">
               <label for="gc-note"><strong>Personal Message</strong></label>
               <textarea id="gc-note" rows="2" maxlength="140" placeholder="Enjoy movie night on me!"></textarea>
             </div>
@@ -81,7 +81,7 @@
               </div>
             </div>
 
-            <div class="info-callout">
+            <div class="info-callout form-group">
               <label for="gc-check-input"><strong>Check Gift Card Balance</strong></label>
               <div class="giftcard-balance-row">
                 <input type="text" id="gc-check-input" placeholder="Enter code (e.g. GC-CINE50)" maxlength="32">
@@ -202,9 +202,16 @@
 
       document.getElementById('giftcard-issue-form').addEventListener('submit', function (e) {
         e.preventDefault();
+        [recipientInput, emailInput].forEach(CT.clearFieldError);
         const rec = recipientInput.value.trim();
         const em = emailInput.value.trim();
-        if (!rec || !CT.isValidEmail(em)) {
+        if (!rec) {
+          CT.flagFieldError(recipientInput, 'Recipient name is required');
+          window.showToast('Please enter recipient name and a valid email address', 'warning');
+          return;
+        }
+        if (!CT.isValidEmail(em)) {
+          CT.flagFieldError(emailInput, 'Please enter a valid recipient email');
           window.showToast('Please enter recipient name and a valid email address', 'warning');
           return;
         }
@@ -214,13 +221,16 @@
         localStorage.setItem('cinetixGiftCards', JSON.stringify(ledger));
         codeEl.textContent = newCode;
         checkInput.value = newCode;
+        CT.clearFieldError(checkInput);
         renderBalanceStatus('Issued ' + newCode + ' — Active balance: $' + selectedAmount.toFixed(2), true);
         window.showToast('Issued $' + selectedAmount + ' e-Gift Card (' + newCode + ') for ' + rec + '!', 'success');
       });
 
       function checkBalance() {
+        CT.clearFieldError(checkInput);
         const queryCode = (checkInput.value || '').trim().toUpperCase();
         if (!queryCode) {
+          CT.flagFieldError(checkInput, 'Enter a gift card code to check');
           window.showToast('Enter a gift card code to check its balance', 'warning');
           return;
         }
@@ -230,6 +240,7 @@
           renderBalanceStatus(msg, true);
           window.showToast(msg, 'success');
         } else {
+          CT.flagFieldError(checkInput, 'Gift card code was not found');
           renderBalanceStatus('Gift card code "' + queryCode + '" was not found.', false);
           window.showToast('Gift card code not found', 'error');
         }

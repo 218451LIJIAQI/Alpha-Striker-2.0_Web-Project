@@ -10,6 +10,7 @@ use think\facade\Session;
 class User extends ApiController
 {
     private const MAX_RESET_ATTEMPTS = 5;
+    private const THROTTLE_SCOPE     = 'user_login';
 
     public function reg()
     {
@@ -53,6 +54,7 @@ class User extends ApiController
                 return $this->fail('Registration failed');
             }
 
+            $this->clearLoginThrottle(self::THROTTLE_SCOPE);
             return $this->issueUserSession($userId, $name, $email, 'Registration successful');
         } catch (\Throwable $e) {
             return $this->serverError('Registration failed', $e);
@@ -66,6 +68,10 @@ class User extends ApiController
                 return $this->fail('Forbidden: cross-origin request rejected', 403);
             }
 
+            if (!$this->checkLoginThrottle(self::THROTTLE_SCOPE)) {
+                return $this->fail('Too many failed sign-in attempts. Please wait before trying again.', 429);
+            }
+
             $email    = strtolower($this->strParam('email'));
             $password = $this->rawStrParam('password');
 
@@ -75,9 +81,13 @@ class User extends ApiController
 
             $user = Db::name('user')->where('email', $email)->find();
             if (!$user || !$this->verifyAndUpgradePassword($user, $password)) {
+                if ($this->recordLoginFailure(self::THROTTLE_SCOPE)) {
+                    return $this->fail('Too many failed sign-in attempts. Please wait before trying again.', 429);
+                }
                 return $this->fail('Invalid email or password');
             }
 
+            $this->clearLoginThrottle(self::THROTTLE_SCOPE);
             return $this->issueUserSession(
                 (int) $user['user_code'],
                 $user['user_name'],
@@ -115,6 +125,8 @@ class User extends ApiController
     public function session()
     {
         try {
+            $this->purgeExpiredResetChallenge();
+
             $userId = (int) Session::get('user_id', 0);
             if ($userId <= 0) {
                 return $this->ok([
@@ -158,6 +170,8 @@ class User extends ApiController
             if (!$this->verifySameOrigin()) {
                 return $this->fail('Forbidden: cross-origin request rejected', 403);
             }
+
+            $this->purgeExpiredResetChallenge();
 
             $email = strtolower($this->strParam('email'));
             if (!$this->isValidEmail($email)) {
@@ -251,6 +265,7 @@ class User extends ApiController
                 }
 
                 $this->clearResetChallenge();
+                $this->clearLoginThrottle(self::THROTTLE_SCOPE);
                 $this->rotateSession();
                 Session::set('user_id', $sessionUserId);
                 Session::set('user_email', $user['email']);
@@ -315,12 +330,12 @@ class User extends ApiController
                 return $this->fail('Password update failed');
             }
 
+            // Clear customer session keys on recovery reset (preserving any isolated admin_* session)
+            Session::delete('user_id');
+            Session::delete('user_email');
             $this->clearResetChallenge();
+            $this->clearLoginThrottle(self::THROTTLE_SCOPE);
             $this->rotateSession();
-            if ($sessionUserId > 0 && $sessionUserId === (int) $user['user_code']) {
-                Session::set('user_id', $sessionUserId);
-                Session::set('user_email', $user['email']);
-            }
 
             return $this->ok(null, 'Password changed successfully');
         } catch (\Throwable $e) {
@@ -350,6 +365,14 @@ class User extends ApiController
                 ]);
         }
         return $authenticated;
+    }
+
+    private function purgeExpiredResetChallenge()
+    {
+        $expiresAt = (int) Session::get('reset_expires_at', 0);
+        if ($expiresAt > 0 && time() > $expiresAt) {
+            $this->clearResetChallenge();
+        }
     }
 
     private function clearResetChallenge()

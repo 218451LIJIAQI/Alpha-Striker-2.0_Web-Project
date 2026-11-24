@@ -47,11 +47,14 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
       className: '',
       innerHTML: '',
       textContent: '',
+      dataset: {},
       options: children,
+      children,
       classList: makeClassList(elClasses),
       parentNode: { removeChild: () => {} },
       appendChild(child) {
         children.push(child);
+        child.parentNode = this;
         return child;
       },
       click() {
@@ -62,8 +65,13 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
       },
       setAttribute: (k, v) => attrs.set(k, String(v)),
       getAttribute: (k) => (attrs.has(k) ? attrs.get(k) : null),
+      removeAttribute: (k) => attrs.delete(k),
       remove() {
         this.removed = true;
+        if (this.parentNode && Array.isArray(this.parentNode.children)) {
+          const idx = this.parentNode.children.indexOf(this);
+          if (idx >= 0) this.parentNode.children.splice(idx, 1);
+        }
       },
       querySelector: () => ({ addEventListener: () => {} }),
       querySelectorAll: () => [],
@@ -103,7 +111,7 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
     },
     localStorage: {
       getItem: (k) => (storage.has(k) ? storage.get(k) : null),
-      setItem: (k, v) => storage.set(k, String(v)),
+      setItem: (k) => storage.set(k, ''),
       removeItem: (k) => storage.delete(k),
       clear: () => storage.clear(),
     },
@@ -141,6 +149,7 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
     },
     location: { pathname, search: '', href: pathname },
   };
+  sandbox.localStorage.setItem = (k, v) => storage.set(k, String(v));
   sandbox.window = sandbox;
 
   const commonCode = fs.readFileSync(path.join(ROOT, 'public/js/common.js'), 'utf8');
@@ -234,7 +243,10 @@ test('showNotification supports both 2-argument and 3-argument call signatures s
   sandbox.showNotification('Custom Title', 'Detailed <script> message', 'warning');
 
   assert.equal(appended.length, before + 2);
+  const firstToast = appended[appended.length - 2];
   const secondToast = appended[appended.length - 1];
+  assert.equal(firstToast.style.top, '84px');
+  assert.equal(secondToast.style.top, '172px');
   assert.ok(secondToast.innerHTML.includes('Custom Title'));
   assert.ok(secondToast.innerHTML.includes('&lt;script&gt;'));
 });
@@ -527,4 +539,138 @@ test('AdminApp.sanitizeCsvCell neutralizes spreadsheet formula injection and cre
   await retryBtn.trigger('click');
   assert.ok(tbody.innerHTML.includes('=CMD|'));
   assert.ok(!tbody.innerHTML.includes('table-error-state'));
+});
+
+test('resolveAssetUrl scheme allowlist, screening time cutoff helpers, compareSeatCodes, and persistent field error helpers work accurately', () => {
+  const { sandbox, makeElement } = createBrowserSandbox('/pages/pay.html');
+  const CT = sandbox.CineTicket;
+
+  // Block dangerous URI schemes while allowing safe relative, https, and data:image URIs
+  assert.equal(CT.resolveAssetUrl('javascript:alert(1)'), '../img/logo.jpg');
+  assert.equal(CT.resolveAssetUrl('vbscript:msgbox(1)'), '../img/logo.jpg');
+  assert.equal(CT.resolveAssetUrl('data:text/html,<script>alert(1)</script>'), '../img/logo.jpg');
+  assert.equal(CT.resolveAssetUrl('data:image/png;base64,iVBORw0KGgo='), 'data:image/png;base64,iVBORw0KGgo=');
+  assert.equal(CT.resolveAssetUrl('https://cdn.example.com/poster.jpg'), 'https://cdn.example.com/poster.jpg');
+
+  // 12-hour AM/PM & 24-hour screening minute parser + cancellation cutoff
+  assert.equal(CT.parseScreeningMinutes('12:00 AM'), 0);
+  assert.equal(CT.parseScreeningMinutes('09:30 AM'), 570);
+  assert.equal(CT.parseScreeningMinutes('12:30 PM'), 750);
+  assert.equal(CT.parseScreeningMinutes('08:15 PM'), 1215);
+  assert.equal(CT.parseScreeningMinutes('invalid-time'), -1);
+
+  const nowRef = new Date(2026, 10, 24, 14, 0, 0); // 2026-11-24 14:00
+  assert.equal(CT.isScreeningCancelable('2026-11-25', '09:30 AM', nowRef), true);
+  assert.equal(CT.isScreeningCancelable('2026-11-24', '08:00 PM', nowRef), true);
+  assert.equal(CT.isScreeningCancelable('2026-11-24', '09:30 AM', nowRef), false);
+  assert.equal(CT.isScreeningCancelable('2026-11-23', '11:30 PM', nowRef), false);
+
+  // Natural seat code comparator (A2 < A10 < D2 < D12)
+  const seats = ['D12', 'A10', 'D2', 'A2'];
+  seats.sort(CT.compareSeatCodes);
+  assert.deepEqual(Array.from(seats), ['A2', 'A10', 'D2', 'D12']);
+
+  // Persistent field error flagging + automatic clear on input
+  const group = makeElement('div');
+  group.querySelector = (sel) =>
+    group.children.find((ch) => sel.includes(ch.getAttribute('data-error-for') || '__none__')) || null;
+  const input = makeElement('input');
+  input.id = 'expiry';
+  input.closest = () => group;
+  group.appendChild(input);
+
+  CT.flagFieldError(input, 'Card has expired.');
+  assert.equal(input.classList.contains('input-error'), true);
+  assert.equal(input.getAttribute('aria-invalid'), 'true');
+  assert.equal(input.focused, true);
+  assert.equal(group.children.length, 2);
+  assert.equal(group.children[1].textContent, 'Card has expired.');
+
+  input.trigger('input');
+  assert.equal(input.classList.contains('input-error'), false);
+  assert.equal(input.getAttribute('aria-invalid'), null);
+  assert.equal(group.children.length, 1);
+});
+
+test('AdminApp atomic batchKey bulk delete, whitelisted sortKey fallback, explicit toolbar labels, and renderFormLoadError work end-to-end', async () => {
+  const batchRequests = [];
+  const { sandbox, storage, domById, makeElement } = createBrowserSandbox('/admin/offers.html', async (url, opts) => {
+    batchRequests.push({ url, body: JSON.parse(opts.body) });
+    return { status: 200, json: async () => ({ success: true, data: { deleted_count: 2 } }) };
+  });
+  storage.set('adminToken', 'csrf-batch-789');
+  const adminCode = fs.readFileSync(path.join(ROOT, 'public/js/admin/admin.js'), 'utf8');
+  vm.runInNewContext(adminCode, sandbox);
+
+  const searchInput = makeElement('input');
+  const sortSelect = makeElement('select');
+  const bulkBtn = makeElement('button');
+  const toolbar = makeElement('div');
+  toolbar.querySelector = (sel) => {
+    if (sel === '.toolbar-search') return searchInput;
+    if (sel === '[data-role="sort"]') return sortSelect;
+    if (sel === '[data-role="bulk"]') return bulkBtn;
+    return null;
+  };
+
+  const rowChecks = [makeElement('input'), makeElement('input')];
+  rowChecks[0].value = '11';
+  rowChecks[1].value = '12';
+  const checkAll = makeElement('input');
+  const tbody = makeElement('tbody');
+  tbody.closest = () => ({ querySelector: () => checkAll });
+  tbody.querySelectorAll = (sel) => (sel === '.row-check' ? rowChecks : []);
+  domById.set('batch-toolbar', toolbar);
+  domById.set('batch-tbody', tbody);
+
+  const ctrl = sandbox.AdminApp.createTableController({
+    toolbarId: 'batch-toolbar',
+    tbodyId: 'batch-tbody',
+    colSpan: 4,
+    sorts: [
+      { key: 'id_asc', label: 'ID Asc', compare: (a, b) => a.offer_code - b.offer_code },
+      { key: 'id_desc', label: 'ID Desc', compare: (a, b) => b.offer_code - a.offer_code },
+    ],
+    bulkAction: {
+      label: 'Delete Selected',
+      endpoint: '/index.php/admin/offer/delete',
+      idKey: 'offer_code',
+      batchKey: 'offer_codes',
+      onSuccess: () => {},
+    },
+    renderRow: (it) => `<tr><td>#${it.offer_code}</td></tr>`,
+  });
+
+  // Toolbar markup includes explicit <label class="sr-only" for="...">
+  assert.ok(toolbar.innerHTML.includes('<label class="sr-only" for="batch-toolbar-search">'));
+  assert.ok(toolbar.innerHTML.includes('<label class="sr-only" for="batch-toolbar-sort">'));
+
+  ctrl.setItems([{ offer_code: 12 }, { offer_code: 11 }]);
+  assert.ok(tbody.innerHTML.indexOf('#11') < tbody.innerHTML.indexOf('#12'));
+
+  // Unwhitelisted sortKey falls back safely to default 'id_asc'
+  sortSelect.trigger('change', { target: { value: 'id_desc' } });
+  assert.ok(tbody.innerHTML.indexOf('#12') < tbody.innerHTML.indexOf('#11'));
+  sortSelect.trigger('change', { target: { value: 'evil_unlisted_sort' } });
+  assert.ok(tbody.innerHTML.indexOf('#11') < tbody.innerHTML.indexOf('#12'));
+
+  // Single-POST atomic batch payload via batchKey
+  checkAll.checked = true;
+  checkAll.trigger('change');
+  await bulkBtn.trigger('click', { currentTarget: bulkBtn });
+  assert.equal(batchRequests.length, 1);
+  assert.deepEqual(batchRequests[0].body, { offer_codes: ['11', '12'] });
+
+  // renderFormLoadError retry state
+  const formEl = makeElement('form');
+  const retryBtn = makeElement('button');
+  formEl.querySelector = (sel) => (sel === '[data-role="retry-form"]' ? retryBtn : null);
+  let retried = false;
+  sandbox.AdminApp.renderFormLoadError(formEl, 'Database offline', 'offers.html', 'Back to Offers', () => {
+    retried = true;
+  });
+  assert.ok(formEl.innerHTML.includes('Unable to load record:'));
+  assert.ok(formEl.innerHTML.includes('offers.html'));
+  retryBtn.trigger('click');
+  assert.equal(retried, true);
 });

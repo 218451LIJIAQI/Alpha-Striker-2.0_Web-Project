@@ -10,11 +10,13 @@ use think\facade\Session;
 /**
  * Base controller for authenticated admin endpoints.
  * Enforces Same-Origin check, active admin session, and non-empty constant-time X-Admin-Token / Bearer verification,
- * and centralizes partial-update merging, foreign-key ID resolution, relation mapping, non-destructive junction syncing,
- * and formula-safe UTF-8 BOM CSV streaming.
+ * and centralizes partial-update merging, single/batch target ID resolution, foreign-key ID resolution,
+ * relation mapping, non-destructive junction syncing, and formula-safe UTF-8 BOM CSV streaming.
  */
 abstract class BaseAdmin extends ApiController
 {
+    private const MAX_BATCH_IDS = 200;
+
     public function __construct()
     {
         if (!$this->verifySameOrigin()) {
@@ -55,6 +57,33 @@ abstract class BaseAdmin extends ApiController
         }
 
         return hash_equals($sessionToken, $clientToken);
+    }
+
+    /**
+     * Resolves either a single positive ID or a batch list of positive IDs for atomic delete/bulk actions.
+     */
+    protected function resolveTargetIds($singleKey, $batchKey, $direct = '')
+    {
+        if ($direct !== '' && $direct !== null) {
+            $one = $this->parsePositiveInt($direct);
+            return $one > 0 ? [$one] : [];
+        }
+
+        $payload = $this->payload();
+        if (isset($payload[$batchKey])) {
+            $batch = $this->normalizeIdArray($payload[$batchKey]);
+            return array_slice($batch, 0, self::MAX_BATCH_IDS);
+        }
+
+        if (isset($payload[$singleKey])) {
+            if (is_array($payload[$singleKey])) {
+                return array_slice($this->normalizeIdArray($payload[$singleKey]), 0, self::MAX_BATCH_IDS);
+            }
+            $one = $this->parsePositiveInt($payload[$singleKey]);
+            return $one > 0 ? [$one] : [];
+        }
+
+        return [];
     }
 
     /**

@@ -3,16 +3,18 @@
 Static, Security, Accessibility & Relational Contract Audit Suite for CineTix (Alpha Striker 2.0).
 Verifies:
 1. movies.sql relational schema, foreign keys, unique constraints, and seed asset paths (case-sensitive) in SQLite (PRAGMA foreign_keys=ON).
-2. PHP syntax structure, balanced delimiters, zero bare mb_* calls, zero hardcoded '888888', strict non-empty CSRF + same-origin check,
-   shared BaseAdmin relation & partial-update helpers (resolveValidIds, mapRelationIds, syncScheduleRows, syncMovieOfferRows, mergeExistingPayload),
-   ApiController strict scalar/integer/date/password/CSV-formula-injection/cent-rounding parity, SameSite=Lax + Asia/Kuala_Lumpur configs,
-   and 3-way route parity across Frontend <-> PHP Controllers <-> mock_thinkphp_server.py.
+2. PHP syntax structure, balanced delimiters, zero bare mb_* calls, zero hardcoded '888888', strict non-empty CSRF + host:port same-origin check,
+   role-isolated login brute-force lockouts + reset expiry cleanup, screening start-time cancellation & date-window guards,
+   shared BaseAdmin relation, atomic batch ID & partial-update helpers (resolveTargetIds, resolveValidIds, mapRelationIds, syncScheduleRows, syncMovieOfferRows, mergeExistingPayload),
+   ApiController strict scalar/integer/date/asset-URI/password/CSV-formula-injection/cent-rounding/whitelisted-pagination parity,
+   SameSite=Lax + Asia/Kuala_Lumpur configs, and 3-way route parity across Frontend <-> PHP Controllers <-> mock_thinkphp_server.py.
 3. JavaScript syntax across all external .js modules and inline HTML <script> blocks via `node --check`, zero leaked window.* globals,
-   and presence of shared security/UI primitives (sanitizeCsvCell, sanitizeRedirectPath, isValidPasswordBytes, parseSeatCodes, activatePill, bindTabList, renderStateCard).
-4. HTML/JS zero `href="#"` dead links, zero external CDN <link>/<script> dependencies, case-sensitive local asset integrity,
-   100% offline CSS coverage for every `fa-*` icon class, and all 39 binary images/icons readability.
-5. CSS brace balance, zero undefined or unused CSS custom properties, single centralized dark-mode variable block, `:focus-visible`,
-   `prefers-reduced-motion`, sticky table headers, viewport-safe sidebar/modal scroll rules, and absence of destructive global overrides.
+   and presence of shared security/UI primitives (sanitizeCsvCell, sanitizeRedirectPath, isValidPasswordBytes, parseSeatCodes, compareSeatCodes,
+   parseScreeningMinutes, isScreeningCancelable, flagFieldError, clearFieldError, activatePill, bindTabList, renderStateCard).
+4. HTML/JS zero `href="#"` dead links, zero external CDN <link>/<script> dependencies, 100% explicit `<label>`/ARIA coverage across all form controls
+   in all 32 HTML pages, case-sensitive local asset integrity, 100% offline CSS coverage for every `fa-*` icon class, and all 39 binary images readability.
+5. CSS brace balance, zero undefined or unused CSS custom properties, zero leftover pre-rebrand blue colors, single centralized dark-mode variable block,
+   `:focus-visible`, `prefers-reduced-motion`, sticky table headers, viewport-safe sidebar/modal scroll rules, and absence of destructive global overrides.
 """
 
 from __future__ import annotations
@@ -24,6 +26,8 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+from bs4 import BeautifulSoup
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -228,6 +232,15 @@ def verify_php_and_security_contracts() -> None:
         "function parseFiniteFloat(",
         "function rawStrParam(",
         "function isValidIsoDate(",
+        "function isValidAssetPath(",
+        "function parseScreeningMinutes(",
+        "function isScreeningCancelable(",
+        "function compareSeatCodes(",
+        "function compareScreeningRows(",
+        "function checkLoginThrottle(",
+        "function recordLoginFailure(",
+        "function clearLoginThrottle(",
+        "function paginateAndSort(",
         "function optionalIdWithDefault(",
         "function applyDateWindow(",
         "function sanitizeCsvCell(",
@@ -237,6 +250,7 @@ def verify_php_and_security_contracts() -> None:
     ):
         assert_true(helper_sig in api_ctrl_src, f"ApiController.php missing {helper_sig}")
     assert_true(re.search(r"MAX_PASSWORD_BYTES\s*=\s*72", api_ctrl_src) is not None, "ApiController.php missing MAX_PASSWORD_BYTES = 72")
+    assert_true(re.search(r"MAX_LOGIN_ATTEMPTS\s*=\s*5", api_ctrl_src) is not None, "ApiController.php missing MAX_LOGIN_ATTEMPTS = 5")
     assert_true("function textSub(" not in api_ctrl_src, "Dead ApiController::textSub helper should remain removed")
 
     base_admin_src = (ROOT / "application/admin/controller/BaseAdmin.php").read_text(encoding="utf-8")
@@ -245,6 +259,7 @@ def verify_php_and_security_contracts() -> None:
         "BaseAdmin.php CSRF short-circuit vulnerability not remediated!",
     )
     for admin_helper in (
+        "function resolveTargetIds(",
         "function resolveValidIds(",
         "function queryRelationIds(",
         "function mapRelationIds(",
@@ -262,9 +277,18 @@ def verify_php_and_security_contracts() -> None:
             f"{admin_ctrl_name} must delegate relation handling to BaseAdmin helpers",
         )
         assert_true(
+            "$this->isValidAssetPath(" in ctrl_src,
+            f"{admin_ctrl_name} must validate asset URI paths via isValidAssetPath",
+        )
+        assert_true(
             "function syncMovieOffers(" not in ctrl_src and "function syncOfferMovies(" not in ctrl_src,
             f"{admin_ctrl_name} retains duplicate private movie_offer sync method",
         )
+
+    user_ctrl_src = (ROOT / "application/user/controller/User.php").read_text(encoding="utf-8")
+    admin_auth_src = (ROOT / "application/admin/controller/Auth.php").read_text(encoding="utf-8")
+    assert_true("function purgeExpiredResetChallenge(" in user_ctrl_src, "User.php missing purgeExpiredResetChallenge")
+    assert_true("user_login" in user_ctrl_src and "admin_login" in admin_auth_src, "Login lockout scopes must be role-isolated")
 
     admin_user_src = (ROOT / "application/admin/controller/User.php").read_text(encoding="utf-8")
     safe_match = re.search(r"SAFE_FIELDS\s*=\s*'([^']+)'", admin_user_src)
@@ -275,11 +299,19 @@ def verify_php_and_security_contracts() -> None:
         "?: $this->idParam('user_code')" not in seat_src and "$this->idParam('user_code') ?:" not in seat_src,
         "Seat.php still trusts client-supplied user_code fallback!",
     )
+    assert_true("isScreeningCancelable(" in seat_src, "Seat.php must enforce screening start-time cancellation guard")
 
     # Verify 3-way route & helper parity: Frontend <-> PHP Controllers <-> mock_thinkphp_server.py
     mock_src = (ROOT / "tests/mock_thinkphp_server.py").read_text(encoding="utf-8")
     for mock_sig in (
         "def is_valid_iso_date(",
+        "def is_valid_asset_path(",
+        "def parse_screening_minutes(",
+        "def is_screening_cancelable(",
+        "def compare_seat_codes(",
+        "def compare_screening_rows(",
+        "def resolve_target_ids(",
+        "def paginate_and_sort(",
         "def parse_positive_int(",
         "def scalar_str(",
         "def sanitize_csv_cell(",
@@ -289,7 +321,7 @@ def verify_php_and_security_contracts() -> None:
     ):
         assert_true(mock_sig in mock_src, f"mock_thinkphp_server.py missing 1:1 {mock_sig} parity")
     assert_true(re.search(r"MAX_PASSWORD_BYTES\s*=\s*72", mock_src) is not None, "mock_thinkphp_server.py missing MAX_PASSWORD_BYTES = 72")
-    assert_true("(4300, 4399)" in mock_src, "mock_thinkphp_server.py must bind strictly within 4300-4399")
+    assert_true("(4300, 4399)" in mock_src and "CINETIX_PORT_RANGE" in mock_src, "mock_thinkphp_server.py must support default 4300-4399 and CINETIX_PORT_RANGE")
     mock_routes = set(re.findall(r'route\s*==\s*"([a-z0-9_]+/[a-z0-9_]+/[a-z0-9_]+)"', mock_src))
 
     all_php_routes = {
@@ -347,6 +379,12 @@ def verify_js_html_css_and_binaries() -> None:
         "function sanitizeRedirectPath(",
         "function isValidPasswordBytes(",
         "function parseSeatCodes(",
+        "function compareSeatCodes(",
+        "function parseScreeningMinutes(",
+        "function isScreeningCancelable(",
+        "function flagFieldError(",
+        "function clearFieldError(",
+        "function bindFieldErrorClear(",
         "function activatePill(",
         "function bindTabList(",
         "function renderStateCard(",
@@ -356,6 +394,9 @@ def verify_js_html_css_and_binaries() -> None:
     admin_js_src = (ROOT / "public/js/admin/admin.js").read_text(encoding="utf-8")
     assert_true("function sanitizeCsvCell(" in admin_js_src, "public/js/admin/admin.js missing sanitizeCsvCell")
     assert_true("function getQueryId(" in admin_js_src, "public/js/admin/admin.js missing getQueryId")
+    assert_true("function renderFormLoadError(" in admin_js_src, "public/js/admin/admin.js missing renderFormLoadError")
+    assert_true("adminRemember" not in admin_js_src, "Dead adminRemember key should remain removed from admin.js")
+    assert_true("function resolveAdminAsset(" not in admin_js_src, "Duplicate resolveAdminAsset wrapper should remain removed")
 
     for jf in js_files:
         proc = subprocess.run(["node", "--check", str(jf)], capture_output=True, text=True)
@@ -375,6 +416,7 @@ def verify_js_html_css_and_binaries() -> None:
     assert_true(len(html_files) == 32, f"Expected 32 HTML pages, found {len(html_files)}")
     inline_script_count = 0
     local_ref_count = 0
+    labeled_control_count = 0
     ext_asset_re = re.compile(r"<(?:link|script)\b[^>]*(?:href|src)=[\"']https?://", re.I)
 
     for hf in html_files:
@@ -384,6 +426,23 @@ def verify_js_html_css_and_binaries() -> None:
             ext_asset_re.search(txt) is None,
             f"External CDN stylesheet/script tag found in offline build: {hf}",
         )
+
+        # Verify 100% explicit <label> or ARIA naming across all interactive form controls
+        soup = BeautifulSoup(txt, "html.parser")
+        label_fors = {lbl.get("for") for lbl in soup.find_all("label") if lbl.get("for")}
+        for ctrl in soup.find_all(["input", "select", "textarea"]):
+            if ctrl.name == "input" and (ctrl.get("type") or "text").lower() in ("hidden", "submit", "button", "reset", "image"):
+                continue
+            cid = ctrl.get("id")
+            has_label = (
+                (cid and cid in label_fors)
+                or ctrl.find_parent("label") is not None
+                or bool((ctrl.get("aria-label") or "").strip())
+                or bool((ctrl.get("aria-labelledby") or "").strip())
+            )
+            assert_true(has_label, f"Unlabeled form control in {hf.relative_to(ROOT)}: {ctrl}")
+            labeled_control_count += 1
+
         for tok in fa_token_re.findall(txt):
             if tok != "spin":
                 used_fa_icons.add(f"fa-{tok}")
@@ -434,6 +493,7 @@ def verify_js_html_css_and_binaries() -> None:
     )
     assert_true(":focus-visible" in header_css_txt, "Missing :focus-visible rules in header.css")
     assert_true("prefers-reduced-motion" in header_css_txt, "Missing prefers-reduced-motion media query in header.css")
+    assert_true(".sr-only" in header_css_txt and ".field-error-hint" in header_css_txt, "Missing .sr-only or .field-error-hint in header.css")
 
     theater_css_txt = (ROOT / "public/css/theater/theater.css").read_text(encoding="utf-8")
     assert_true(".theater-distance-pill" in theater_css_txt, "Missing .theater-distance-pill rule in theater.css")
@@ -449,6 +509,10 @@ def verify_js_html_css_and_binaries() -> None:
     assert_true(len(css_files) == 14, f"Expected 14 CSS files, found {len(css_files)}")
     defined_css_vars: set[str] = set()
     used_css_vars: set[str] = set()
+    legacy_blue_re = re.compile(
+        r"#(?:2196f3|007bff|3498db|0d6efd)|rgba?\(\s*(?:0,\s*123,\s*255|52,\s*152,\s*219|19,\s*106,\s*236|33,\s*150,\s*243)",
+        re.I,
+    )
     for cf in css_files:
         raw = cf.read_text(encoding="utf-8")
         no_comments = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
@@ -461,6 +525,10 @@ def verify_js_html_css_and_binaries() -> None:
         assert_true(
             "background-color: transparent !important" not in no_comments,
             f"Destructive universal transparent background override found in {cf}",
+        )
+        assert_true(
+            legacy_blue_re.search(no_comments) is None,
+            f"Leftover pre-rebrand blue color/shadow found in {cf}",
         )
         if cf.name not in ("dark-mode.css", "header.css"):
             assert_true(
@@ -497,7 +565,7 @@ def verify_js_html_css_and_binaries() -> None:
 
     print(
         f"[PASS] {len(js_files)} JS modules, {inline_script_count} inline scripts, "
-        f"{len(html_files)} HTML pages ({local_ref_count} case-exact refs, 0 CDN links, 0 href='#'), "
+        f"{len(html_files)} HTML pages ({labeled_control_count} labeled controls, {local_ref_count} case-exact refs, 0 CDN links, 0 href='#'), "
         f"{len(css_files)} CSS stylesheets ({len(defined_css_vars)} clean tokens, {len(defined_fa_icons)} offline icon glyphs), "
         f"and {len(binary_files)} binary images verified"
     )

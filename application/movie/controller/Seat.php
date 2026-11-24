@@ -27,8 +27,11 @@ class Seat extends ApiController
                 ->where('date', $date)
                 ->where('time', $time)
                 ->field('seat_num, seat_zone, theater_code')
-                ->order('seat_num', 'asc')
                 ->select();
+
+            usort($seats, function ($a, $b) {
+                return $this->compareSeatCodes($a['seat_num'] ?? '', $b['seat_num'] ?? '');
+            });
 
             return $this->ok($seats);
         } catch (\Throwable $e) {
@@ -70,6 +73,10 @@ class Seat extends ApiController
                 return $this->fail('Complete screening and seat parameters are required');
             }
 
+            if ($date < date('Y-m-d')) {
+                return $this->fail('Selected screening date has already passed', 400);
+            }
+
             $seatList        = is_array($rawSeats) ? $rawSeats : explode(',', (string) $rawSeats);
             $normalizedSeats = [];
             foreach ($seatList as $seat) {
@@ -88,9 +95,7 @@ class Seat extends ApiController
 
             $seatNums = array_values($normalizedSeats);
             usort($seatNums, function ($a, $b) {
-                return $a[0] === $b[0]
-                    ? ((int) substr($a, 1)) <=> ((int) substr($b, 1))
-                    : strcmp($a[0], $b[0]);
+                return $this->compareSeatCodes($a, $b);
             });
 
             if (empty($seatNums)) {
@@ -170,10 +175,14 @@ class Seat extends ApiController
 
                 if (!empty($conflicts)) {
                     Db::rollback();
+                    $sortedConflicts = array_values($conflicts);
+                    usort($sortedConflicts, function ($a, $b) {
+                        return $this->compareSeatCodes($a, $b);
+                    });
                     return $this->fail(
-                        'Seats already booked: ' . implode(', ', $conflicts),
+                        'Seats already booked: ' . implode(', ', $sortedConflicts),
                         409,
-                        ['conflict_seats' => array_values($conflicts)]
+                        ['conflict_seats' => $sortedConflicts]
                     );
                 }
 
@@ -222,6 +231,9 @@ class Seat extends ApiController
                         ->where('seat_num', 'in', $seatNums)
                         ->column('seat_num');
                     $conflictList = !empty($actualConflicts) ? array_values($actualConflicts) : $seatNums;
+                    usort($conflictList, function ($a, $b) {
+                        return $this->compareSeatCodes($a, $b);
+                    });
                     return $this->fail(
                         'Seats already booked: ' . implode(', ', $conflictList),
                         409,
@@ -273,9 +285,10 @@ class Seat extends ApiController
                 : [];
 
             foreach ($seats as &$seat) {
-                $tCode                = $seat['theater_code'] ?? 1;
-                $seat['movie_info']   = $movies[$seat['movie_code']] ?? null;
-                $seat['theater_info'] = $theaters[$tCode] ?? null;
+                $tCode                 = $seat['theater_code'] ?? 1;
+                $seat['movie_info']    = $movies[$seat['movie_code']] ?? null;
+                $seat['theater_info']  = $theaters[$tCode] ?? null;
+                $seat['is_cancelable'] = $this->isScreeningCancelable($seat['date'] ?? '', $seat['time'] ?? '');
             }
             unset($seat);
 
@@ -314,6 +327,11 @@ class Seat extends ApiController
                 if ($ownerUserId <= 0 || $ownerUserId !== $sessionUserId) {
                     Db::rollback();
                     return $this->fail('Not authorized to cancel this booking', 403);
+                }
+
+                if (!$this->isScreeningCancelable($seat['date'] ?? '', $seat['time'] ?? '')) {
+                    Db::rollback();
+                    return $this->fail('Cannot cancel a screening that has already started or passed', 400);
                 }
 
                 $deleted = Db::name('seat')

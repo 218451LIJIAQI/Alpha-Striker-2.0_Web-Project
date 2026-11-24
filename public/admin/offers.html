@@ -26,7 +26,10 @@
       <table>
         <thead>
           <tr>
-            <th class="check-col"><input type="checkbox" data-role="check-all" aria-label="Select all offers on page"></th>
+            <th class="check-col">
+              <label class="sr-only" for="offers-check-all">Select all offers on page</label>
+              <input type="checkbox" id="offers-check-all" data-role="check-all" aria-label="Select all offers on page">
+            </th>
             <th>ID</th>
             <th>Image</th>
             <th>Title &amp; Category</th>
@@ -50,8 +53,9 @@
       AdminApp.renderAdminNav('offers');
       if (!(await AdminApp.ensureAuthenticated())) return;
 
+      const CT = window.CineTicket;
       const esc = AdminApp.escapeHtml;
-      const todayIso = window.CineTicket.todayIso();
+      const todayIso = CT.todayIso();
 
       const tableCtrl = AdminApp.createTableController({
         endpoint: '/index.php/admin/offer/index',
@@ -76,6 +80,7 @@
           label: 'Delete Selected',
           endpoint: '/index.php/admin/offer/delete',
           idKey: 'offer_code',
+          batchKey: 'offer_codes',
           confirmText: function (n) { return 'Delete ' + n + ' selected offer(s)? Movie applicability links will also be removed.'; },
           successPrefix: 'Deleted',
         },
@@ -107,7 +112,7 @@
           return true;
         },
         renderRow: function (o) {
-          const imgSrc = AdminApp.resolveAdminAsset(o.img);
+          const imgSrc = CT.resolveAssetUrl(o.img);
           const discount = '$' + (parseFloat(o.money) || 0).toFixed(2);
           const mCount = Array.isArray(o.movie_codes) ? o.movie_codes.length : (o.movie_count || 0);
           const ownerTxt = o.owner && o.owner.user_name ? ('User: ' + o.owner.user_name) : 'Public';
@@ -115,7 +120,7 @@
           const isExpired = Boolean(o.offer_validity && String(o.offer_validity) < todayIso);
           return (
             '<tr>' +
-            '<td class="check-col"><input type="checkbox" class="row-check" value="' + esc(o.offer_code) + '" aria-label="Select offer #' + esc(o.offer_code) + '"></td>' +
+            '<td class="check-col"><label><span class="sr-only">Select offer #' + esc(o.offer_code) + '</span><input type="checkbox" class="row-check" value="' + esc(o.offer_code) + '" aria-label="Select offer #' + esc(o.offer_code) + '"></label></td>' +
             '<td class="tabular-nums">#' + esc(o.offer_code) + '</td>' +
             '<td><img src="' + esc(imgSrc) + '" alt="' + esc(o.offer_title) + '" class="offer-img"></td>' +
             '<td><strong>' + esc(o.offer_title) + '</strong><br><small class="sub-meta">' + esc(o.offer_type) + '</small></td>' +

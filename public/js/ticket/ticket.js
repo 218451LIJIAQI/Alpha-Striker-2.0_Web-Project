@@ -1,11 +1,26 @@
 /**
  * Digital Tickets Wallet, Native Print/PDF Export & Ticket Cancellation Controller
+ * Enforces past-screening refund cutoff badges & disabled state, and supports ?zone= URL deep-linking + popstate sync.
  */
 (function () {
   'use strict';
 
   let cachedSeats = [];
   let activeZoneFilter = 'all';
+
+  function syncWalletUrl() {
+    if (!window.history || typeof window.history.pushState !== 'function') return;
+    const params = new URLSearchParams();
+    if (activeZoneFilter && activeZoneFilter !== 'all') {
+      params.set('zone', activeZoneFilter);
+    }
+    const qs = params.toString();
+    const nextUrl = window.location.pathname + (qs ? '?' + qs : '');
+    const curUrl = window.location.pathname + (window.location.search || '');
+    if (nextUrl !== curUrl) {
+      window.history.pushState(null, '', nextUrl);
+    }
+  }
 
   function purgeCancelledSeatFromReceipt(cancelledSeat) {
     if (!cancelledSeat) return;
@@ -148,6 +163,7 @@
         onAction: function () {
           activeZoneFilter = 'all';
           syncZoneFilterButtons();
+          syncWalletUrl();
           renderFilteredTickets();
         },
       });
@@ -183,14 +199,24 @@
     const seatStr = String(seat.seat_num || 'A1');
     const theaterLabel = theater.theater_name || ('Theater #' + (seat.theater_code || 1));
     const isVip = Number(seat.seat_zone) === 2;
+    const isCancelable = seat.is_cancelable !== undefined
+      ? Boolean(seat.is_cancelable)
+      : CT.isScreeningCancelable(seat.date, seat.time);
 
     const wrapper = document.createElement('article');
-    wrapper.className = 'ticket' + (isVip ? ' ticket-vip' : '');
+    wrapper.className = 'ticket' + (isVip ? ' ticket-vip' : '') + (isCancelable ? '' : ' ticket-completed');
     wrapper.id = 'ticket' + seat.seat_code;
+
+    const cancelBtnHtml = isCancelable
+      ? '<button type="button" class="view-details2 cancel-button" data-seat-code="' + esc(seat.seat_code) + '"><i class="fas fa-undo" aria-hidden="true"></i> Cancel Booking</button>'
+      : '<button type="button" class="view-details2 cancel-button is-completed" data-seat-code="' + esc(seat.seat_code) + '" disabled aria-disabled="true" title="Past or started screenings cannot be cancelled"><i class="fas fa-check-circle" aria-hidden="true"></i> Completed</button>';
 
     wrapper.innerHTML =
       '<div class="movie-banner">' +
+      '<div class="ticket-banner-top">' +
       '<h2 class="movie-title">' + esc(title) + '</h2>' +
+      '<span class="ticket-status-pill ' + (isCancelable ? 'status-upcoming' : 'status-completed') + '">' + (isCancelable ? 'Upcoming' : 'Completed') + '</span>' +
+      '</div>' +
       '<div class="movie-duration"><span>' + esc(runtime) + ' • ' + esc(theaterLabel) + '</span></div>' +
       '<div class="movie-genre">' +
       '<div class="genre-tags">' +
@@ -234,17 +260,19 @@
       '</div>' +
       '<div class="ticket-actions">' +
       '<button type="button" class="view-details export-ticket-btn"><i class="fas fa-qrcode" aria-hidden="true"></i> Print / Save PDF</button>' +
-      '<button type="button" class="view-details2 cancel-button" data-seat-code="' + esc(seat.seat_code) + '"><i class="fas fa-undo" aria-hidden="true"></i> Cancel Booking</button>' +
+      cancelBtnHtml +
       '</div>' +
       '</div>';
 
     wrapper.querySelector('.export-ticket-btn').addEventListener('click', function () {
       exportTicket(wrapper);
     });
-    const cancelBtn = wrapper.querySelector('.cancel-button');
-    cancelBtn.addEventListener('click', function () {
-      cancelTicket(seat, cancelBtn);
-    });
+    if (isCancelable) {
+      const cancelBtn = wrapper.querySelector('.cancel-button');
+      cancelBtn?.addEventListener('click', function () {
+        cancelTicket(seat, cancelBtn);
+      });
+    }
 
     return wrapper;
   }
@@ -285,14 +313,27 @@
   }
 
   document.addEventListener('DOMContentLoaded', async function () {
+    function readZoneFromUrl() {
+      const rawZone = (new URLSearchParams(window.location.search).get('zone') || 'all').toLowerCase();
+      activeZoneFilter = (rawZone === 'vip' || rawZone === 'std') ? rawZone : 'all';
+      syncZoneFilterButtons();
+    }
+
+    readZoneFromUrl();
+
     document.querySelectorAll('[data-ticket-zone]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         activeZoneFilter = btn.getAttribute('data-ticket-zone') || 'all';
         syncZoneFilterButtons();
+        syncWalletUrl();
         renderFilteredTickets();
       });
     });
 
+    window.addEventListener('popstate', function () {
+      readZoneFromUrl();
+      if (cachedSeats.length > 0) renderFilteredTickets();
+    });
     window.addEventListener('cinetix:authchange', function () {
       loadUserTickets();
     });

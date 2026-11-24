@@ -25,7 +25,10 @@
       <table>
         <thead>
           <tr>
-            <th class="check-col"><input type="checkbox" data-role="check-all" aria-label="Select all reservations on page"></th>
+            <th class="check-col">
+              <label class="sr-only" for="seats-check-all">Select all reservations on page</label>
+              <input type="checkbox" id="seats-check-all" data-role="check-all" aria-label="Select all reservations on page">
+            </th>
             <th>Booking ID</th>
             <th>Movie</th>
             <th>Theater</th>
@@ -48,6 +51,7 @@
       AdminApp.renderAdminNav('seats');
       if (!(await AdminApp.ensureAuthenticated())) return;
 
+      const CT = window.CineTicket;
       const esc = AdminApp.escapeHtml;
       const tableCtrl = AdminApp.createTableController({
         endpoint: '/index.php/admin/seat/index',
@@ -65,13 +69,30 @@
         ],
         sorts: [
           { key: 'id_desc', label: 'Sort: Newest Booking', compare: function (a, b) { return Number(b.seat_code) - Number(a.seat_code); } },
-          { key: 'date_asc', label: 'Sort: Screening Date', compare: function (a, b) { return String((a.date || '') + ' ' + (a.time || '')).localeCompare(String((b.date || '') + ' ' + (b.time || ''))); } },
-          { key: 'seat_asc', label: 'Sort: Seat Code', compare: function (a, b) { return String(a.seat_num || '').localeCompare(String(b.seat_num || '')); } },
+          {
+            key: 'date_asc',
+            label: 'Sort: Screening Date',
+            compare: function (a, b) {
+              const da = String(a.date || '');
+              const db = String(b.date || '');
+              if (da !== db) return da.localeCompare(db);
+              const ma = CT.parseScreeningMinutes(a.time);
+              const mb = CT.parseScreeningMinutes(b.time);
+              if (ma !== mb) return ma - mb;
+              return Number(a.seat_code) - Number(b.seat_code);
+            },
+          },
+          {
+            key: 'seat_asc',
+            label: 'Sort: Seat Code',
+            compare: function (a, b) { return CT.compareSeatCodes(a.seat_num, b.seat_num); },
+          },
         ],
         bulkAction: {
           label: 'Cancel Selected',
           endpoint: '/index.php/admin/seat/delete',
           idKey: 'seat_code',
+          batchKey: 'seat_codes',
           confirmText: function (n) { return 'Cancel ' + n + ' selected seat reservation(s) and release seats back to inventory?'; },
           successPrefix: 'Cancelled',
         },
@@ -84,12 +105,24 @@
         },
         exportCsv: {
           filename: 'cinetix-seat-bookings.csv',
-          headers: ['Booking ID', 'Movie', 'Theater', 'Customer', 'Date', 'Time', 'Seat', 'Zone'],
+          headers: ['Booking ID', 'Movie', 'Theater', 'Date', 'Time', 'Seat', 'Zone', 'Customer', 'Email', 'Created At'],
           row: function (s) {
             const movieTitle = (s.movie && s.movie.movie_name) ? s.movie.movie_name : ('Movie #' + s.movie_code);
             const theaterName = (s.theater && s.theater.theater_name) ? s.theater.theater_name : ('Theater #' + (s.theater_code || 1));
-            const userName = (s.user && s.user.user_name) ? (s.user.user_name + ' (' + (s.user.email || '') + ')') : 'Guest Checkout';
-            return [s.seat_code, movieTitle, theaterName, userName, s.date || '', s.time || '', s.seat_num || '', Number(s.seat_zone) === 2 ? 'VIP' : 'Standard'];
+            const userName = (s.user && s.user.user_name) ? s.user.user_name : 'Guest Checkout';
+            const userEmail = (s.user && s.user.email) ? s.user.email : '';
+            return [
+              s.seat_code,
+              movieTitle,
+              theaterName,
+              s.date || '',
+              s.time || '',
+              s.seat_num || '',
+              Number(s.seat_zone) === 2 ? 'Prime VIP' : 'Standard',
+              userName,
+              userEmail,
+              s.create_time || '',
+            ];
           },
         },
         searchText: function (s) {
@@ -112,7 +145,7 @@
           const isVip = Number(s.seat_zone) === 2;
           return (
             '<tr>' +
-            '<td class="check-col"><input type="checkbox" class="row-check" value="' + esc(s.seat_code) + '" aria-label="Select booking #' + esc(s.seat_code) + '"></td>' +
+            '<td class="check-col"><label><span class="sr-only">Select booking #' + esc(s.seat_code) + '</span><input type="checkbox" class="row-check" value="' + esc(s.seat_code) + '" aria-label="Select booking #' + esc(s.seat_code) + '"></label></td>' +
             '<td class="tabular-nums">#' + esc(s.seat_code) + '</td>' +
             '<td><strong>' + esc(movieTitle) + '</strong></td>' +
             '<td>' + esc(theaterName) + '</td>' +

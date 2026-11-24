@@ -104,6 +104,7 @@
       const offerCode = AdminApp.getQueryId('offer_code', 'offers.html');
       if (!offerCode) return;
 
+      const formEl = document.getElementById('edit-offer-form');
       const imgInput = document.getElementById('img');
       const syncPreview = AdminApp.bindImagePreview(imgInput, document.getElementById('offer-preview'));
       const movieGrid = document.getElementById('movie-check-grid');
@@ -118,7 +119,7 @@
         ]);
         if (!detailRes.success || !detailRes.data) {
           window.showToast(detailRes.message || 'Offer not found', 'error');
-          setTimeout(function () { window.location.href = 'offers.html'; }, 700);
+          AdminApp.renderFormLoadError(formEl, detailRes.message || 'Offer not found.', 'offers.html', 'Back to Offers');
           return;
         }
 
@@ -146,10 +147,13 @@
         );
       } catch (_) {
         window.showToast('Unable to load offer details', 'error');
+        AdminApp.renderFormLoadError(formEl, 'Connection failed while loading offer details.', 'offers.html', 'Back to Offers', function () {
+          window.location.reload();
+        });
         return;
       }
 
-      document.getElementById('edit-offer-form').addEventListener('submit', function (e) {
+      formEl.addEventListener('submit', function (e) {
         e.preventDefault();
         AdminApp.submitForm('/index.php/admin/offer/update', {
           offer_code: offerCode,

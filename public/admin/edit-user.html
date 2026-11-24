@@ -54,24 +54,32 @@
       const userCode = AdminApp.getQueryId('user_code', 'user.html');
       if (!userCode) return;
 
+      const formEl = document.getElementById('edit-user-form');
+      const pwdInput = document.getElementById('login_pwd');
+
       try {
         const detailRes = await AdminApp.apiFetch('/index.php/admin/user/getUserByCode?user_code=' + encodeURIComponent(userCode));
         if (!detailRes.success || !detailRes.data) {
           window.showToast(detailRes.message || 'User not found', 'error');
-          setTimeout(function () { window.location.href = 'user.html'; }, 700);
+          AdminApp.renderFormLoadError(formEl, detailRes.message || 'User not found.', 'user.html', 'Back to Users');
           return;
         }
         document.getElementById('user_name').value = detailRes.data.user_name || '';
         document.getElementById('email').value = detailRes.data.email || '';
       } catch (_) {
         window.showToast('Unable to load user details', 'error');
+        AdminApp.renderFormLoadError(formEl, 'Connection failed while loading user details.', 'user.html', 'Back to Users', function () {
+          window.location.reload();
+        });
         return;
       }
 
-      document.getElementById('edit-user-form').addEventListener('submit', function (e) {
+      formEl.addEventListener('submit', function (e) {
         e.preventDefault();
-        const newPwd = document.getElementById('login_pwd').value;
+        window.CineTicket.clearFieldError(pwdInput);
+        const newPwd = pwdInput.value;
         if (newPwd !== '' && !window.CineTicket.isValidPasswordBytes(newPwd)) {
+          window.CineTicket.flagFieldError(pwdInput, 'New password must be 6-72 UTF-8 bytes');
           window.showToast('New password must be 6-72 UTF-8 bytes', 'warning');
           return;
         }

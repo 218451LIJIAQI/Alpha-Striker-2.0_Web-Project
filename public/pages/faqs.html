@@ -17,6 +17,7 @@
 
     <div class="faq-toolbar">
       <div class="faq-search-box" role="search">
+        <label class="sr-only" for="faq-search-input">Search FAQs</label>
         <input type="search" id="faq-search-input" placeholder="Search FAQs by keyword (e.g. refund, promo code, 4DX, password)..." aria-label="Search FAQs">
         <button type="button" id="faq-clear-btn" class="btn btn-primary">Reset</button>
       </div>
@@ -68,7 +69,7 @@
       <div class="faq-section" data-cat="account">
         <button type="button" class="question" aria-expanded="true"><span>6. What is the membership program and how does it work?</span><span class="faq-chevron" aria-hidden="true">▾</span></button>
         <div class="answer">
-          Registered members receive member-exclusive promo codes, save digital tickets in their wallet, and cancel reserved seats online anytime before the screening.
+          Registered members receive member-exclusive promo codes, save digital tickets in their wallet, and cancel upcoming reserved seats online anytime before the screening begins.
         </div>
       </div>
 
@@ -89,7 +90,7 @@
       <div class="faq-section" data-cat="tickets">
         <button type="button" class="question" aria-expanded="true"><span>9. Can I cancel or refund my booking?</span><span class="faq-chevron" aria-hidden="true">▾</span></button>
         <div class="answer">
-          <strong>Cancellations &amp; Refunds:</strong> Signed-in members can cancel reserved seats directly on the <strong>Tickets</strong> page, releasing the seat immediately back into auditorium inventory.
+          <strong>Cancellations &amp; Refunds:</strong> Signed-in members can cancel upcoming reserved seats directly on the <strong>Tickets</strong> page prior to the scheduled screening start time, releasing the seat immediately back into auditorium inventory.
         </div>
       </div>
 
@@ -104,6 +105,7 @@
     <div id="faq-empty" class="grid-empty-state is-hidden">
       <h3>No matching FAQ entries</h3>
       <p>Try clearing the filter or searching another keyword.</p>
+      <button type="button" id="faq-empty-reset-btn" class="btn btn-primary empty-reset-btn">Show All FAQs</button>
     </div>
   </main>
 
@@ -114,12 +116,23 @@
       const CT = window.CineTicket;
       const searchInput = document.getElementById('faq-search-input');
       const clearBtn = document.getElementById('faq-clear-btn');
+      const emptyResetBtn = document.getElementById('faq-empty-reset-btn');
       const catButtons = document.querySelectorAll('#faq-category-filters .btn-filter');
       const sections = Array.from(document.querySelectorAll('#faq-list .faq-section'));
       const emptyEl = document.getElementById('faq-empty');
       let activeCat = 'all';
 
-      function applyFilter() {
+      function syncFaqUrl() {
+        if (!window.history || typeof window.history.replaceState !== 'function') return;
+        const params = new URLSearchParams();
+        const kw = (searchInput.value || '').trim();
+        if (kw) params.set('q', kw);
+        if (activeCat && activeCat !== 'all') params.set('cat', activeCat);
+        const qs = params.toString();
+        window.history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
+      }
+
+      function applyFilter(updateUrl) {
         const kw = (searchInput.value || '').trim().toLowerCase();
         let visible = 0;
         sections.forEach(function (sec) {
@@ -130,6 +143,18 @@
           if (show) visible += 1;
         });
         emptyEl.classList.toggle('is-hidden', visible > 0);
+        if (updateUrl !== false) syncFaqUrl();
+      }
+
+      function resetFaqs() {
+        searchInput.value = '';
+        activeCat = 'all';
+        CT.activatePill(catButtons, function (b) { return b.dataset.cat === 'all'; });
+        sections.forEach(function (sec) {
+          sec.querySelector('.answer')?.classList.remove('is-hidden');
+          sec.querySelector('.question')?.setAttribute('aria-expanded', 'true');
+        });
+        applyFilter(true);
       }
 
       sections.forEach(function (sec) {
@@ -145,27 +170,26 @@
         btn.addEventListener('click', function () {
           CT.activatePill(catButtons, btn);
           activeCat = btn.dataset.cat || 'all';
-          applyFilter();
+          applyFilter(true);
         });
       });
 
-      searchInput.addEventListener('input', applyFilter);
-      clearBtn.addEventListener('click', function () {
-        searchInput.value = '';
-        activeCat = 'all';
-        CT.activatePill(catButtons, function (b) { return b.dataset.cat === 'all'; });
-        sections.forEach(function (sec) {
-          sec.querySelector('.answer')?.classList.remove('is-hidden');
-          sec.querySelector('.question')?.setAttribute('aria-expanded', 'true');
-        });
-        applyFilter();
-      });
+      searchInput.addEventListener('input', function () { applyFilter(true); });
+      clearBtn.addEventListener('click', resetFaqs);
+      emptyResetBtn?.addEventListener('click', resetFaqs);
 
-      const initialQuery = new URLSearchParams(window.location.search).get('q');
-      if (initialQuery) {
-        searchInput.value = initialQuery;
-        applyFilter();
+      function hydrateFromUrl() {
+        const qs = new URLSearchParams(window.location.search);
+        searchInput.value = qs.get('q') || '';
+        const cat = (qs.get('cat') || 'all').toLowerCase();
+        const validCat = Array.from(catButtons).some(function (b) { return b.dataset.cat === cat; }) ? cat : 'all';
+        activeCat = validCat;
+        CT.activatePill(catButtons, function (b) { return b.dataset.cat === activeCat; });
+        applyFilter(false);
       }
+
+      hydrateFromUrl();
+      window.addEventListener('popstate', hydrateFromUrl);
     });
   </script>
 </body>

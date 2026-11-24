@@ -2,15 +2,17 @@
 namespace app\common\controller;
 
 use think\Db;
+use think\facade\Env;
 use think\facade\Log;
 use think\facade\Request;
 use think\facade\Session;
 
 /**
  * Shared JSON & CSV API base controller.
- * Centralizes payload parsing, strict integer/float/scalar/email/password guards, mbstring-free UTF-8 helpers,
- * ISO calendar validation, same-origin CSRF verification, CSV formula-injection sanitization,
- * role-aware session lifecycle, cent-exact pricing math, promo validation, and SQL conflict detection.
+ * Centralizes payload parsing, strict integer/float/scalar/email/password/asset-URI guards, mbstring-free UTF-8 helpers,
+ * ISO calendar & screening time-window validation, same-origin CSRF verification, CSV formula-injection sanitization,
+ * role-isolated login rate limiting & session lifecycle, whitelisted sorting/pagination, cent-exact pricing math,
+ * promo validation, and SQL conflict detection.
  */
 abstract class ApiController
 {
@@ -19,6 +21,8 @@ abstract class ApiController
     public const GROUP_DISCOUNT_RATE      = 0.30;
     public const MAX_SEATS_PER_ORDER      = 10;
     public const MAX_PASSWORD_BYTES       = 72;
+    public const MAX_LOGIN_ATTEMPTS       = 5;
+    public const LOGIN_LOCKOUT_SECONDS    = 60;
 
     /** @var array|null */
     private $cachedPayload = null;
@@ -121,6 +125,99 @@ abstract class ApiController
         return checkdate((int) $m[2], (int) $m[3], (int) $m[1]);
     }
 
+    protected function targetDateParam($key = 'date')
+    {
+        $candidate = $this->strParam($key);
+        return ($candidate !== '' && $this->isValidIsoDate($candidate)) ? $candidate : date('Y-m-d');
+    }
+
+    protected function isValidAssetPath($value)
+    {
+        if (!is_string($value)) {
+            return false;
+        }
+        $trimmed = trim($value);
+        if ($trimmed === '' || $this->textLen($trimmed) > 500 || preg_match('/[\x00-\x1F\x7F]/', $trimmed)) {
+            return false;
+        }
+        if (preg_match('/^[a-z][a-z0-9+.-]*:/i', $trimmed)) {
+            return (bool) preg_match('/^(?:https?:\/\/|data:image\/)/i', $trimmed);
+        }
+        return true;
+    }
+
+    protected function parseScreeningMinutes($timeValue)
+    {
+        if (is_array($timeValue) || is_object($timeValue) || is_bool($timeValue) || $timeValue === null) {
+            return -1;
+        }
+        $str = trim((string) $timeValue);
+        if (preg_match('/^(\d{1,2}):(\d{2})\s*([AaPp][Mm])$/', $str, $m)) {
+            $hour = (int) $m[1];
+            $min  = (int) $m[2];
+            if ($hour < 1 || $hour > 12 || $min > 59) {
+                return -1;
+            }
+            $hour24 = ($hour % 12) + (strtoupper($m[3]) === 'PM' ? 12 : 0);
+            return $hour24 * 60 + $min;
+        }
+        if (preg_match('/^([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/', $str, $m)) {
+            return ((int) $m[1]) * 60 + ((int) $m[2]);
+        }
+        return -1;
+    }
+
+    protected function isScreeningCancelable($date, $time)
+    {
+        $isoDate = trim((string) $date);
+        if (!$this->isValidIsoDate($isoDate)) {
+            return false;
+        }
+        $today = date('Y-m-d');
+        if ($isoDate < $today) {
+            return false;
+        }
+        if ($isoDate > $today) {
+            return true;
+        }
+        $mins = $this->parseScreeningMinutes($time);
+        if ($mins < 0) {
+            return false;
+        }
+        $nowMins = ((int) date('G')) * 60 + ((int) date('i'));
+        return $mins > $nowMins;
+    }
+
+    protected function compareSeatCodes($a, $b)
+    {
+        $sa = strtoupper(trim((string) $a));
+        $sb = strtoupper(trim((string) $b));
+        if ($sa === $sb) {
+            return 0;
+        }
+        if (preg_match('/^([A-Z]+)(\d+)$/', $sa, $ma) && preg_match('/^([A-Z]+)(\d+)$/', $sb, $mb)) {
+            return $ma[1] === $mb[1]
+                ? (((int) $ma[2]) <=> ((int) $mb[2]))
+                : strcmp($ma[1], $mb[1]);
+        }
+        return strcmp($sa, $sb);
+    }
+
+    protected function compareScreeningRows(array $a, array $b)
+    {
+        $da = (string) ($a['date'] ?? '');
+        $db = (string) ($b['date'] ?? '');
+        if ($da !== $db) {
+            return strcmp($da, $db);
+        }
+        $ma = $this->parseScreeningMinutes($a['time'] ?? '');
+        $mb = $this->parseScreeningMinutes($b['time'] ?? '');
+        if ($ma !== $mb) {
+            return $ma <=> $mb;
+        }
+        return ((int) ($a['seat_code'] ?? 0)) <=> ((int) ($b['seat_code'] ?? 0));
+    }
+
     protected function isValidEmail($value)
     {
         if (is_array($value) || is_object($value) || is_bool($value) || $value === null) {
@@ -162,6 +259,62 @@ abstract class ApiController
     }
 
     /**
+     * Role-isolated brute-force login throttle with automatic expiry cleanup.
+     */
+    protected function checkLoginThrottle($scope)
+    {
+        $now         = time();
+        $lockKey     = $scope . '_lock_until';
+        $windowKey   = $scope . '_window_until';
+        $lockUntil   = (int) Session::get($lockKey, 0);
+        $windowUntil = (int) Session::get($windowKey, 0);
+
+        if ($lockUntil > 0) {
+            if ($now < $lockUntil) {
+                return false;
+            }
+            $this->clearLoginThrottle($scope);
+            return true;
+        }
+
+        if ($windowUntil > 0 && $now > $windowUntil) {
+            $this->clearLoginThrottle($scope);
+        }
+
+        return true;
+    }
+
+    protected function recordLoginFailure($scope)
+    {
+        $now         = time();
+        $ttl         = max(5, (int) Env::get('auth.login_lockout', self::LOGIN_LOCKOUT_SECONDS));
+        $attemptsKey = $scope . '_attempts';
+        $lockKey     = $scope . '_lock_until';
+        $windowKey   = $scope . '_window_until';
+
+        $windowUntil = (int) Session::get($windowKey, 0);
+        $attempts    = ($windowUntil > 0 && $now <= $windowUntil)
+            ? ((int) Session::get($attemptsKey, 0)) + 1
+            : 1;
+
+        Session::set($attemptsKey, $attempts);
+        Session::set($windowKey, $now + $ttl);
+
+        if ($attempts >= self::MAX_LOGIN_ATTEMPTS) {
+            Session::set($lockKey, $now + $ttl);
+            return true;
+        }
+        return false;
+    }
+
+    protected function clearLoginThrottle($scope)
+    {
+        Session::delete($scope . '_attempts');
+        Session::delete($scope . '_lock_until');
+        Session::delete($scope . '_window_until');
+    }
+
+    /**
      * Verifies Same-Origin boundary on state-mutating and privileged requests when Origin or Referer is present.
      */
     protected function verifySameOrigin()
@@ -194,8 +347,12 @@ abstract class ApiController
         if ($sourceAuthority === $expectedHost) {
             return true;
         }
-        $expectedHostnameOnly = explode(':', $expectedHost)[0];
-        return $parsedPort === null && strtolower($parsedHost) === $expectedHostnameOnly;
+        $hostParts            = explode(':', $expectedHost, 2);
+        $expectedHostnameOnly = $hostParts[0];
+        $expectedPort         = $hostParts[1] ?? '';
+        return $parsedPort === null
+            && in_array($expectedPort, ['', '80', '443'], true)
+            && strtolower($parsedHost) === $expectedHostnameOnly;
     }
 
     /**
@@ -281,6 +438,47 @@ abstract class ApiController
         return array_values($ids);
     }
 
+    /**
+     * Applies whitelisted sorting, optional predicate filtering, and optional pagination with consistent counts.
+     */
+    protected function paginateAndSort(array $rows, array $sortMap, $defaultSort, callable $filterFn = null)
+    {
+        $totalCount = count($rows);
+        if ($filterFn !== null) {
+            $rows = array_values(array_filter($rows, $filterFn));
+        }
+        $filteredCount = count($rows);
+
+        $requestedSort = $this->strParam('sort', $defaultSort);
+        $sortKey       = isset($sortMap[$requestedSort]) ? $requestedSort : $defaultSort;
+        if (isset($sortMap[$sortKey]) && is_callable($sortMap[$sortKey])) {
+            usort($rows, $sortMap[$sortKey]);
+        }
+
+        $rawPage     = $this->idParam('page');
+        $rawPageSize = $this->idParam('page_size');
+        if ($rawPage > 0 || $rawPageSize > 0) {
+            $pageSize   = min(100, max(1, $rawPageSize > 0 ? $rawPageSize : 25));
+            $totalPages = max(1, (int) ceil($filteredCount / $pageSize));
+            $page       = min($totalPages, max(1, $rawPage > 0 ? $rawPage : 1));
+            $rows       = array_slice($rows, ($page - 1) * $pageSize, $pageSize);
+        } else {
+            $page       = 1;
+            $pageSize   = max(1, $filteredCount);
+            $totalPages = 1;
+        }
+
+        return [$rows, [
+            'total'       => $totalCount,
+            'filtered'    => $filteredCount,
+            'returned'    => count($rows),
+            'page'        => $page,
+            'page_size'   => $pageSize,
+            'total_pages' => $totalPages,
+            'sort'        => $sortKey,
+        ]];
+    }
+
     protected function applyDateWindow($query, $startCol, $endCol, $date)
     {
         return $query
@@ -359,15 +557,28 @@ abstract class ApiController
             ];
         }
 
-        $today    = date('Y-m-d');
-        $validity = trim((string) ($offer['offer_validity'] ?? ''));
-        if ($this->isValidIsoDate($validity) && $validity < $today) {
-            return [
-                'valid'   => false,
-                'status'  => 200,
-                'message' => 'This promo code has expired',
-                'offer'   => null,
-            ];
+        $today     = date('Y-m-d');
+        $checkDate = ($screeningDate !== '' && $this->isValidIsoDate($screeningDate))
+            ? $screeningDate
+            : $today;
+        $validity  = trim((string) ($offer['offer_validity'] ?? ''));
+        if ($this->isValidIsoDate($validity)) {
+            if ($validity < $today) {
+                return [
+                    'valid'   => false,
+                    'status'  => 200,
+                    'message' => 'This promo code has expired',
+                    'offer'   => null,
+                ];
+            }
+            if ($validity < $checkDate) {
+                return [
+                    'valid'   => false,
+                    'status'  => 200,
+                    'message' => 'This promo code expires before the selected screening date',
+                    'offer'   => null,
+                ];
+            }
         }
 
         $ownerUserId = isset($offer['user_code']) && $offer['user_code'] !== null ? (int) $offer['user_code'] : 0;
@@ -407,9 +618,6 @@ abstract class ApiController
                 ];
             }
 
-            $checkDate = ($screeningDate !== '' && $this->isValidIsoDate($screeningDate))
-                ? $screeningDate
-                : $today;
             $validFrom = trim((string) ($link['valid_from'] ?? ''));
             $validTo   = trim((string) ($link['valid_to'] ?? ''));
             if ($validFrom !== '' && $checkDate < $validFrom) {

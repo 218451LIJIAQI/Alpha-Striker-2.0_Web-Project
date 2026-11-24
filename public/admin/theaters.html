@@ -92,7 +92,10 @@
       <table>
         <thead>
           <tr>
-            <th class="check-col"><input type="checkbox" data-role="check-all" aria-label="Select all theaters on page"></th>
+            <th class="check-col">
+              <label class="sr-only" for="theaters-check-all">Select all theaters on page</label>
+              <input type="checkbox" id="theaters-check-all" data-role="check-all" aria-label="Select all theaters on page">
+            </th>
             <th>ID</th>
             <th>Photo</th>
             <th>Theater &amp; Code</th>
@@ -115,6 +118,7 @@
       AdminApp.renderAdminNav('theaters');
       if (!(await AdminApp.ensureAuthenticated())) return;
 
+      const CT = window.CineTicket;
       const form = document.getElementById('theater-form');
       const heading = document.getElementById('theater-form-heading');
       const movieGrid = document.getElementById('theater-movies-grid');
@@ -220,6 +224,7 @@
           label: 'Delete Selected',
           endpoint: '/index.php/admin/theater/delete',
           idKey: 'theater_code',
+          batchKey: 'theater_codes',
           confirmText: function (n) { return 'Delete ' + n + ' selected theater(s)? Related schedules and seat bookings will also be removed.'; },
           successPrefix: 'Deleted',
         },
@@ -244,11 +249,11 @@
           return String(t.amenity || '').toLowerCase().includes(val.toLowerCase());
         },
         renderRow: function (t) {
-          const thumb = AdminApp.resolveAdminAsset(t.img);
+          const thumb = CT.resolveAssetUrl(t.img);
           const mCount = Array.isArray(t.movie_codes) ? t.movie_codes.length : (t.movie_count || 0);
           return (
             '<tr>' +
-            '<td class="check-col"><input type="checkbox" class="row-check" value="' + esc(t.theater_code) + '" aria-label="Select theater #' + esc(t.theater_code) + '"></td>' +
+            '<td class="check-col"><label><span class="sr-only">Select theater #' + esc(t.theater_code) + '</span><input type="checkbox" class="row-check" value="' + esc(t.theater_code) + '" aria-label="Select theater #' + esc(t.theater_code) + '"></label></td>' +
             '<td class="tabular-nums">#' + esc(t.theater_code) + '</td>' +
             '<td><img src="' + esc(thumb) + '" alt="' + esc(t.theater_name) + '" class="theater-thumb"></td>' +
             '<td><strong>' + esc(t.theater_name) + '</strong><br><small class="sub-meta tabular-nums">' + esc(t.theater_id || '—') + '</small></td>' +

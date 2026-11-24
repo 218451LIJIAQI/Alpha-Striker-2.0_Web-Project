@@ -22,7 +22,8 @@ class Offer extends BaseAdmin
         try {
             $offers = Db::name('offer')->order('offer_code', 'asc')->select();
             if (empty($offers)) {
-                return $this->ok([]);
+                [$empty, $meta] = $this->paginateAndSort([], ['id_asc' => null], 'id_asc');
+                return $this->ok($empty, 'OK', ['meta' => $meta]);
             }
 
             $movieMap = $this->mapRelationIds('movie_offer', 'offer_code', 'movie_code');
@@ -41,7 +42,45 @@ class Offer extends BaseAdmin
             }
             unset($o);
 
-            return $this->ok($offers);
+            $keyword  = strtolower($this->strParam('keyword'));
+            $filter   = strtolower($this->strParam('filter', 'all'));
+            $todayIso = date('Y-m-d');
+
+            [$paged, $meta] = $this->paginateAndSort(
+                $offers,
+                [
+                    'id_asc'        => function ($a, $b) { return ((int) $a['offer_code']) <=> ((int) $b['offer_code']); },
+                    'id_desc'       => function ($a, $b) { return ((int) $b['offer_code']) <=> ((int) $a['offer_code']); },
+                    'discount_desc' => function ($a, $b) { return ((float) $b['money']) <=> ((float) $a['money']); },
+                    'validity_asc'  => function ($a, $b) { return strcmp((string) ($a['offer_validity'] ?? ''), (string) ($b['offer_validity'] ?? '')); },
+                ],
+                'id_asc',
+                function ($o) use ($keyword, $filter, $todayIso) {
+                    $isExpired = !empty($o['offer_validity']) && (string) $o['offer_validity'] < $todayIso;
+                    if ($filter === 'public' && !empty($o['user_code'])) {
+                        return false;
+                    }
+                    if ($filter === 'member' && empty($o['user_code'])) {
+                        return false;
+                    }
+                    if ($filter === 'active' && $isExpired) {
+                        return false;
+                    }
+                    if ($filter === 'expired' && !$isExpired) {
+                        return false;
+                    }
+                    if ($keyword !== '') {
+                        $ownerTxt = isset($o['owner']['user_name']) ? $o['owner']['user_name'] : 'public';
+                        $hay      = strtolower('#' . $o['offer_code'] . ' ' . ($o['offer_title'] ?? '') . ' ' . ($o['promo_code'] ?? '') . ' ' . ($o['offer_type'] ?? '') . ' ' . $ownerTxt);
+                        if (strpos($hay, $keyword) === false) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+            );
+
+            return $this->ok($paged, 'OK', ['meta' => $meta]);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to query offers', $e);
         }
@@ -166,23 +205,31 @@ class Offer extends BaseAdmin
     public function delete($offer_code = '')
     {
         try {
-            $offerId = $this->idParam('offer_code', $offer_code);
-            if ($offerId <= 0) {
+            $targetIds = $this->resolveTargetIds('offer_code', 'offer_codes', $offer_code);
+            if (empty($targetIds)) {
                 return $this->fail('Valid offer_code is required');
             }
 
             Db::startTrans();
             try {
-                if (!Db::name('offer')->where('offer_code', $offerId)->find()) {
+                $existingIds = array_map(
+                    'intval',
+                    Db::name('offer')->where('offer_code', 'in', $targetIds)->lock(true)->column('offer_code') ?: []
+                );
+                if (empty($existingIds)) {
                     Db::rollback();
                     return $this->fail('Offer not found', 404);
                 }
 
-                Db::table('movie_offer')->where('offer_code', $offerId)->delete();
-                Db::name('offer')->where('offer_code', $offerId)->delete();
+                Db::table('movie_offer')->where('offer_code', 'in', $existingIds)->delete();
+                Db::name('offer')->where('offer_code', 'in', $existingIds)->delete();
 
                 Db::commit();
-                return $this->ok(['offer_code' => $offerId], 'Offer deleted successfully');
+                return $this->ok([
+                    'offer_code'    => $existingIds[0],
+                    'deleted_ids'   => $existingIds,
+                    'deleted_count' => count($existingIds),
+                ], 'Offer deleted successfully');
             } catch (\Throwable $txErr) {
                 Db::rollback();
                 throw $txErr;
@@ -219,7 +266,7 @@ class Offer extends BaseAdmin
         if ($valid === '' || !$this->isValidIsoDate($valid)) {
             return [null, 'Validity date must use YYYY-MM-DD format'];
         }
-        if ($img === '' || $this->textLen($img) > 500) {
+        if (!$this->isValidAssetPath($img)) {
             return [null, 'Offer image path or URL (1-500 characters) is required'];
         }
         if ($badge !== '' && $this->textLen($badge) > 50) {

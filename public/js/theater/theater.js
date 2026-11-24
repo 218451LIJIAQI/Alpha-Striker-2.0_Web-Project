@@ -1,10 +1,24 @@
 /**
  * Theater Directory & Amenity Filter Controller
+ * Supports URL query deep-linking (?address=, ?amenity=), refresh recovery, and popstate sync.
  */
 (function () {
   'use strict';
 
   let requestSeq = 0;
+
+  function syncTheaterUrl(address, amenity) {
+    if (!window.history || typeof window.history.pushState !== 'function') return;
+    const params = new URLSearchParams();
+    if (address) params.set('address', address);
+    if (amenity) params.set('amenity', amenity);
+    const qs = params.toString();
+    const nextUrl = window.location.pathname + (qs ? '?' + qs : '');
+    const curUrl = window.location.pathname + (window.location.search || '');
+    if (nextUrl !== curUrl) {
+      window.history.pushState(null, '', nextUrl);
+    }
+  }
 
   async function fetchTheaters(address, amenity, onReset) {
     const CT = window.CineTicket;
@@ -109,35 +123,54 @@
     const filterButtons = document.querySelectorAll('.filter-options button');
     let activeAmenity = '';
 
-    CT.activatePill(filterButtons, function (_, idx) { return idx === 0; });
+    function syncPillState() {
+      CT.activatePill(filterButtons, function (btn, idx) {
+        if (!activeAmenity) return idx === 0;
+        return btn.textContent.trim().toLowerCase() === activeAmenity.toLowerCase();
+      });
+    }
 
     function resetAll() {
       if (searchInput) searchInput.value = '';
       activeAmenity = '';
-      CT.activatePill(filterButtons, function (_, idx) { return idx === 0; });
+      syncPillState();
+      syncTheaterUrl('', '');
       fetchTheaters('', '', resetAll);
     }
 
-    function runSearch() {
-      fetchTheaters(searchInput ? searchInput.value.trim() : '', activeAmenity, resetAll);
+    function runSearch(updateUrl) {
+      const addr = searchInput ? searchInput.value.trim() : '';
+      if (updateUrl !== false) syncTheaterUrl(addr, activeAmenity);
+      fetchTheaters(addr, activeAmenity, resetAll);
     }
 
-    fetchTheaters('', '', resetAll);
+    function applyFromUrl() {
+      const qs = new URLSearchParams(window.location.search);
+      const addr = (qs.get('address') || '').trim();
+      const am = (qs.get('amenity') || '').trim();
+      if (searchInput) searchInput.value = addr;
+      activeAmenity = am;
+      syncPillState();
+      runSearch(false);
+    }
 
-    searchBtn?.addEventListener('click', runSearch);
+    applyFromUrl();
+    window.addEventListener('popstate', applyFromUrl);
+
+    searchBtn?.addEventListener('click', function () { runSearch(true); });
     searchInput?.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') {
         e.preventDefault();
-        runSearch();
+        runSearch(true);
       }
     });
 
     filterButtons.forEach(function (button) {
       button.addEventListener('click', function () {
-        CT.activatePill(filterButtons, button);
         const label = button.textContent.trim();
         activeAmenity = label === 'All Theaters' ? '' : label;
-        runSearch();
+        syncPillState();
+        runSearch(true);
       });
     });
   });

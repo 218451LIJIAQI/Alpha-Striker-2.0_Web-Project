@@ -33,7 +33,7 @@
           <p>Enter your administrator credentials to manage catalog, schedules &amp; bookings</p>
         </div>
 
-        <form id="admin-login-form">
+        <form id="admin-login-form" novalidate>
           <div class="form-group">
             <label for="admin-username" class="form-label">Username *</label>
             <input type="text" id="admin-username" name="username" class="form-input" placeholder="Enter admin username" required maxlength="64" autocomplete="username">
@@ -57,16 +57,28 @@
   <script>
     document.getElementById('admin-login-form').addEventListener('submit', async function (e) {
       e.preventDefault();
-      const username = document.getElementById('admin-username').value.trim();
-      const password = document.getElementById('admin-password').value;
+      const CT = window.CineTicket;
+      const userEl = document.getElementById('admin-username');
+      const pwdEl = document.getElementById('admin-password');
+      const username = userEl.value.trim();
+      const password = pwdEl.value;
       const btn = document.getElementById('admin-submit-btn');
       if (btn.disabled) return;
 
-      if (!username || !password) {
+      [userEl, pwdEl].forEach(CT.clearFieldError);
+
+      if (!username) {
+        CT.flagFieldError(userEl, 'Admin username is required');
         window.showToast('Username and password are required', 'warning');
         return;
       }
-      if (window.CineTicket.utf8ByteLength(password) > 72) {
+      if (!password) {
+        CT.flagFieldError(pwdEl, 'Admin password is required');
+        window.showToast('Username and password are required', 'warning');
+        return;
+      }
+      if (CT.utf8ByteLength(password) > 72) {
+        CT.flagFieldError(pwdEl, 'Password exceeds maximum 72-byte length');
         window.showToast('Password exceeds maximum 72-byte length', 'warning');
         return;
       }
@@ -85,6 +97,7 @@
           window.location.href = 'dashboard.html';
           return;
         }
+        CT.flagFieldError(pwdEl, payload.message || 'Invalid credentials');
         window.showToast(payload.message || 'Invalid credentials', 'error');
       } catch (_) {
         window.showToast('Unable to reach authentication service', 'error');

@@ -7,11 +7,17 @@ use think\facade\Session;
 
 class Auth extends ApiController
 {
+    private const THROTTLE_SCOPE = 'admin_login';
+
     public function login()
     {
         try {
             if (!$this->verifySameOrigin()) {
                 return $this->fail('Forbidden: cross-origin request rejected', 403);
+            }
+
+            if (!$this->checkLoginThrottle(self::THROTTLE_SCOPE)) {
+                return $this->fail('Too many failed sign-in attempts. Please wait before trying again.', 429);
             }
 
             $username = $this->strParam('username');
@@ -32,9 +38,13 @@ class Auth extends ApiController
                 : hash_equals($expectedPass, $password));
 
             if (!$userMatches || !$passMatches) {
+                if ($this->recordLoginFailure(self::THROTTLE_SCOPE)) {
+                    return $this->fail('Too many failed sign-in attempts. Please wait before trying again.', 429);
+                }
                 return $this->fail('Invalid username or password', 401);
             }
 
+            $this->clearLoginThrottle(self::THROTTLE_SCOPE);
             $this->rotateSession();
             $token = bin2hex(random_bytes(32));
             Session::set('admin_auth', true);

@@ -1,5 +1,6 @@
 /**
  * Checkout & Payment Processing Controller
+ * Enforces date-aware schedule/promo checks, shared persistent field-error state, and WAI-ARIA radiogroup keyboard navigation.
  */
 document.addEventListener('DOMContentLoaded', function () {
   const CT = window.CineTicket;
@@ -55,6 +56,12 @@ document.addEventListener('DOMContentLoaded', function () {
   ) {
     showBlockedCheckout();
     window.showToast('No active seat selection found — choose a movie and seats first', 'info');
+    return;
+  }
+
+  if (date < CT.todayIso()) {
+    showBlockedCheckout('Screening Date Passed', 'This screening date has already passed. Please select an upcoming screening date.');
+    window.showToast('Selected screening date has already passed', 'warning');
     return;
   }
 
@@ -130,7 +137,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const suggestionsEl = document.querySelector('.promo-suggestions');
     if (!suggestionsEl) return;
     try {
-      const offerRes = await CT.fetchJson('/index.php/offer/offer/getOfferList?movie_code=' + encodeURIComponent(movieCode));
+      const qs = new URLSearchParams({ movie_code: movieCode, date: date });
+      const offerRes = await CT.fetchJson('/index.php/offer/offer/getOfferList?' + qs.toString());
       if (!offerRes || !offerRes.success || !Array.isArray(offerRes.data)) return;
       if (offerRes.data.length === 0) {
         suggestionsEl.innerHTML = '';
@@ -151,9 +159,12 @@ document.addEventListener('DOMContentLoaded', function () {
     contextVerified = false;
     syncPayButtonState();
 
+    const movieQs = new URLSearchParams({ movie_code: movieCode, date: date });
+    const theaterQs = new URLSearchParams({ theater_code: theaterCode, date: date });
+
     Promise.all([
-      CT.fetchJson('/index.php/movie/movies/getMovieByCode?movie_code=' + encodeURIComponent(movieCode)),
-      CT.fetchJson('/index.php/theater/theater/getTheaterDetails?theater_code=' + encodeURIComponent(theaterCode)).catch(function () { return null; }),
+      CT.fetchJson('/index.php/movie/movies/getMovieByCode?' + movieQs.toString()),
+      CT.fetchJson('/index.php/theater/theater/getTheaterDetails?' + theaterQs.toString()).catch(function () { return null; }),
       refreshEligiblePromoTags(),
     ]).then(function (results) {
       const moviePayload = results[0];
@@ -172,7 +183,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       const movie = moviePayload.data;
       if (Array.isArray(movie.theater_codes) && !movie.theater_codes.includes(parseInt(theaterCode, 10))) {
-        showBlockedCheckout('Unscheduled Screening', 'This movie is not currently scheduled at the selected theater.');
+        showBlockedCheckout('Unscheduled Screening', 'This movie is not scheduled at the selected theater on ' + date + '.');
         window.showToast('Selected movie is not scheduled at this theater', 'error');
         return;
       }
@@ -305,18 +316,8 @@ document.addEventListener('DOMContentLoaded', function () {
       '</div>';
   }
 
-  function clearFieldError(inputEl) {
-    if (!inputEl) return;
-    inputEl.classList.remove('input-error');
-    inputEl.removeAttribute('aria-invalid');
-  }
-
-  function flagFieldError(inputEl, message) {
-    if (inputEl) {
-      inputEl.classList.add('input-error');
-      inputEl.setAttribute('aria-invalid', 'true');
-      inputEl.focus();
-    }
+  function rejectCardInput(inputEl, message) {
+    CT.flagFieldError(inputEl, message);
     window.showToast(message, 'error');
     return false;
   }
@@ -324,32 +325,51 @@ document.addEventListener('DOMContentLoaded', function () {
   function initPaymentMethods() {
     const cards = Array.from(document.querySelectorAll('.payment-method-card'));
     const cardForm = document.getElementById('card-form');
+    if (!cards.length) return;
 
-    function selectCard(card) {
+    function selectCard(card, moveFocus) {
       cards.forEach(function (c) {
         const active = c === card;
         c.classList.toggle('active', active);
         c.setAttribute('aria-checked', String(active));
+        c.setAttribute('tabindex', active ? '0' : '-1');
       });
       const radio = card.querySelector('input[type="radio"]');
       if (radio) {
         radio.checked = true;
         if (cardForm) cardForm.style.display = radio.value === 'card' ? 'block' : 'none';
       }
+      if (moveFocus && typeof card.focus === 'function') {
+        card.focus();
+      }
     }
 
-    cards.forEach(function (card) {
-      const isInitial = card.classList.contains('active');
+    const initialActive = cards.find(function (c) { return c.classList.contains('active'); }) || cards[0];
+    cards.forEach(function (card, idx) {
+      const isInitial = card === initialActive;
       card.setAttribute('role', 'radio');
-      card.setAttribute('tabindex', '0');
+      card.setAttribute('tabindex', isInitial ? '0' : '-1');
       card.setAttribute('aria-checked', String(isInitial));
+
       card.addEventListener('click', function () {
-        selectCard(card);
+        selectCard(card, false);
       });
       card.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          selectCard(card);
+          selectCard(card, false);
+        } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          selectCard(cards[(idx + 1) % cards.length], true);
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          selectCard(cards[(idx - 1 + cards.length) % cards.length], true);
+        } else if (e.key === 'Home') {
+          e.preventDefault();
+          selectCard(cards[0], true);
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          selectCard(cards[cards.length - 1], true);
         }
       });
     });
@@ -362,21 +382,21 @@ document.addEventListener('DOMContentLoaded', function () {
     const holderEl = document.getElementById('cardholder-name');
 
     cardNumEl?.addEventListener('input', function (e) {
-      clearFieldError(cardNumEl);
+      CT.clearFieldError(cardNumEl);
       const digits = e.target.value.replace(/\D/g, '').slice(0, 16);
       e.target.value = (digits.match(/.{1,4}/g) || []).join(' ');
     });
     expiryEl?.addEventListener('input', function (e) {
-      clearFieldError(expiryEl);
+      CT.clearFieldError(expiryEl);
       const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
       e.target.value = digits.length >= 3 ? digits.slice(0, 2) + '/' + digits.slice(2) : digits;
     });
     cvvEl?.addEventListener('input', function (e) {
-      clearFieldError(cvvEl);
+      CT.clearFieldError(cvvEl);
       e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4);
     });
     holderEl?.addEventListener('input', function () {
-      clearFieldError(holderEl);
+      CT.clearFieldError(holderEl);
     });
   }
 
@@ -525,22 +545,22 @@ document.addEventListener('DOMContentLoaded', function () {
     const cvv = (cvvEl?.value || '').trim();
     const holder = (holderEl?.value || '').trim();
 
-    [cardNumEl, expiryEl, cvvEl, holderEl].forEach(clearFieldError);
+    [cardNumEl, expiryEl, cvvEl, holderEl].forEach(CT.clearFieldError);
 
     if (!/^\d{13,19}$/.test(cardNumber)) {
-      return flagFieldError(cardNumEl, 'Please enter a valid 13-19 digit card number');
+      return rejectCardInput(cardNumEl, 'Please enter a valid 13-19 digit card number');
     }
     if (!/^(0[1-9]|1[0-2])\/(\d{2})$/.test(expiry)) {
-      return flagFieldError(expiryEl, 'Please enter a valid expiry date (MM/YY)');
+      return rejectCardInput(expiryEl, 'Please enter a valid expiry date (MM/YY)');
     }
     if (!CT.isCardExpiryValid(expiry)) {
-      return flagFieldError(expiryEl, 'This card has expired — please enter a future expiry date');
+      return rejectCardInput(expiryEl, 'This card has expired — please enter a future expiry date');
     }
     if (!/^\d{3,4}$/.test(cvv)) {
-      return flagFieldError(cvvEl, 'Please enter a valid 3 or 4 digit CVV');
+      return rejectCardInput(cvvEl, 'Please enter a valid 3 or 4 digit CVV');
     }
     if (!holder) {
-      return flagFieldError(holderEl, 'Please enter the cardholder name');
+      return rejectCardInput(holderEl, 'Please enter the cardholder name');
     }
     return true;
   }

@@ -20,7 +20,8 @@ class Movie extends BaseAdmin
         try {
             $movies = Db::name('movies')->order('movie_code', 'asc')->select();
             if (empty($movies)) {
-                return $this->ok([]);
+                [$empty, $meta] = $this->paginateAndSort([], ['id_asc' => null], 'id_asc');
+                return $this->ok($empty, 'OK', ['meta' => $meta]);
             }
 
             $theaterMap = $this->mapRelationIds('theater_movie', 'movie_code', 'theater_code');
@@ -37,7 +38,34 @@ class Movie extends BaseAdmin
             }
             unset($m);
 
-            return $this->ok($movies);
+            $keyword = strtolower($this->strParam('keyword'));
+            $genre   = strtolower($this->strParam('filter', 'all'));
+
+            [$paged, $meta] = $this->paginateAndSort(
+                $movies,
+                [
+                    'id_asc'      => function ($a, $b) { return ((int) $a['movie_code']) <=> ((int) $b['movie_code']); },
+                    'id_desc'     => function ($a, $b) { return ((int) $b['movie_code']) <=> ((int) $a['movie_code']); },
+                    'title_asc'   => function ($a, $b) { return strcasecmp((string) $a['movie_name'], (string) $b['movie_name']); },
+                    'rating_desc' => function ($a, $b) { return ((float) $b['star']) <=> ((float) $a['star']); },
+                    'price_desc'  => function ($a, $b) { return ((float) $b['money']) <=> ((float) $a['money']); },
+                ],
+                'id_asc',
+                function ($m) use ($keyword, $genre) {
+                    if ($genre !== '' && $genre !== 'all' && strpos(strtolower((string) ($m['movie_type'] ?? '')), $genre) === false) {
+                        return false;
+                    }
+                    if ($keyword !== '') {
+                        $hay = strtolower('#' . $m['movie_code'] . ' ' . ($m['movie_name'] ?? '') . ' ' . ($m['movie_type'] ?? '') . ' ' . ($m['tag'] ?? ''));
+                        if (strpos($hay, $keyword) === false) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+            );
+
+            return $this->ok($paged, 'OK', ['meta' => $meta]);
         } catch (\Throwable $e) {
             return $this->serverError('Failed to query movies', $e);
         }
@@ -165,25 +193,33 @@ class Movie extends BaseAdmin
     public function delete($movie_code = '')
     {
         try {
-            $movieId = $this->idParam('movie_code', $movie_code);
-            if ($movieId <= 0) {
+            $targetIds = $this->resolveTargetIds('movie_code', 'movie_codes', $movie_code);
+            if (empty($targetIds)) {
                 return $this->fail('Valid movie_code is required');
             }
 
             Db::startTrans();
             try {
-                if (!Db::name('movies')->where('movie_code', $movieId)->find()) {
+                $existingIds = array_map(
+                    'intval',
+                    Db::name('movies')->where('movie_code', 'in', $targetIds)->lock(true)->column('movie_code') ?: []
+                );
+                if (empty($existingIds)) {
                     Db::rollback();
                     return $this->fail('Movie not found', 404);
                 }
 
-                Db::table('theater_movie')->where('movie_code', $movieId)->delete();
-                Db::table('movie_offer')->where('movie_code', $movieId)->delete();
-                Db::name('seat')->where('movie_code', $movieId)->delete();
-                Db::name('movies')->where('movie_code', $movieId)->delete();
+                Db::table('theater_movie')->where('movie_code', 'in', $existingIds)->delete();
+                Db::table('movie_offer')->where('movie_code', 'in', $existingIds)->delete();
+                Db::name('seat')->where('movie_code', 'in', $existingIds)->delete();
+                Db::name('movies')->where('movie_code', 'in', $existingIds)->delete();
 
                 Db::commit();
-                return $this->ok(['movie_code' => $movieId], 'Movie deleted successfully');
+                return $this->ok([
+                    'movie_code'    => $existingIds[0],
+                    'deleted_ids'   => $existingIds,
+                    'deleted_count' => count($existingIds),
+                ], 'Movie deleted successfully');
             } catch (\Throwable $txErr) {
                 Db::rollback();
                 throw $txErr;
@@ -209,7 +245,7 @@ class Movie extends BaseAdmin
         if ($genre === '' || $this->textLen($genre) > 50) {
             return [null, 'Movie genre (1-50 characters) is required'];
         }
-        if ($img === '' || $this->textLen($img) > 500) {
+        if (!$this->isValidAssetPath($img)) {
             return [null, 'Poster image path or URL (1-500 characters) is required'];
         }
         if ($times === '' || $this->textLen($times) > 50) {

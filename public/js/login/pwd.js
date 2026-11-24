@@ -1,5 +1,6 @@
 /**
  * Password Reset & Authenticated Password Change Controller
+ * Supports ?mode=change URL deep-linking, popstate sync, and persistent field-level error highlighting.
  */
 (function () {
   'use strict';
@@ -7,20 +8,29 @@
   async function resetPwd(event) {
     event.preventDefault();
     const CT = window.CineTicket;
-    const email = document.getElementById('email').value.trim();
-    const verificationCode = document.getElementById('Verification').value.trim();
-    const password = document.getElementById('password').value;
+    const emailEl = document.getElementById('email');
+    const codeEl = document.getElementById('Verification');
+    const pwdEl = document.getElementById('password');
+
+    const email = emailEl ? emailEl.value.trim() : '';
+    const verificationCode = codeEl ? codeEl.value.trim() : '';
+    const password = pwdEl ? pwdEl.value : '';
     const submitBtn = document.querySelector('#reset-form button[type="submit"]');
 
-    if (!email || !verificationCode || !password) {
-      window.showToast('Please fill in all required fields', 'warning');
+    [emailEl, codeEl, pwdEl].forEach(CT.clearFieldError);
+
+    if (!CT.isValidEmail(email)) {
+      CT.flagFieldError(emailEl, 'Please enter a valid email address');
+      window.showToast('Please enter a valid email address', 'warning');
       return;
     }
     if (!/^\d{6}$/.test(verificationCode)) {
+      CT.flagFieldError(codeEl, 'Enter the 6-digit verification code');
       window.showToast('Please enter the 6-digit verification code', 'warning');
       return;
     }
     if (!CT.isValidPasswordBytes(password)) {
+      CT.flagFieldError(pwdEl, 'New password must be 6-72 UTF-8 bytes');
       window.showToast('New password must be 6-72 UTF-8 bytes', 'warning');
       return;
     }
@@ -37,6 +47,7 @@
         setTimeout(function () { window.location.href = CT.rootUrl('login.html'); }, 650);
         return;
       }
+      CT.flagFieldError(codeEl, data.message || 'Password reset failed');
       window.showToast(data.message || 'Password reset failed', 'error');
     } catch (_) {
       window.showToast('Request failed, please try again later', 'error');
@@ -48,20 +59,29 @@
   async function changeSignedInPwd(event) {
     event.preventDefault();
     const CT = window.CineTicket;
-    const oldPassword = document.getElementById('old-password').value;
-    const newPassword = document.getElementById('new-password-auth').value;
-    const confirmPassword = document.getElementById('confirm-password-auth').value;
+    const oldEl = document.getElementById('old-password');
+    const newEl = document.getElementById('new-password-auth');
+    const confirmEl = document.getElementById('confirm-password-auth');
+
+    const oldPassword = oldEl ? oldEl.value : '';
+    const newPassword = newEl ? newEl.value : '';
+    const confirmPassword = confirmEl ? confirmEl.value : '';
     const submitBtn = document.querySelector('#change-pwd-form button[type="submit"]');
 
-    if (!oldPassword || !newPassword || !confirmPassword) {
+    [oldEl, newEl, confirmEl].forEach(CT.clearFieldError);
+
+    if (!oldPassword) {
+      CT.flagFieldError(oldEl, 'Current password is required');
       window.showToast('Please complete all password fields', 'warning');
       return;
     }
     if (!CT.isValidPasswordBytes(newPassword)) {
+      CT.flagFieldError(newEl, 'New password must be 6-72 UTF-8 bytes');
       window.showToast('New password must be 6-72 UTF-8 bytes', 'warning');
       return;
     }
     if (newPassword !== confirmPassword) {
+      CT.flagFieldError(confirmEl, 'New passwords do not match');
       window.showToast('New passwords do not match', 'error');
       return;
     }
@@ -77,6 +97,7 @@
         setTimeout(function () { window.location.href = CT.pageUrl('homepage.html'); }, 650);
         return;
       }
+      CT.flagFieldError(oldEl, data.message || 'Password update failed');
       window.showToast(data.message || 'Password update failed', 'error');
     } catch (_) {
       window.showToast('Request failed, please try again later', 'error');
@@ -96,6 +117,15 @@
     resetForm?.addEventListener('submit', resetPwd);
     changeForm?.addEventListener('submit', changeSignedInPwd);
 
+    function syncUrlMode(isOld) {
+      if (!window.history || typeof window.history.replaceState !== 'function') return;
+      const qs = new URLSearchParams(window.location.search);
+      if (isOld) qs.set('mode', 'change');
+      else qs.delete('mode');
+      const query = qs.toString();
+      window.history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
+    }
+
     const syncTabs = CT.bindTabList([tabCode, tabOldPwd].filter(Boolean), function (btn) {
       if (btn === tabOldPwd && !CT.AuthStore.getUser().isLoggedIn) {
         window.showToast('Please sign in first to change password with your current password', 'info');
@@ -104,11 +134,12 @@
       const isOld = btn === tabOldPwd;
       resetForm?.classList.toggle('is-hidden', isOld);
       changeForm?.classList.toggle('is-hidden', !isOld);
+      syncUrlMode(isOld);
       return true;
     });
 
     function switchMode(mode) {
-      const isOld = mode === 'change';
+      const isOld = mode === 'change' && CT.AuthStore.getUser().isLoggedIn;
       syncTabs(isOld ? tabOldPwd : tabCode);
       resetForm?.classList.toggle('is-hidden', isOld);
       changeForm?.classList.toggle('is-hidden', !isOld);
@@ -117,6 +148,7 @@
     window.addEventListener('cinetix:authchange', function () {
       if (!CT.AuthStore.getUser().isLoggedIn && tabOldPwd?.classList.contains('active')) {
         switchMode('code');
+        syncUrlMode(false);
       }
     });
 
@@ -127,8 +159,12 @@
       emailInput.value = currentUser.userEmail;
     }
 
-    const requestedMode = new URLSearchParams(window.location.search).get('mode');
-    switchMode(requestedMode === 'change' && currentUser.isLoggedIn ? 'change' : 'code');
+    const applyModeFromUrl = function () {
+      const requestedMode = new URLSearchParams(window.location.search).get('mode');
+      switchMode(requestedMode === 'change' ? 'change' : 'code');
+    };
+    applyModeFromUrl();
+    window.addEventListener('popstate', applyModeFromUrl);
 
     if (!sendBtn) return;
 
@@ -138,10 +174,11 @@
 
       const email = emailInput ? emailInput.value.trim() : '';
       if (!CT.isValidEmail(email)) {
+        CT.flagFieldError(emailInput, 'Please enter a valid email address first');
         window.showToast('Please enter a valid email address first', 'warning');
-        emailInput?.focus();
         return;
       }
+      CT.clearFieldError(emailInput);
 
       sendBtn.disabled = true;
       sendBtn.textContent = 'Sending...';
@@ -155,6 +192,7 @@
         if (!res.success) {
           sendBtn.disabled = false;
           sendBtn.textContent = 'Send Code';
+          CT.flagFieldError(emailInput, res.message || 'Could not send verification code');
           window.showToast(res.message || 'Could not send verification code', 'error');
           return;
         }

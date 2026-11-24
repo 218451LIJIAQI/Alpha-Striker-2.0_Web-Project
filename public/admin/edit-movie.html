@@ -107,6 +107,7 @@
       const movieCode = AdminApp.getQueryId('movie_code', 'movies.html');
       if (!movieCode) return;
 
+      const formEl = document.getElementById('edit-movie-form');
       const imgInput = document.getElementById('img');
       const syncPreview = AdminApp.bindImagePreview(imgInput, document.getElementById('poster-preview'));
       const theaterGrid = document.getElementById('theater-check-grid');
@@ -122,7 +123,7 @@
         ]);
         if (!detailRes.success || !detailRes.data) {
           window.showToast(detailRes.message || 'Movie not found', 'error');
-          setTimeout(function () { window.location.href = 'movies.html'; }, 700);
+          AdminApp.renderFormLoadError(formEl, detailRes.message || 'Movie not found.', 'movies.html', 'Back to Movies');
           return;
         }
 
@@ -154,10 +155,13 @@
         );
       } catch (_) {
         window.showToast('Unable to load movie details', 'error');
+        AdminApp.renderFormLoadError(formEl, 'Connection failed while loading movie details.', 'movies.html', 'Back to Movies', function () {
+          window.location.reload();
+        });
         return;
       }
 
-      document.getElementById('edit-movie-form').addEventListener('submit', function (e) {
+      formEl.addEventListener('submit', function (e) {
         e.preventDefault();
         AdminApp.submitForm('/index.php/admin/movie/update', {
           movie_code: movieCode,

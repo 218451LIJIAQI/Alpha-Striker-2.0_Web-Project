@@ -51,8 +51,18 @@ document.addEventListener('DOMContentLoaded', function () {
     return;
   }
 
-  setTimeout(function () {
+  const prefersReducedMotion =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const revealReceipt = function () {
     if (loading) loading.classList.add('is-hidden');
     if (success) success.classList.remove('is-hidden');
-  }, 420);
+  };
+
+  if (prefersReducedMotion) {
+    revealReceipt();
+  } else {
+    setTimeout(revealReceipt, 320);
+  }
 });
