@@ -401,6 +401,24 @@ abstract class ApiController
         Session::destroy();
     }
 
+    /**
+     * Resolves the authenticated customer ID against live t_user storage, clearing stale session keys if the user was deleted.
+     */
+    protected function resolveActiveSessionUserId()
+    {
+        $sessionUserId = (int) Session::get('user_id', 0);
+        if ($sessionUserId <= 0) {
+            return 0;
+        }
+        $exists = Db::name('user')->where('user_code', $sessionUserId)->value('user_code');
+        if (!$exists) {
+            Session::delete('user_id');
+            Session::delete('user_email');
+            return 0;
+        }
+        return (int) $exists;
+    }
+
     protected function pickAllowed(array $source, array $allowedFields)
     {
         $allowed  = array_flip($allowedFields);

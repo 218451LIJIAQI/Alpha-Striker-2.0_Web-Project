@@ -76,6 +76,9 @@ class Seat extends ApiController
             if ($date < date('Y-m-d')) {
                 return $this->fail('Selected screening date has already passed', 400);
             }
+            if (!$this->isScreeningCancelable($date, $time)) {
+                return $this->fail('Selected screening time has already started or passed', 400);
+            }
 
             $seatList        = is_array($rawSeats) ? $rawSeats : explode(',', (string) $rawSeats);
             $normalizedSeats = [];
@@ -105,15 +108,9 @@ class Seat extends ApiController
                 return $this->fail('Maximum ' . self::MAX_SEATS_PER_ORDER . ' seats allowed per transaction');
             }
 
-            // Strictly trust server-side Session user_id ONLY (never client-supplied user_code)
-            $sessionUserId = (int) Session::get('user_id', 0);
-            $userCode      = null;
-            if ($sessionUserId > 0) {
-                $exists = Db::name('user')->where('user_code', $sessionUserId)->value('user_code');
-                if ($exists) {
-                    $userCode = (int) $exists;
-                }
-            }
+            // Strictly trust server-side verified Session user_id ONLY (never client-supplied user_code)
+            $activeUserId = $this->resolveActiveSessionUserId();
+            $userCode     = $activeUserId > 0 ? $activeUserId : null;
 
             Db::startTrans();
             try {
@@ -250,7 +247,7 @@ class Seat extends ApiController
     public function getSeatListByUserCode()
     {
         try {
-            $sessionUserId = (int) Session::get('user_id', 0);
+            $sessionUserId = $this->resolveActiveSessionUserId();
             if ($sessionUserId <= 0) {
                 return $this->fail('Authentication required to view tickets', 401);
             }
@@ -305,7 +302,7 @@ class Seat extends ApiController
                 return $this->fail('Forbidden: cross-origin request rejected', 403);
             }
 
-            $sessionUserId = (int) Session::get('user_id', 0);
+            $sessionUserId = $this->resolveActiveSessionUserId();
             if ($sessionUserId <= 0) {
                 return $this->fail('Authentication required to cancel a booking', 401);
             }

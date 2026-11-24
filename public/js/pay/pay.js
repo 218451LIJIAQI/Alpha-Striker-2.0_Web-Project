@@ -65,6 +65,12 @@ document.addEventListener('DOMContentLoaded', function () {
     return;
   }
 
+  if (!CT.isScreeningCancelable(date, time)) {
+    showBlockedCheckout('Showtime Already Started', 'This screening time has already started or passed. Please pick a later showtime.');
+    window.showToast('Selected screening time has already started', 'warning');
+    return;
+  }
+
   if (allParsedSeats.length > 10) {
     window.showToast('Maximum 10 seats allowed per transaction', 'warning');
   }

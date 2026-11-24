@@ -696,6 +696,19 @@ def make_handler(state: ContractState):
             with state.session_lock:
                 state.sessions.pop(sid, None)
 
+        def _resolve_active_session_user_id(self, session: dict, db: sqlite3.Connection) -> int:
+            uid = int(session.get("user_id") or 0)
+            if uid <= 0:
+                return 0
+            with state.db_lock:
+                urow = db.execute("SELECT user_code FROM t_user WHERE user_code = ?", (uid,)).fetchone()
+            if not urow:
+                with state.session_lock:
+                    session.pop("user_id", None)
+                    session.pop("user_email", None)
+                return 0
+            return int(urow["user_code"])
+
         def _clear_login_throttle(self, session: dict, scope: str) -> None:
             with state.session_lock:
                 session.pop(f"{scope}_attempts", None)
@@ -1115,7 +1128,7 @@ def make_handler(state: ContractState):
             if route == "offer/offer/getofferlist":
                 otype = self._str_param(p, "offer_type")
                 mc = self._id_param(p, "movie_code")
-                sess_uid = int(session.get("user_id") or 0)
+                sess_uid = self._resolve_active_session_user_id(session, db)
                 target_date = self._target_date_param(p, "date")
                 with state.db_lock:
                     sql = "SELECT offer_code, offer_title, offer_description, promo_code, offer_validity, img, badge, money, offer_type, user_code FROM t_offer WHERE "
@@ -1173,7 +1186,7 @@ def make_handler(state: ContractState):
                 mc = self._id_param(p, "movie_code")
                 sc = self._id_param(p, "seat_count")
                 d = self._str_param(p, "date")
-                sess_uid = int(session.get("user_id") or 0)
+                sess_uid = self._resolve_active_session_user_id(session, db)
                 with state.db_lock:
                     res = validate_promo_for_context(db, code, mc, sess_uid, d)
                     if not res["valid"]:
@@ -1228,6 +1241,8 @@ def make_handler(state: ContractState):
 
                 if d < today_str:
                     return self._send_json({"success": False, "message": "Selected screening date has already passed"}, 400, sid)
+                if not is_screening_cancelable(d, t):
+                    return self._send_json({"success": False, "message": "Selected screening time has already started or passed"}, 400, sid)
 
                 seat_list = raw_seats if isinstance(raw_seats, list) else str(raw_seats).split(",")
                 seats_map: dict[str, str] = {}
@@ -1247,14 +1262,10 @@ def make_handler(state: ContractState):
                 if len(seats) > MAX_SEATS_PER_ORDER:
                     return self._send_json({"success": False, "message": f"Maximum {MAX_SEATS_PER_ORDER} seats allowed per transaction"}, 200, sid)
 
-                sess_uid = int(session.get("user_id") or 0)
+                active_uid = self._resolve_active_session_user_id(session, db)
+                user_code = active_uid if active_uid > 0 else None
 
                 with state.db_lock:
-                    user_code = None
-                    if sess_uid > 0:
-                        urow = db.execute("SELECT user_code FROM t_user WHERE user_code = ?", (sess_uid,)).fetchone()
-                        if urow:
-                            user_code = int(urow["user_code"])
 
                     db.execute("BEGIN IMMEDIATE")
                     try:
@@ -1364,7 +1375,7 @@ def make_handler(state: ContractState):
                 )
 
             if route == "movie/seat/getseatlistbyusercode":
-                sess_uid = int(session.get("user_id") or 0)
+                sess_uid = self._resolve_active_session_user_id(session, db)
                 if sess_uid <= 0:
                     return self._send_json({"success": False, "message": "Authentication required to view tickets"}, 401, sid)
                 req_uid = self._id_param(p, "user_code")
@@ -1388,7 +1399,7 @@ def make_handler(state: ContractState):
             if route == "movie/seat/delete":
                 if not self._verify_same_origin():
                     return self._send_json({"success": False, "message": "Forbidden: cross-origin request rejected"}, 403, sid)
-                sess_uid = int(session.get("user_id") or 0)
+                sess_uid = self._resolve_active_session_user_id(session, db)
                 if sess_uid <= 0:
                     return self._send_json({"success": False, "message": "Authentication required to cancel a booking"}, 401, sid)
                 seat_id = self._id_param(p, "seat_code", allow_direct=True)
@@ -2308,7 +2319,14 @@ def make_handler(state: ContractState):
                             return self._send_json({"success": False, "message": "User not found"}, 404, sid)
                         eph = ",".join("?" for _ in existing_ids)
                         db.execute(f"UPDATE t_seat SET user_code = NULL WHERE user_code IN ({eph})", existing_ids)
-                        db.execute(f"UPDATE t_offer SET user_code = NULL WHERE user_code IN ({eph})", existing_ids)
+                        owned_offer_ids = [
+                            int(r["offer_code"])
+                            for r in db.execute(f"SELECT offer_code FROM t_offer WHERE user_code IN ({eph})", existing_ids).fetchall()
+                        ]
+                        if owned_offer_ids:
+                            oph = ",".join("?" for _ in owned_offer_ids)
+                            db.execute(f"DELETE FROM movie_offer WHERE offer_code IN ({oph})", owned_offer_ids)
+                            db.execute(f"DELETE FROM t_offer WHERE offer_code IN ({oph})", owned_offer_ids)
                         db.execute(f"DELETE FROM t_user WHERE user_code IN ({eph})", existing_ids)
                         db.execute("COMMIT")
                     except Exception:

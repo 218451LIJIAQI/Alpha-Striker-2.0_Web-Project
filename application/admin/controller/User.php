@@ -163,7 +163,14 @@ class User extends BaseAdmin
                 }
 
                 Db::name('seat')->where('user_code', 'in', $existingIds)->update(['user_code' => null]);
-                Db::name('offer')->where('user_code', 'in', $existingIds)->update(['user_code' => null]);
+                $ownedOfferIds = array_map(
+                    'intval',
+                    Db::name('offer')->where('user_code', 'in', $existingIds)->column('offer_code') ?: []
+                );
+                if (!empty($ownedOfferIds)) {
+                    Db::table('movie_offer')->where('offer_code', 'in', $ownedOfferIds)->delete();
+                    Db::name('offer')->where('offer_code', 'in', $ownedOfferIds)->delete();
+                }
                 Db::name('user')->where('user_code', 'in', $existingIds)->delete();
 
                 Db::commit();

@@ -420,12 +420,12 @@ html.dark-mode .dark-mode-toggle .sun-icon, body.dark-mode .dark-mode-toggle .su
   cursor: default;
 }
 
-.dropdown-content.show { display: block; animation: headerSlideDown 0.2s ease-out; }
+.dropdown-content.show { display: block; animation: headerSlideDown 0.14s ease-out; }
 
 @keyframes headerSlideDown {
   from {
-    opacity: 0;
-    transform: translateY(-6px);
+    opacity: 0.96;
+    transform: translateY(-4px);
   }
   to {
     opacity: 1;
@@ -655,8 +655,8 @@ html.dark-mode .dark-mode-toggle .sun-icon, body.dark-mode .dark-mode-toggle .su
 
 @keyframes toastSlideIn {
   from {
-    transform: translateX(100%);
-    opacity: 0;
+    transform: translateX(16px);
+    opacity: 0.96;
   }
   to {
     transform: translateX(0);

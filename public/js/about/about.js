@@ -34,10 +34,13 @@
       feedback: 'Guest Experience Feedback',
     };
 
+    const currentUser = CT.AuthStore && CT.AuthStore.isAuthenticated() ? CT.AuthStore.getUser() : null;
+    const prefilledEmail = currentUser && currentUser.email ? CT.escapeHtml(currentUser.email) : '';
+
     container.classList.remove('is-hidden');
     container.innerHTML =
       '<h4>' + CT.escapeHtml(titles[category] || 'Support Inquiry') + '</h4>' +
-      '<div class="form-group"><label for="cat-email-input">Contact Email *</label><input type="email" id="cat-email-input" class="cat-email" placeholder="your.email@example.com" required></div>' +
+      '<div class="form-group"><label for="cat-email-input">Contact Email *</label><input type="email" id="cat-email-input" class="cat-email" value="' + prefilledEmail + '" placeholder="your.email@example.com" required></div>' +
       '<div class="form-group"><label for="cat-details-input">Details *</label><textarea id="cat-details-input" class="cat-details" rows="3" placeholder="Share relevant booking ID or details..." required></textarea></div>' +
       '<button type="button" class="send-email-btn submit-category-form">Submit Request</button>';
 
@@ -151,7 +154,20 @@
     });
 
     document.querySelector('.call-btn')?.addEventListener('click', window.clickCallUs);
-    document.querySelector('.email-btn')?.addEventListener('click', window.clickEmailUs);
+    document.querySelector('.email-btn')?.addEventListener('click', function () {
+      const currentUser = CT.AuthStore && CT.AuthStore.isAuthenticated() ? CT.AuthStore.getUser() : null;
+      if (currentUser) {
+        const nameEl = document.getElementById('support-name-input');
+        const emailEl = document.getElementById('support-email-input');
+        if (nameEl && !nameEl.value.trim() && currentUser.user_name && currentUser.user_name !== 'Guest') {
+          nameEl.value = currentUser.user_name;
+        }
+        if (emailEl && !emailEl.value.trim() && currentUser.email) {
+          emailEl.value = currentUser.email;
+        }
+      }
+      window.clickEmailUs();
+    });
     document.querySelector('.chat-btn')?.addEventListener('click', clickLiveChat);
 
     document.querySelectorAll('[data-call-phone]').forEach(function (btn) {

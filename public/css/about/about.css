@@ -102,12 +102,7 @@
 
 .story-content p { margin: 0 0 14px; color: var(--text-muted); }
 
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-8px); }
-}
-
-.floating { animation: float 3.6s ease-in-out infinite; }
+/* Story image rests cleanly without continuous bounce distraction */
 
 .counter-section {
   background: var(--hero-gradient);

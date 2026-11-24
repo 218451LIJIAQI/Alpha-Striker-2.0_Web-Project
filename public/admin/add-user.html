@@ -50,16 +50,39 @@
       AdminApp.renderAdminNav('users');
       if (!(await AdminApp.ensureAuthenticated())) return;
 
-      document.getElementById('add-user-form').addEventListener('submit', function (e) {
+      const formEl = document.getElementById('add-user-form');
+      const CT = window.CineTicket;
+      CT.bindFieldErrorClear(formEl);
+
+      formEl.addEventListener('submit', function (e) {
         e.preventDefault();
-        const pwd = document.getElementById('login_pwd').value;
-        if (!window.CineTicket.isValidPasswordBytes(pwd)) {
+        const nameEl = document.getElementById('user_name');
+        const emailEl = document.getElementById('email');
+        const pwdEl = document.getElementById('login_pwd');
+        [nameEl, emailEl, pwdEl].forEach(CT.clearFieldError);
+
+        const userName = nameEl.value.trim();
+        const email = emailEl.value.trim();
+        const pwd = pwdEl.value;
+
+        if (!userName || userName.length > 50) {
+          CT.flagFieldError(nameEl, 'Display name (1-50 characters) is required');
+          window.showToast('Please enter a valid display name', 'warning');
+          return;
+        }
+        if (!CT.isValidEmail(email)) {
+          CT.flagFieldError(emailEl, 'Please enter a valid email address');
+          window.showToast('Please enter a valid email address', 'warning');
+          return;
+        }
+        if (!CT.isValidPasswordBytes(pwd)) {
+          CT.flagFieldError(pwdEl, 'Initial password must be 6-72 UTF-8 bytes');
           window.showToast('Initial password must be 6-72 UTF-8 bytes', 'warning');
           return;
         }
         AdminApp.submitForm('/index.php/admin/user/create', {
-          user_name: document.getElementById('user_name').value.trim(),
-          email: document.getElementById('email').value.trim(),
+          user_name: userName,
+          email: email,
           login_pwd: pwd,
         }, 'user.html', 'User created successfully', 'Failed to create user', e.submitter);
       });

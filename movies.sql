@@ -88,7 +88,7 @@ CREATE TABLE `t_offer` (
   UNIQUE KEY `uk_offer_promo` (`promo_code`),
   KEY `idx_offer_type` (`offer_type`),
   KEY `idx_offer_user` (`user_code`),
-  CONSTRAINT `fk_offer_user` FOREIGN KEY (`user_code`) REFERENCES `t_user` (`user_code`) ON DELETE SET NULL ON UPDATE CASCADE
+  CONSTRAINT `fk_offer_user` FOREIGN KEY (`user_code`) REFERENCES `t_user` (`user_code`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Offers Table';
 
 /* Seat reservations (nullable user_code supports both registered and guest checkouts) */

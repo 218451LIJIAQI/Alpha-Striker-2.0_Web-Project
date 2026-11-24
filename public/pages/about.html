@@ -26,7 +26,7 @@
       <h2 class="section-title">Our Story</h2>
 
       <div class="our-story">
-        <div class="story-image floating">
+        <div class="story-image">
           <img src="../img/about/team.jpg" alt="Alpha Striker 2.0 founding team">
         </div>
 
@@ -354,13 +354,13 @@
       </div>
 
       <div class="modal-body">
-        <div class="email-tabs" role="tablist">
-          <button type="button" class="email-tab active" data-tab="quick-contact" role="tab" aria-selected="true">Quick Contact</button>
-          <button type="button" class="email-tab" data-tab="detailed-form" role="tab" aria-selected="false">Detailed Support</button>
-          <button type="button" class="email-tab" data-tab="email-addresses" role="tab" aria-selected="false">Direct Email</button>
+        <div class="email-tabs" role="tablist" aria-label="Email Support Channels">
+          <button type="button" class="email-tab active" id="email-tab-quick" data-tab="quick-contact" role="tab" aria-selected="true" aria-controls="quick-contact">Quick Contact</button>
+          <button type="button" class="email-tab" id="email-tab-detailed" data-tab="detailed-form" role="tab" aria-selected="false" aria-controls="detailed-form">Detailed Support</button>
+          <button type="button" class="email-tab" id="email-tab-direct" data-tab="email-addresses" role="tab" aria-selected="false" aria-controls="email-addresses">Direct Email</button>
         </div>
 
-        <div class="email-tab-content active" id="quick-contact">
+        <div class="email-tab-content active" id="quick-contact" role="tabpanel" aria-labelledby="email-tab-quick">
           <div class="quick-contact-form">
             <div class="form-group">
               <label for="support-category-select">What can we help you with?</label>
@@ -424,7 +424,7 @@
           </div>
         </div>
 
-        <div class="email-tab-content" id="detailed-form">
+        <div class="email-tab-content" id="detailed-form" role="tabpanel" aria-labelledby="email-tab-detailed">
           <div class="detailed-support-form">
             <div class="support-categories" role="group" aria-label="Support Categories">
               <button type="button" class="category-card" data-support-cat="booking" aria-pressed="false">
@@ -453,7 +453,7 @@
           </div>
         </div>
 
-        <div class="email-tab-content" id="email-addresses">
+        <div class="email-tab-content" id="email-addresses" role="tabpanel" aria-labelledby="email-tab-direct">
           <div class="email-addresses-list">
             <div class="email-department">
               <div class="dept-icon"><i class="fas fa-headset" aria-hidden="true"></i></div>

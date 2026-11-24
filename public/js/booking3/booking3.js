@@ -169,9 +169,13 @@
       dates.unshift({ dateObj: new Date(parts[0], parts[1] - 1, parts[2]), iso: preferredIsoDate });
     }
 
+    const hasAnyUpcomingToday = Array.from(document.querySelectorAll('.time-slot')).some(function (slot) {
+      return CT.isScreeningCancelable(todayIso, slot.textContent.trim());
+    });
+    const fallbackIso = (!hasAnyUpcomingToday && dates.length > 1) ? dates[1].iso : dates[0].iso;
     const activeIso = dates.some(function (x) { return x.iso === preferredIsoDate; })
       ? preferredIsoDate
-      : dates[0].iso;
+      : fallbackIso;
     state.date = activeIso;
 
     dates.forEach(function (entry) {
@@ -193,6 +197,7 @@
         if (state.date === iso) return;
         CT.activatePill(dateContainer.querySelectorAll('.date-item'), item);
         state.date = iso;
+        syncTimeSlotsForDate(state.time);
         await loadTheaters();
         await loadOccupiedSeats([]);
       });
@@ -201,23 +206,48 @@
     });
   }
 
+  function syncTimeSlotsForDate(preferredTime) {
+    const CT = window.CineTicket;
+    const slots = Array.from(document.querySelectorAll('.time-slot'));
+    if (!slots.length) return;
+
+    const availableSlots = [];
+    slots.forEach(function (slot) {
+      const slotTime = slot.textContent.trim();
+      const isUpcoming = !state.date || CT.isScreeningCancelable(state.date, slotTime);
+      slot.disabled = !isUpcoming;
+      slot.classList.toggle('disabled', !isUpcoming);
+      if (!isUpcoming) {
+        slot.title = 'This showtime has already started';
+      } else {
+        slot.removeAttribute('title');
+        availableSlots.push(slot);
+      }
+    });
+
+    const candidatePool = availableSlots.length ? availableSlots : slots;
+    const matched = preferredTime
+      ? candidatePool.find(function (s) { return s.textContent.trim() === preferredTime; })
+      : null;
+    const currentActive = candidatePool.find(function (s) { return s.classList.contains('active'); });
+    const nextActive = matched || currentActive || candidatePool[0];
+
+    CT.activatePill(slots, nextActive);
+    state.time = availableSlots.length ? nextActive.textContent.trim() : '';
+  }
+
   function bindTimeSlots(preferredTime) {
     const CT = window.CineTicket;
     const slots = Array.from(document.querySelectorAll('.time-slot'));
     if (!slots.length) return;
 
-    const matched = preferredTime
-      ? slots.find(function (s) { return s.textContent.trim() === preferredTime; })
-      : null;
-    const initialActive = matched || slots.find(function (s) { return s.classList.contains('active'); }) || slots[0];
-
-    CT.activatePill(slots, initialActive);
-    state.time = initialActive.textContent.trim();
+    syncTimeSlotsForDate(preferredTime);
 
     slots.forEach(function (slot) {
       if (slot.dataset.timeBound === 'true') return;
       slot.dataset.timeBound = 'true';
       slot.addEventListener('click', function () {
+        if (slot.disabled) return;
         const chosen = slot.textContent.trim();
         if (state.time === chosen) return;
         CT.activatePill(slots, slot);

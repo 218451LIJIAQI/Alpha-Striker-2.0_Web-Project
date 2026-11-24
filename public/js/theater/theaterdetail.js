@@ -31,16 +31,20 @@
     const tabContents = document.querySelectorAll('.tab-content');
     if (!tabBtns.length) return;
 
+    const DEFAULT_TAB = 'facilities';
+
     function activateTabKey(tabKey, updateUrl) {
       const btn = tabBtns.find(function (b) { return b.getAttribute('data-tab') === tabKey; }) || tabBtns[0];
-      const resolvedKey = btn.getAttribute('data-tab') || 'overview';
+      const resolvedKey = btn.getAttribute('data-tab') || DEFAULT_TAB;
       tabContents.forEach(function (c) {
-        c.classList.toggle('active', c.id === resolvedKey + '-tab');
+        const isCurrent = c.id === resolvedKey + '-tab';
+        c.classList.toggle('active', isCurrent);
+        c.hidden = !isCurrent;
       });
       syncTabAria(btn);
       if (updateUrl && window.history && typeof window.history.replaceState === 'function') {
         const qs = new URLSearchParams(window.location.search);
-        if (resolvedKey === 'overview') qs.delete('tab');
+        if (resolvedKey === DEFAULT_TAB) qs.delete('tab');
         else qs.set('tab', resolvedKey);
         const query = qs.toString();
         window.history.replaceState(null, '', window.location.pathname + (query ? '?' + query : '') + (window.location.hash || ''));
@@ -48,13 +52,15 @@
     }
 
     const syncTabAria = window.CineTicket.bindTabList(tabBtns, function (btn) {
-      const target = btn.getAttribute('data-tab') || 'overview';
+      const target = btn.getAttribute('data-tab') || DEFAULT_TAB;
       tabContents.forEach(function (c) {
-        c.classList.toggle('active', c.id === target + '-tab');
+        const isCurrent = c.id === target + '-tab';
+        c.classList.toggle('active', isCurrent);
+        c.hidden = !isCurrent;
       });
       if (window.history && typeof window.history.replaceState === 'function') {
         const qs = new URLSearchParams(window.location.search);
-        if (target === 'overview') qs.delete('tab');
+        if (target === DEFAULT_TAB) qs.delete('tab');
         else qs.set('tab', target);
         const query = qs.toString();
         window.history.replaceState(null, '', window.location.pathname + (query ? '?' + query : '') + (window.location.hash || ''));
@@ -62,7 +68,7 @@
     });
 
     const syncFromUrl = function () {
-      const reqTab = new URLSearchParams(window.location.search).get('tab') || 'overview';
+      const reqTab = new URLSearchParams(window.location.search).get('tab') || DEFAULT_TAB;
       activateTabKey(reqTab, false);
     };
     syncFromUrl();

@@ -3,7 +3,6 @@ namespace app\offer\controller;
 
 use app\common\controller\ApiController;
 use think\Db;
-use think\facade\Session;
 
 class Offer extends ApiController
 {
@@ -12,7 +11,7 @@ class Offer extends ApiController
         try {
             $offerType     = $this->strParam('offer_type');
             $movieCode     = $this->idParam('movie_code');
-            $sessionUserId = (int) Session::get('user_id', 0);
+            $sessionUserId = $this->resolveActiveSessionUserId();
             $today         = date('Y-m-d');
             $targetDate    = $this->targetDateParam('date');
 
@@ -90,7 +89,7 @@ class Offer extends ApiController
             $movieCode     = $this->idParam('movie_code');
             $seatCount     = $this->idParam('seat_count');
             $date          = $this->strParam('date');
-            $sessionUserId = (int) Session::get('user_id', 0);
+            $sessionUserId = $this->resolveActiveSessionUserId();
 
             $validation = $this->validatePromoForContext($code, $movieCode, $sessionUserId, $date);
             if (!$validation['valid']) {

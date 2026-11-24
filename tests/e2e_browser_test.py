@@ -362,18 +362,20 @@ def run_e2e_suite() -> None:
         )
         save_shot("07_paysuccess_receipt_light.png")
 
-        booked_date = driver.execute_script("return JSON.parse(sessionStorage.getItem('lastBookingReceipt')).date")
+        booked_receipt = driver.execute_script("return JSON.parse(sessionStorage.getItem('lastBookingReceipt'))")
+        booked_date = booked_receipt["date"]
+        booked_time = booked_receipt["time"]
 
         # Verify guest spoofing user_code=1 is ignored (stored as NULL)
         spoof_status, _, _ = http_json(
             f"{raw_url}/index.php/movie/seat/saveSeats",
             method="POST",
-            payload={"movie_code": 1, "theater_code": 2, "date": booked_date, "time": "09:30 AM", "seat_nums": ["F4"], "user_code": 1},
+            payload={"movie_code": 1, "theater_code": 2, "date": booked_date, "time": booked_time, "seat_nums": ["F4"], "user_code": 1},
         )
         assert_eq(spoof_status, 200, "Guest F4 booking status")
         spoof_row = server.state.conn.execute(
-            "SELECT seat_code, user_code FROM t_seat WHERE movie_code=1 AND theater_code=2 AND date=? AND time='09:30 AM' AND seat_num='F4'",
-            (booked_date,),
+            "SELECT seat_code, user_code FROM t_seat WHERE movie_code=1 AND theater_code=2 AND date=? AND time=? AND seat_num='F4'",
+            (booked_date, booked_time),
         ).fetchone()
         assert_true(spoof_row is not None and spoof_row["user_code"] is None, "Guest spoofed user_code=1 was not forced to NULL!")
         guest_seat_id = int(spoof_row["seat_code"])
@@ -1232,6 +1234,62 @@ def run_e2e_suite() -> None:
         )
         assert_eq(past_book_code, 400, "Booking seats on a past date must return HTTP 400")
         assert_eq(past_book_body["success"], False, "Past-date booking rejected")
+
+        today_iso_now = time.strftime("%Y-%m-%d")
+        sameday_past_code, sameday_past_body, _ = http_json(
+            f"{raw_url}/index.php/movie/seat/saveSeats",
+            method="POST",
+            payload={"movie_code": 1, "theater_code": 1, "date": today_iso_now, "time": "12:00 AM", "seat_nums": ["A1"]},
+        )
+        assert_eq(sameday_past_code, 400, "Booking a same-day showtime that already started (12:00 AM) must return HTTP 400")
+        assert_eq(sameday_past_body["success"], False, "Same-day past showtime booking rejected")
+
+        # Verify deleting a user cascade-removes their private vouchers (never turns them public) and invalidates their open session
+        _, tmp_u_res, _ = http_json(
+            f"{raw_url}/index.php/admin/user/create",
+            method="POST",
+            payload={"user_name": "Temp Voucher Owner", "email": "voucherowner@example.com", "login_pwd": "ownerpass123"},
+            headers={"Cookie": f"PHPSESSID={iso_sid_after}", "X-Admin-Token": iso_adm_token},
+        )
+        tmp_owner_id = int(tmp_u_res["data"]["user_code"])
+        _, _, tmp_owner_hdrs = http_json(
+            f"{raw_url}/index.php/user/user/login",
+            method="POST",
+            payload={"email": "voucherowner@example.com", "password": "ownerpass123"},
+        )
+        tmp_owner_sid = extract_phpsessid(tmp_owner_hdrs)
+        http_json(
+            f"{raw_url}/index.php/admin/offer/create",
+            method="POST",
+            payload={
+                "offer_title": "Private Member Voucher",
+                "offer_type": "VIP Exclusive",
+                "promo_code": "PRIVLEAK99",
+                "money": 20.0,
+                "offer_validity": "2027-12-31",
+                "img": "../img/offer/family.png",
+                "offer_description": "Private voucher that must never become public.",
+                "user_code": tmp_owner_id,
+                "movie_codes": [1],
+            },
+            headers={"Cookie": f"PHPSESSID={iso_sid_after}", "X-Admin-Token": iso_adm_token},
+        )
+        http_json(
+            f"{raw_url}/index.php/admin/user/delete",
+            method="POST",
+            payload={"user_code": tmp_owner_id},
+            headers={"Cookie": f"PHPSESSID={iso_sid_after}", "X-Admin-Token": iso_adm_token},
+        )
+        _, pub_after_del, _ = http_json(f"{raw_url}/index.php/offer/offer/getOfferList")
+        assert_true(
+            all(o["promo_code"] != "PRIVLEAK99" for o in pub_after_del["data"]),
+            "Deleted user's private voucher PRIVLEAK99 leaked into public getOfferList!",
+        )
+        stale_tickets_code, _, _ = http_json(
+            f"{raw_url}/index.php/movie/seat/getSeatListByUserCode",
+            headers={"Cookie": f"PHPSESSID={tmp_owner_sid}"},
+        )
+        assert_eq(stale_tickets_code, 401, "Deleted user's open session must immediately return 401 on protected ticket endpoints")
 
         past_cancel_code, past_cancel_body, _ = http_json(
             f"{raw_url}/index.php/movie/seat/delete",

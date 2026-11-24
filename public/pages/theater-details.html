@@ -29,19 +29,19 @@
     <section class="section">
       <div class="tabs-container">
         <div class="tabs-header" role="tablist" aria-label="Cinema Amenities and Specifications">
-          <button type="button" class="tab-btn active" data-tab="facilities"><i class="fas fa-star" aria-hidden="true"></i> Facilities &amp; Amenities</button>
-          <button type="button" class="tab-btn" data-tab="technical"><i class="fas fa-cogs" aria-hidden="true"></i> Technical Specs</button>
-          <button type="button" class="tab-btn" data-tab="dining"><i class="fas fa-utensils" aria-hidden="true"></i> Food &amp; Dining</button>
-          <button type="button" class="tab-btn" data-tab="accessibility"><i class="fas fa-universal-access" aria-hidden="true"></i> Accessibility</button>
-          <button type="button" class="tab-btn" data-tab="safety"><i class="fas fa-shield-alt" aria-hidden="true"></i> Safety Measures</button>
+          <button type="button" class="tab-btn active" id="tab-btn-facilities" data-tab="facilities" aria-controls="facilities-tab"><i class="fas fa-star" aria-hidden="true"></i> Facilities &amp; Amenities</button>
+          <button type="button" class="tab-btn" id="tab-btn-technical" data-tab="technical" aria-controls="technical-tab"><i class="fas fa-cogs" aria-hidden="true"></i> Technical Specs</button>
+          <button type="button" class="tab-btn" id="tab-btn-dining" data-tab="dining" aria-controls="dining-tab"><i class="fas fa-utensils" aria-hidden="true"></i> Food &amp; Dining</button>
+          <button type="button" class="tab-btn" id="tab-btn-accessibility" data-tab="accessibility" aria-controls="accessibility-tab"><i class="fas fa-universal-access" aria-hidden="true"></i> Accessibility</button>
+          <button type="button" class="tab-btn" id="tab-btn-safety" data-tab="safety" aria-controls="safety-tab"><i class="fas fa-shield-alt" aria-hidden="true"></i> Safety Measures</button>
         </div>
 
         <div class="tabs-content">
-          <div class="tab-content active" id="facilities-tab" role="tabpanel"><div class="amenities-grid" id="amenities-grid"></div></div>
-          <div class="tab-content" id="technical-tab" role="tabpanel"><div class="amenities-grid" id="tech-specs-grid"></div></div>
-          <div class="tab-content" id="dining-tab" role="tabpanel"><div id="dining-info"></div></div>
-          <div class="tab-content" id="accessibility-tab" role="tabpanel"><div id="accessibility-info"></div></div>
-          <div class="tab-content" id="safety-tab" role="tabpanel"><div id="safety-measures"></div></div>
+          <div class="tab-content active" id="facilities-tab" role="tabpanel" aria-labelledby="tab-btn-facilities"><div class="amenities-grid" id="amenities-grid"></div></div>
+          <div class="tab-content" id="technical-tab" role="tabpanel" aria-labelledby="tab-btn-technical"><div class="amenities-grid" id="tech-specs-grid"></div></div>
+          <div class="tab-content" id="dining-tab" role="tabpanel" aria-labelledby="tab-btn-dining"><div id="dining-info"></div></div>
+          <div class="tab-content" id="accessibility-tab" role="tabpanel" aria-labelledby="tab-btn-accessibility"><div id="accessibility-info"></div></div>
+          <div class="tab-content" id="safety-tab" role="tabpanel" aria-labelledby="tab-btn-safety"><div id="safety-measures"></div></div>
         </div>
       </div>
     </section>
