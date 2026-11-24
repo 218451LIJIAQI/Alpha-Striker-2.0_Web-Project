@@ -14,17 +14,19 @@
     window.showToast('Opening mail client for ' + emailAddress, 'info');
   }
 
+  function closeModalAndRestoreFocus(modalEl) {
+    if (!modalEl) return;
+    modalEl.style.display = 'none';
+    window.CineTicket.restoreDialogFocus();
+  }
+
   function selectCategory(category, triggerEl) {
-    document.querySelectorAll('.category-card').forEach(function (card) {
-      const isAct = card === triggerEl;
-      card.classList.toggle('active', isAct);
-      card.setAttribute('aria-pressed', String(isAct));
-    });
+    const CT = window.CineTicket;
+    CT.activatePill(document.querySelectorAll('.category-card'), triggerEl);
 
     const container = document.getElementById('category-form');
     if (!container) return;
 
-    const CT = window.CineTicket;
     const titles = {
       booking: 'Booking & Refund Support',
       technical: 'Technical Issue Report',
@@ -35,8 +37,8 @@
     container.classList.remove('is-hidden');
     container.innerHTML =
       '<h4>' + CT.escapeHtml(titles[category] || 'Support Inquiry') + '</h4>' +
-      '<div class="form-group"><label for="cat-email-input">Contact Email</label><input type="email" id="cat-email-input" class="cat-email" placeholder="your.email@example.com"></div>' +
-      '<div class="form-group"><label for="cat-details-input">Details</label><textarea id="cat-details-input" class="cat-details" rows="3" placeholder="Share relevant booking ID or details..."></textarea></div>' +
+      '<div class="form-group"><label for="cat-email-input">Contact Email *</label><input type="email" id="cat-email-input" class="cat-email" placeholder="your.email@example.com" required></div>' +
+      '<div class="form-group"><label for="cat-details-input">Details *</label><textarea id="cat-details-input" class="cat-details" rows="3" placeholder="Share relevant booking ID or details..." required></textarea></div>' +
       '<button type="button" class="send-email-btn submit-category-form">Submit Request</button>';
 
     container.querySelector('.submit-category-form').addEventListener('click', function () {
@@ -54,6 +56,7 @@
   function clickLiveChat() {
     const dialog = document.getElementById('chat-dialog');
     if (dialog) {
+      window.CineTicket.rememberDialogTrigger();
       dialog.style.display = 'flex';
       document.getElementById('chat-input-field')?.focus();
     }
@@ -127,14 +130,13 @@
 
     document.querySelectorAll('.close-modal').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        const modal = btn.closest('.contact-modal');
-        if (modal) modal.style.display = 'none';
+        closeModalAndRestoreFocus(btn.closest('.contact-modal'));
       });
     });
 
     document.querySelectorAll('.contact-modal').forEach(function (modal) {
       modal.addEventListener('click', function (e) {
-        if (e.target === modal) modal.style.display = 'none';
+        if (e.target === modal) closeModalAndRestoreFocus(modal);
       });
     });
 
@@ -192,17 +194,11 @@
       if (timeSelect) timeSelect.selectedIndex = 0;
     });
 
-    document.querySelectorAll('.email-tab').forEach(function (tab) {
-      tab.addEventListener('click', function () {
-        const targetId = tab.getAttribute('data-tab');
-        document.querySelectorAll('.email-tab').forEach(function (t) {
-          const act = t === tab;
-          t.classList.toggle('active', act);
-          t.setAttribute('aria-selected', String(act));
-        });
-        document.querySelectorAll('.email-tab-content').forEach(function (c) {
-          c.classList.toggle('active', c.id === targetId);
-        });
+    const emailContents = document.querySelectorAll('.email-tab-content');
+    CT.bindTabList(document.querySelectorAll('.email-tab'), function (tab) {
+      const targetId = tab.getAttribute('data-tab');
+      emailContents.forEach(function (c) {
+        c.classList.toggle('active', c.id === targetId);
       });
     });
 
@@ -236,14 +232,13 @@
       emailInput.value = '';
       subjectInput.value = '';
       messageInput.value = '';
-      const modal = document.getElementById('email-modal');
-      if (modal) modal.style.display = 'none';
+      closeModalAndRestoreFocus(document.getElementById('email-modal'));
     });
 
     const chatDialog = document.getElementById('chat-dialog');
     if (chatDialog) {
       chatDialog.querySelector('.close-chat')?.addEventListener('click', function () {
-        chatDialog.style.display = 'none';
+        closeModalAndRestoreFocus(chatDialog);
       });
       chatDialog.querySelector('.send-message')?.addEventListener('click', sendChatMessage);
       document.getElementById('chat-input-field')?.addEventListener('keydown', function (e) {

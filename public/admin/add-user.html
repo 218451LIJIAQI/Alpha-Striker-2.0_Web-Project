@@ -34,7 +34,7 @@
 
         <div class="form-group full-width">
           <label for="login_pwd" class="form-label">Initial Password *</label>
-          <input type="password" id="login_pwd" name="login_pwd" class="form-input" placeholder="6 to 72 characters" required minlength="6" maxlength="72" autocomplete="new-password">
+          <input type="password" id="login_pwd" name="login_pwd" class="form-input" placeholder="6 to 72 UTF-8 bytes" required minlength="6" maxlength="72" autocomplete="new-password">
         </div>
       </div>
 
@@ -52,10 +52,15 @@
 
       document.getElementById('add-user-form').addEventListener('submit', function (e) {
         e.preventDefault();
+        const pwd = document.getElementById('login_pwd').value;
+        if (!window.CineTicket.isValidPasswordBytes(pwd)) {
+          window.showToast('Initial password must be 6-72 UTF-8 bytes', 'warning');
+          return;
+        }
         AdminApp.submitForm('/index.php/admin/user/create', {
           user_name: document.getElementById('user_name').value.trim(),
           email: document.getElementById('email').value.trim(),
-          login_pwd: document.getElementById('login_pwd').value,
+          login_pwd: pwd,
         }, 'user.html', 'User created successfully', 'Failed to create user', e.submitter);
       });
     });

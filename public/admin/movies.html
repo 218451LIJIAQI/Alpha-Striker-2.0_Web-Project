@@ -53,6 +53,7 @@
 
       const esc = AdminApp.escapeHtml;
       const tableCtrl = AdminApp.createTableController({
+        endpoint: '/index.php/admin/movie/index',
         toolbarId: 'movies-toolbar',
         tbodyId: 'movies-tbody',
         colSpan: 11,
@@ -81,7 +82,12 @@
           idKey: 'movie_code',
           confirmText: function (n) { return 'Delete ' + n + ' selected movie(s)? Related schedules, offer links, and seat bookings will also be removed.'; },
           successPrefix: 'Deleted',
-          onSuccess: loadMovies,
+        },
+        deleteAction: {
+          endpoint: '/index.php/admin/movie/delete',
+          idKey: 'movie_code',
+          confirmText: function (id) { return 'Delete movie #' + id + '? Related schedules, offer links, and seat bookings will also be removed.'; },
+          successText: 'Movie deleted',
         },
         exportCsv: {
           filename: 'cinetix-movies.csv',
@@ -123,23 +129,9 @@
             '</tr>'
           );
         },
-        afterRender: function (tbody) {
-          AdminApp.bindDeleteActions(tbody, {
-            endpoint: '/index.php/admin/movie/delete',
-            idKey: 'movie_code',
-            confirmText: function (id) { return 'Delete movie #' + id + '? Related schedules, offer links, and seat bookings will also be removed.'; },
-            successText: 'Movie deleted',
-            onSuccess: loadMovies,
-          });
-        },
       });
 
-      async function loadMovies() {
-        const res = await AdminApp.apiFetch('/index.php/admin/movie/index');
-        tableCtrl.setItems(res.success && Array.isArray(res.data) ? res.data : []);
-      }
-
-      loadMovies();
+      tableCtrl.reload();
     });
   </script>
 </body>

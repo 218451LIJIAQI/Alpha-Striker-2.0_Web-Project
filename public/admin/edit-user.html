@@ -34,7 +34,7 @@
 
         <div class="form-group full-width">
           <label for="login_pwd" class="form-label">New Password (Optional)</label>
-          <input type="password" id="login_pwd" name="login_pwd" class="form-input" placeholder="Leave blank to keep current password (6–72 chars)" minlength="6" maxlength="72" autocomplete="new-password">
+          <input type="password" id="login_pwd" name="login_pwd" class="form-input" placeholder="Leave blank to keep current password (6–72 UTF-8 bytes)" minlength="6" maxlength="72" autocomplete="new-password">
           <span class="form-hint">Only fill this field if you want to reset the user's password.</span>
         </div>
       </div>
@@ -51,29 +51,35 @@
       AdminApp.renderAdminNav('users');
       if (!(await AdminApp.ensureAuthenticated())) return;
 
-      const userCode = (new URLSearchParams(window.location.search).get('user_code') || '').trim();
-      if (!/^[1-9]\d*$/.test(userCode)) {
-        window.location.href = 'user.html';
+      const userCode = AdminApp.getQueryId('user_code', 'user.html');
+      if (!userCode) return;
+
+      try {
+        const detailRes = await AdminApp.apiFetch('/index.php/admin/user/getUserByCode?user_code=' + encodeURIComponent(userCode));
+        if (!detailRes.success || !detailRes.data) {
+          window.showToast(detailRes.message || 'User not found', 'error');
+          setTimeout(function () { window.location.href = 'user.html'; }, 700);
+          return;
+        }
+        document.getElementById('user_name').value = detailRes.data.user_name || '';
+        document.getElementById('email').value = detailRes.data.email || '';
+      } catch (_) {
+        window.showToast('Unable to load user details', 'error');
         return;
       }
-
-      const detailRes = await AdminApp.apiFetch('/index.php/admin/user/getUserByCode?user_code=' + encodeURIComponent(userCode));
-      if (!detailRes.success || !detailRes.data) {
-        window.showToast(detailRes.message || 'User not found', 'error');
-        setTimeout(function () { window.location.href = 'user.html'; }, 700);
-        return;
-      }
-
-      document.getElementById('user_name').value = detailRes.data.user_name || '';
-      document.getElementById('email').value = detailRes.data.email || '';
 
       document.getElementById('edit-user-form').addEventListener('submit', function (e) {
         e.preventDefault();
+        const newPwd = document.getElementById('login_pwd').value;
+        if (newPwd !== '' && !window.CineTicket.isValidPasswordBytes(newPwd)) {
+          window.showToast('New password must be 6-72 UTF-8 bytes', 'warning');
+          return;
+        }
         AdminApp.submitForm('/index.php/admin/user/update', {
           user_code: userCode,
           user_name: document.getElementById('user_name').value.trim(),
           email: document.getElementById('email').value.trim(),
-          login_pwd: document.getElementById('login_pwd').value,
+          login_pwd: newPwd,
         }, 'user.html', 'User updated successfully', 'Failed to update user', e.submitter);
       });
     });

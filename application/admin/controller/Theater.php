@@ -52,11 +52,7 @@ class Theater extends BaseAdmin
                 return $this->fail('Theater not found', 404);
             }
 
-            $mCodes = Db::table('theater_movie')
-                ->where('theater_code', $theaterId)
-                ->order('movie_code', 'asc')
-                ->column('movie_code');
-            $theater['movie_codes'] = array_map('intval', $mCodes ?: []);
+            $theater['movie_codes'] = $this->queryRelationIds('theater_movie', 'theater_code', $theaterId, 'movie_code');
 
             return $this->ok($theater);
         } catch (\Throwable $e) {
@@ -86,7 +82,7 @@ class Theater extends BaseAdmin
                     return $this->fail('Failed to create theater');
                 }
 
-                if (empty($data['theater_id'])) {
+                if ($data['theater_id'] === null || $data['theater_id'] === '') {
                     $autoCode = 'TH-' . str_pad((string) $theaterId, 3, '0', STR_PAD_LEFT);
                     Db::name('theater')->where('theater_code', $theaterId)->update(['theater_id' => $autoCode]);
                 }
@@ -116,15 +112,17 @@ class Theater extends BaseAdmin
                 return $this->fail('Valid theater_code is required');
             }
 
-            if (!Db::name('theater')->where('theater_code', $theaterId)->find()) {
+            $existing = Db::name('theater')->where('theater_code', $theaterId)->find();
+            if (!$existing) {
                 return $this->fail('Theater not found', 404);
             }
 
-            [$data, $error] = $this->prepareTheaterData($payload);
+            $merged         = $this->mergeExistingPayload($existing, $payload, self::ALLOWED_FIELDS);
+            [$data, $error] = $this->prepareTheaterData($merged);
             if ($error !== null) {
                 return $this->fail($error);
             }
-            if (empty($data['theater_id'])) {
+            if ($data['theater_id'] === null || $data['theater_id'] === '') {
                 $data['theater_id'] = 'TH-' . str_pad((string) $theaterId, 3, '0', STR_PAD_LEFT);
             }
 
@@ -189,39 +187,51 @@ class Theater extends BaseAdmin
     {
         $data = $this->pickAllowed($payload, self::ALLOWED_FIELDS);
 
-        if (empty($data['theater_name']) || $this->textLen($data['theater_name']) > 200) {
+        $name    = isset($data['theater_name']) ? (string) $data['theater_name'] : '';
+        $address = isset($data['address']) ? (string) $data['address'] : '';
+        $img     = isset($data['img']) ? (string) $data['img'] : '';
+        $amenity = isset($data['amenity']) && $data['amenity'] !== null ? (string) $data['amenity'] : '';
+        $reviews = isset($data['reviews']) && $data['reviews'] !== null ? (string) $data['reviews'] : '';
+        $dist    = isset($data['distance']) && $data['distance'] !== null ? (string) $data['distance'] : '';
+        $codeLbl = isset($data['theater_id']) && $data['theater_id'] !== null ? (string) $data['theater_id'] : '';
+
+        if ($name === '' || $this->textLen($name) > 200) {
             return [null, 'Theater name (1-200 characters) is required'];
         }
-        if (empty($data['address']) || $this->textLen($data['address']) > 500) {
+        if ($address === '' || $this->textLen($address) > 500) {
             return [null, 'Theater address (1-500 characters) is required'];
         }
-        if (empty($data['img']) || $this->textLen($data['img']) > 500) {
+        if ($img === '' || $this->textLen($img) > 500) {
             return [null, 'Theater image path or URL (1-500 characters) is required'];
         }
-        if (isset($data['amenity']) && $this->textLen($data['amenity']) > 500) {
+        if ($amenity !== '' && $this->textLen($amenity) > 500) {
             return [null, 'Amenities list must be 500 characters or fewer'];
         }
-        if (isset($data['reviews']) && $this->textLen($data['reviews']) > 50) {
+        if ($reviews !== '' && $this->textLen($reviews) > 50) {
             return [null, 'Reviews label must be 50 characters or fewer'];
         }
-        if (isset($data['distance']) && $this->textLen($data['distance']) > 50) {
+        if ($dist !== '' && $this->textLen($dist) > 50) {
             return [null, 'Distance label must be 50 characters or fewer'];
         }
-        if (isset($data['theater_id']) && $this->textLen($data['theater_id']) > 100) {
+        if ($codeLbl !== '' && $this->textLen($codeLbl) > 100) {
             return [null, 'Theater code label must be 100 characters or fewer'];
         }
 
-        $star = isset($data['star']) && $data['star'] !== '' ? $data['star'] : 4.8;
-        if (!is_numeric($star) || !is_finite((float) $star) || (float) $star < 0 || (float) $star > 5) {
+        $rawStar = isset($data['star']) && $data['star'] !== null && $data['star'] !== '' ? $data['star'] : 4.8;
+        $star    = $this->parseFiniteFloat($rawStar, 0.0, 5.0);
+        if ($star === null) {
             return [null, 'Rating must be between 0.0 and 5.0'];
         }
 
-        $data['star']       = round((float) $star, 1);
-        $data['amenity']    = isset($data['amenity']) && $data['amenity'] !== '' ? $data['amenity'] : null;
-        $data['reviews']    = isset($data['reviews']) && $data['reviews'] !== '' ? $data['reviews'] : null;
-        $data['distance']   = isset($data['distance']) && $data['distance'] !== '' ? $data['distance'] : null;
-        $data['theater_id'] = isset($data['theater_id']) && $data['theater_id'] !== '' ? $data['theater_id'] : null;
-
-        return [$data, null];
+        return [[
+            'theater_name' => $name,
+            'address'      => $address,
+            'amenity'      => $amenity !== '' ? $amenity : null,
+            'star'         => round($star, 1),
+            'img'          => $img,
+            'reviews'      => $reviews !== '' ? $reviews : null,
+            'distance'     => $dist !== '' ? $dist : null,
+            'theater_id'   => $codeLbl !== '' ? $codeLbl : null,
+        ], null];
     }
 }

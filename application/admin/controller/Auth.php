@@ -10,6 +10,10 @@ class Auth extends ApiController
     public function login()
     {
         try {
+            if (!$this->verifySameOrigin()) {
+                return $this->fail('Forbidden: cross-origin request rejected', 403);
+            }
+
             $username = $this->strParam('username');
             $password = $this->rawStrParam('password');
 
@@ -22,9 +26,10 @@ class Auth extends ApiController
             $expectedPass = (string) Env::get('admin.password', 'admin');
 
             $userMatches = hash_equals($expectedUser, $username);
-            $passMatches = $passwordHash !== ''
+            $withinBytes = strlen($password) <= self::MAX_PASSWORD_BYTES;
+            $passMatches = $withinBytes && ($passwordHash !== ''
                 ? password_verify($password, $passwordHash)
-                : hash_equals($expectedPass, $password);
+                : hash_equals($expectedPass, $password));
 
             if (!$userMatches || !$passMatches) {
                 return $this->fail('Invalid username or password', 401);
@@ -51,6 +56,9 @@ class Auth extends ApiController
     public function logout()
     {
         try {
+            if (!$this->verifySameOrigin()) {
+                return $this->fail('Forbidden: cross-origin request rejected', 403);
+            }
             if (BaseAdmin::hasAdminSession() && !BaseAdmin::checkSession()) {
                 return $this->fail('Forbidden: valid X-Admin-Token header is required', 403);
             }

@@ -136,12 +136,12 @@
 }
 
 .quick-info-card {
-  background: var(--card-bg);
+  background: var(--surface-bg);
   border: 1px solid var(--border-color);
   padding: 22px;
   border-radius: var(--radius-lg);
   text-align: center;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-card);
   transition: transform 0.2s ease;
 }
 
@@ -149,7 +149,7 @@
 
 .quick-info-card .info-icon i {
   font-size: 2rem;
-  color: var(--primary);
+  color: var(--brand-primary);
   margin-bottom: 10px;
 }
 
@@ -157,7 +157,7 @@
 
 .quick-info-card .info-details p {
   margin: 0;
-  color: var(--text-light);
+  color: var(--text-muted);
   font-size: 13.5px;
 }
 
@@ -168,7 +168,7 @@
   font-family: var(--font-display);
   font-size: 1.65rem;
   font-weight: 700;
-  color: var(--text-dark);
+  color: var(--text-main);
   margin: 0 0 22px;
   padding-bottom: 12px;
   border-bottom: 2px solid var(--border-color);
@@ -177,7 +177,7 @@
   gap: 10px;
 }
 
-.section-title i { color: var(--primary); }
+.section-title i { color: var(--brand-primary); }
 
 /* Now Showing Schedule Grid — Preserves 2:3 Poster Ratio */
 .movies-list {
@@ -187,17 +187,17 @@
 }
 
 .schedule-card {
-  background: var(--card-bg);
+  background: var(--surface-bg);
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--border-color);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-card);
   transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
-.schedule-card:hover { transform: translateY(-4px); border-color: var(--primary); }
+.schedule-card:hover { transform: translateY(-4px); border-color: var(--brand-primary); }
 
 .schedule-card img {
   width: 100%;
@@ -222,7 +222,7 @@
 
 .schedule-card-meta {
   font-size: 12.5px;
-  color: var(--text-light);
+  color: var(--text-muted);
   display: flex;
   justify-content: space-between;
   gap: 8px;
@@ -231,7 +231,7 @@
 .schedule-card-price {
   font-size: 13px;
   font-weight: 700;
-  color: var(--primary);
+  color: var(--brand-primary);
 }
 
 .schedule-book-btn {
@@ -243,17 +243,17 @@
 
 /* Tabs & Amenities */
 .tabs-container {
-  background: var(--card-bg);
+  background: var(--surface-bg);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-card);
 }
 
 .tabs-header {
   display: flex;
   flex-wrap: wrap;
-  background: var(--bg-light);
+  background: var(--surface-subtle);
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -266,7 +266,7 @@
   font-family: inherit;
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-light);
+  color: var(--text-muted);
   cursor: pointer;
   transition: background-color 0.18s ease, color 0.18s ease;
   display: inline-flex;
@@ -275,9 +275,9 @@
   gap: 7px;
 }
 
-.tab-btn.active { background: var(--primary); color: #ffffff; }
+.tab-btn.active { background: var(--brand-primary); color: #ffffff; }
 
-.tab-btn:hover:not(.active) { background: var(--brand-primary-soft); color: var(--primary); }
+.tab-btn:hover:not(.active) { background: var(--brand-primary-soft); color: var(--brand-primary); }
 
 .tabs-content { padding: 28px; }
 
@@ -296,7 +296,7 @@
   align-items: flex-start;
   gap: 16px;
   padding: 20px;
-  background: var(--bg-light);
+  background: var(--surface-subtle);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
 }
@@ -304,7 +304,7 @@
 .amenity-icon {
   width: 46px;
   height: 46px;
-  background: var(--primary);
+  background: var(--brand-primary);
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -319,7 +319,7 @@
 .amenity-card p {
   margin: 0;
   font-size: 13.5px;
-  color: var(--text-light);
+  color: var(--text-muted);
 }
 
 /* Info Cards, Location, Reviews & Virtual Tour */
@@ -330,11 +330,11 @@
 }
 
 .info-card {
-  background: var(--card-bg);
+  background: var(--surface-bg);
   border: 1px solid var(--border-color);
   padding: 24px;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-card);
 }
 
 .info-card h3 {
@@ -346,7 +346,7 @@
   gap: 9px;
 }
 
-.info-card h3 i { color: var(--primary); }
+.info-card h3 i { color: var(--brand-primary); }
 
 .detail-list-row {
   display: flex;
@@ -358,7 +358,7 @@
 
 .detail-list-row.bordered { padding: 8px 0; border-bottom: 1px solid var(--border-color); }
 
-.detail-list-row.is-today { font-weight: 700; color: var(--primary); }
+.detail-list-row.is-today { font-weight: 700; color: var(--brand-primary); }
 
 .contact-line {
   margin: 8px 0;
@@ -369,11 +369,11 @@
 }
 
 .location-card {
-  background: var(--card-bg);
+  background: var(--surface-bg);
   border: 1px solid var(--border-color);
   padding: 24px;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-card);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -383,7 +383,7 @@
 
 .location-card h3 { margin: 0 0 4px; }
 
-.location-card p { margin: 0; color: var(--text-light); }
+.location-card p { margin: 0; color: var(--text-muted); }
 
 .reviews-grid {
   display: grid;
@@ -392,11 +392,11 @@
 }
 
 .review-card {
-  background: var(--card-bg);
+  background: var(--surface-bg);
   border: 1px solid var(--border-color);
   padding: 20px;
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-card);
 }
 
 .review-card-top {
@@ -408,12 +408,12 @@
 .review-stars { color: var(--brand-amber); font-weight: 700; }
 
 .vr-tour-card {
-  background: var(--card-bg);
+  background: var(--surface-bg);
   border: 1px solid var(--border-color);
   padding: 32px;
   border-radius: var(--radius-lg);
   text-align: center;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-card);
 }
 
 .vr-tour-card h3 { margin: 0 0 8px; }
@@ -421,7 +421,7 @@
 .vr-tour-card p {
   margin: 0 auto 18px;
   max-width: 560px;
-  color: var(--text-light);
+  color: var(--text-muted);
 }
 
 .vr-launch-link { border-radius: 999px; }

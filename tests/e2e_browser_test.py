@@ -27,6 +27,7 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -41,7 +42,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-from mock_thinkphp_server import start_background_server
+from mock_thinkphp_server import sanitize_csv_cell, start_background_server
 
 
 def assert_eq(actual, expected, msg: str) -> None:
@@ -133,6 +134,13 @@ return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
 """
 
 
+
+def set_viewport(driver: webdriver.Chrome, width: int, height: int, scale: float = 1.0) -> None:
+    driver.execute_cdp_cmd(
+        "Emulation.setDeviceMetricsOverride",
+        {"width": int(width), "height": int(height), "deviceScaleFactor": float(scale), "mobile": False},
+    )
+
 def run_e2e_suite() -> None:
     server, raw_url = start_background_server()
     port = raw_url.rsplit(":", 1)[1]
@@ -152,9 +160,12 @@ def run_e2e_suite() -> None:
         if candidate and os.path.exists(candidate):
             options.binary_location = candidate
             break
+    profile_dir = tempfile.mkdtemp(prefix="cinetix_e2e_profile_", dir="/tmp")
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--no-proxy-server")
+    options.add_argument(f"--user-data-dir={profile_dir}")
     options.add_argument("--window-size=1440,900")
     options.add_argument("--host-resolver-rules=MAP cinetix.local 127.0.0.1, MAP * ~NOTFOUND")
     options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
@@ -165,6 +176,7 @@ def run_e2e_suite() -> None:
         if driver_path and os.path.exists(driver_path)
         else webdriver.Chrome(options=options)
     )
+    set_viewport(driver, 1440, 900)
     wait = WebDriverWait(driver, 8)
 
     try:
@@ -371,6 +383,7 @@ def run_e2e_suite() -> None:
         assert_eq(driver.find_element(By.ID, "header-username").text, "Alice Tan", "Header username after registration")
 
         # Verify keyboard Enter + Escape on header profile dropdown
+        wait.until(lambda d: d.execute_script("const el = document.getElementById('userDropdown'); return Boolean(el && getComputedStyle(el).position === 'absolute');"))
         prof_trigger = driver.find_element(By.ID, "user-profile-trigger")
         driver.execute_script("arguments[0].focus();", prof_trigger)
         ActionChains(driver).send_keys(Keys.ENTER).perform()
@@ -759,7 +772,7 @@ def run_e2e_suite() -> None:
             f"{base_url}/admin/movies.html",
         ]
         for vw, vh in desktop_viewports:
-            driver.set_window_size(vw, vh)
+            set_viewport(driver, vw, vh)
             for target_url in audit_urls:
                 driver.get(target_url)
                 overflow = driver.execute_script("return document.documentElement.scrollWidth - window.innerWidth;")
@@ -767,7 +780,8 @@ def run_e2e_suite() -> None:
 
         # Verify 125%, 150%, and 200% zoom at 1280x720 (effective 640px CSS viewport at 200% zoom)
         for zoom_pct, simulated_w in ((125, 1024), (150, 854), (200, 640)):
-            driver.set_window_size(simulated_w, 720)
+            scale = zoom_pct / 100.0
+            set_viewport(driver, simulated_w, round(720 / scale), scale)
             for target_url in audit_urls:
                 driver.get(target_url)
                 overflow = driver.execute_script("return document.documentElement.scrollWidth - window.innerWidth;")
@@ -791,9 +805,9 @@ def run_e2e_suite() -> None:
         assert_eq(arr_login_body["success"], False, "Array login rejected cleanly")
 
         long_pwd_code, long_pwd_body, _ = http_json(
-            f"{raw_url}/index.php/user/user/register",
+            f"{raw_url}/index.php/user/user/reg",
             method="POST",
-            payload={"user_name": "LongPwd", "email": "longpwd@example.com", "login_pwd": "x" * 73},
+            payload={"name": "LongPwd", "email": "longpwd@example.com", "password": "x" * 73},
         )
         assert_eq(long_pwd_body["success"], False, "Password exceeding 72 bcrypt bytes must be rejected")
 
@@ -851,7 +865,7 @@ def run_e2e_suite() -> None:
         )
 
         # Verify tampered/non-existent movie_code on pay.html disables Pay button and displays error alert
-        driver.set_window_size(1440, 900)
+        set_viewport(driver, 1440, 900)
         driver.get(f"{base_url}/pages/pay.html?movie_code=999&theater_code=1&date=2026-12-05&time=09%3A30+AM&seats=A1")
         wait.until(lambda d: d.find_element(By.ID, "checkout-empty-state").is_displayed())
         assert_true("Screening Unavailable" in driver.find_element(By.ID, "checkout-empty-state").text, "Tampered movie_code=999 must show Screening Unavailable")
@@ -885,10 +899,133 @@ def run_e2e_suite() -> None:
         check_no_local_errors(driver, "Deep remediation contracts & batch admin actions", base_url)
         print("[PASS] E2E 11: Scalar/ID/72B guards, isolated logout, expired-offer filter, tampered checkout block, dark CTA contrast & bulk admin delete")
 
-        print("ALL 11 HEADLESS CHROMIUM E2E, ACCESSIBILITY, VIEWPORT/ZOOM & CONCURRENCY SUITES PASSED.")
+
+        # 12. Round-2 Optimization Contracts: Cross-Origin CSRF 403, SameSite=Lax Cookie, Partial Update + "0" Preservation,
+        #     Non-Destructive Relation Metadata Retention, Open-Redirect Block, Focus Restoration & CSV Formula Defense
+        assert_true("samesite=lax" in adm_lhdrs.get("set-cookie", "").lower(), "Session Set-Cookie must include SameSite=Lax")
+        assert_eq(sanitize_csv_cell("=CMD|' /C calc'!A0"), "'=CMD|' /C calc'!A0", "Backend sanitize_csv_cell formula guard")
+        assert_eq(sanitize_csv_cell("  @SUM(A1:A2)"), "'  @SUM(A1:A2)", "Backend sanitize_csv_cell leading-space formula guard")
+
+        # Verify live authenticated /index.php/admin/seat/exportCsv endpoint neutralizes CSV formula injection end-to-end
+        _, csv_user_res, _ = http_json(
+            f"{raw_url}/index.php/admin/user/create",
+            method="POST",
+            payload={"user_name": "=CMD|' /C calc'!A0", "email": "csvprobe@example.com", "login_pwd": "csvpass123"},
+            headers={"Cookie": f"PHPSESSID={shared_sid3}", "X-Admin-Token": adm_token},
+        )
+        csv_uid = int(csv_user_res["data"]["user_code"])
+        _, _, csv_u_hdrs = http_json(
+            f"{raw_url}/index.php/user/user/login",
+            method="POST",
+            payload={"email": "csvprobe@example.com", "password": "csvpass123"},
+        )
+        csv_u_sid = extract_phpsessid(csv_u_hdrs)
+        http_json(
+            f"{raw_url}/index.php/movie/seat/saveSeats",
+            method="POST",
+            payload={"movie_code": 1, "theater_code": 1, "date": "2026-12-09", "time": "09:30 AM", "seat_nums": ["H10"]},
+            headers={"Cookie": f"PHPSESSID={csv_u_sid}"},
+        )
+        csv_req = urllib.request.Request(
+            f"{raw_url}/index.php/admin/seat/exportCsv",
+            headers={"Cookie": f"PHPSESSID={shared_sid3}", "X-Admin-Token": adm_token},
+            method="GET",
+        )
+        with urllib.request.urlopen(csv_req) as csv_resp:
+            assert_eq(csv_resp.status, 200, "Admin seat exportCsv HTTP status")
+            assert_true("text/csv" in csv_resp.headers.get("Content-Type", ""), "exportCsv must return text/csv")
+            csv_text = csv_resp.read().decode("utf-8")
+            assert_true(csv_text.startswith("\ufeffBooking ID,"), "exportCsv must begin with UTF-8 BOM + header row")
+            assert_true("'=CMD|' /C calc'!A0" in csv_text, f"exportCsv failed to neutralize formula injection: {csv_text[:260]}")
+        http_json(
+            f"{raw_url}/index.php/admin/user/delete",
+            method="POST",
+            payload={"user_code": csv_uid},
+            headers={"Cookie": f"PHPSESSID={shared_sid3}", "X-Admin-Token": adm_token},
+        )
+
+        xorigin_seat_code, _, _ = http_json(
+            f"{raw_url}/index.php/movie/seat/saveSeats",
+            method="POST",
+            payload={"movie_code": 1, "theater_code": 1, "date": "2026-12-08", "time": "09:30 AM", "seat_nums": ["H11"]},
+            headers={"Origin": "https://evil.attacker.example"},
+        )
+        assert_eq(xorigin_seat_code, 403, "Cross-origin POST to saveSeats must be blocked with 403")
+
+        xorigin_adm_code, _, _ = http_json(
+            f"{raw_url}/index.php/admin/movie/delete",
+            method="POST",
+            payload={"movie_code": 1},
+            headers={"Cookie": f"PHPSESSID={shared_sid3}", "X-Admin-Token": adm_token, "Origin": "https://evil.attacker.example"},
+        )
+        assert_eq(xorigin_adm_code, 403, "Cross-origin admin POST even with token must be blocked with 403")
+
+        # Partial update + "0" price preservation + non-destructive daily_showtimes & discount_percent retention
+        with server.state.db_lock:
+            server.state.conn.execute("UPDATE theater_movie SET daily_showtimes = 7 WHERE theater_code = 1 AND movie_code = 1")
+            server.state.conn.execute("UPDATE movie_offer SET discount_percent = 12.5 WHERE movie_code = 1 AND offer_code = 1")
+            server.state.conn.commit()
+
+        _, part_upd_body, _ = http_json(
+            f"{raw_url}/index.php/admin/movie/update",
+            method="POST",
+            payload={"movie_code": 1, "money": "0", "theater_codes": [1, 2], "offer_codes": [1, 2]},
+            headers={"Cookie": f"PHPSESSID={shared_sid3}", "X-Admin-Token": adm_token},
+        )
+        assert_eq(part_upd_body["success"], True, "Partial movie update with money='0' must succeed")
+        _, m1_after, _ = http_json(
+            f"{raw_url}/index.php/admin/movie/getMovieByCode?movie_code=1",
+            headers={"Cookie": f"PHPSESSID={shared_sid3}", "X-Admin-Token": adm_token},
+        )
+        assert_eq(m1_after["data"]["movie_name"], "Frozen 2", "Omitted movie_name preserved during partial update")
+        assert_eq(m1_after["data"]["tag"], "FEATURED", "Omitted optional tag preserved during partial update")
+        assert_eq(float(m1_after["data"]["money"]), 0.0, "Zero price '0' must not be rejected by empty('0')")
+        tm_keep = server.state.conn.execute(
+            "SELECT daily_showtimes FROM theater_movie WHERE theater_code = 1 AND movie_code = 1"
+        ).fetchone()
+        mo_keep = server.state.conn.execute(
+            "SELECT discount_percent FROM movie_offer WHERE movie_code = 1 AND offer_code = 1"
+        ).fetchone()
+        assert_eq(int(tm_keep["daily_showtimes"]), 7, "Existing theater_movie.daily_showtimes preserved across sync")
+        assert_eq(float(mo_keep["discount_percent"]), 12.5, "Existing movie_offer.discount_percent preserved across sync")
+
+        # Restore Movie #1 price & full schedules cleanly
+        http_json(
+            f"{raw_url}/index.php/admin/movie/update",
+            method="POST",
+            payload={"movie_code": 1, "money": "39.00", "theater_codes": [1, 2, 3, 4, 5, 6], "offer_codes": [1, 2, 3, 4, 5]},
+            headers={"Cookie": f"PHPSESSID={shared_sid3}", "X-Admin-Token": adm_token},
+        )
+
+        # Verify focus restoration when closing #theater-form via Escape in admin/theaters.html
+        driver.get(f"{base_url}/admin/theaters.html")
+        wait.until(lambda d: "Cinemark Premium" in d.find_element(By.ID, "theaters-tbody").text)
+        driver.find_element(By.ID, "open-add-theater-btn").click()
+        wait.until(lambda d: d.find_element(By.ID, "theater-form").is_displayed())
+        driver.find_element(By.ID, "theater_name").send_keys(Keys.ESCAPE)
+        wait.until(lambda d: not d.find_element(By.ID, "theater-form").is_displayed())
+        assert_eq(
+            driver.execute_script("return document.activeElement && document.activeElement.id"),
+            "open-add-theater-btn",
+            "Escape on #theater-form must restore focus to #open-add-theater-btn",
+        )
+
+        # Verify open-redirect neutralization on login.html?redirect=\\evil.example
+        driver.get(f"{base_url}/login.html?redirect=%5C%5Cevil.example")
+        email_in = driver.find_element(By.ID, "email")
+        email_in.clear()
+        email_in.send_keys("218451@student.upm.edu.my")
+        driver.find_element(By.ID, "password").send_keys("218451")
+        driver.find_element(By.CSS_SELECTOR, "#login-form button[type='submit']").click()
+        wait.until(EC.url_contains("/pages/homepage.html"))
+        check_no_local_errors(driver, "Suite 12 security, partial update & focus restoration", base_url)
+        print("[PASS] E2E 12: Same-origin CSRF 403, SameSite=Lax, partial update '0' & relation metadata retention, focus return & open-redirect block")
+
+        print("ALL 12 HEADLESS CHROMIUM E2E, ACCESSIBILITY, VIEWPORT/ZOOM & CONCURRENCY SUITES PASSED.")
     finally:
         driver.quit()
         server.shutdown()
+        shutil.rmtree(profile_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":

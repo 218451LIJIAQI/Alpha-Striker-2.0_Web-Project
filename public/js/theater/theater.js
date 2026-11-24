@@ -7,25 +7,43 @@
   let requestSeq = 0;
 
   async function fetchTheaters(address, amenity, onReset) {
+    const CT = window.CineTicket;
+    const theaterList = document.querySelector('.theater-list');
     const seq = ++requestSeq;
     const params = new URLSearchParams();
     if (address) params.append('address', address);
     if (amenity) params.append('amenity', amenity);
     const query = params.toString();
+    const retry = function () { fetchTheaters(address, amenity, onReset); };
 
     try {
-      const payload = await window.CineTicket.fetchJson(
+      const payload = await CT.fetchJson(
         '/index.php/theater/theater/getTheaterList' + (query ? '?' + query : '')
       );
       if (seq !== requestSeq) return;
       if (payload.success) {
         renderTheaters(payload.data || [], onReset);
       } else {
-        window.showToast(payload.message || 'Failed to load theaters', 'error');
+        const msg = payload.message || 'Failed to load theaters';
+        window.showToast(msg, 'error');
+        CT.renderStateCard(theaterList, {
+          heading: 'Unable to load theaters',
+          message: msg,
+          actionLabel: 'Retry Directory',
+          onAction: retry,
+          isError: true,
+        });
       }
     } catch (_) {
       if (seq !== requestSeq) return;
       window.showToast('Unable to load theaters right now', 'error');
+      CT.renderStateCard(theaterList, {
+        heading: 'Unable to load theaters',
+        message: 'Theater directory is temporarily unreachable. Please retry.',
+        actionLabel: 'Retry Directory',
+        onAction: retry,
+        isError: true,
+      });
     }
   }
 
@@ -37,15 +55,12 @@
     const esc = CT.escapeHtml;
 
     if (!Array.isArray(theaters) || theaters.length === 0) {
-      theaterList.innerHTML =
-        '<div class="grid-empty-state">' +
-        '<h3>No theaters matched your criteria</h3>' +
-        '<p>Try clearing your location filter or choosing All Theaters.</p>' +
-        '<button type="button" class="btn btn-primary empty-reset-btn">Show All Theaters</button>' +
-        '</div>';
-      if (typeof onReset === 'function') {
-        theaterList.querySelector('.empty-reset-btn')?.addEventListener('click', onReset);
-      }
+      CT.renderStateCard(theaterList, {
+        heading: 'No theaters matched your criteria',
+        message: 'Try clearing your location filter or choosing All Theaters.',
+        actionLabel: 'Show All Theaters',
+        onAction: onReset,
+      });
       return;
     }
 
@@ -88,22 +103,18 @@
     const theaterList = document.querySelector('.theater-list');
     if (!theaterList) return;
 
+    const CT = window.CineTicket;
     const searchInput = document.querySelector('.search-location input');
     const searchBtn = document.querySelector('.search-location button');
     const filterButtons = document.querySelectorAll('.filter-options button');
     let activeAmenity = '';
 
-    filterButtons.forEach(function (btn, idx) {
-      btn.setAttribute('aria-pressed', String(idx === 0));
-    });
+    CT.activatePill(filterButtons, function (_, idx) { return idx === 0; });
 
     function resetAll() {
       if (searchInput) searchInput.value = '';
       activeAmenity = '';
-      filterButtons.forEach(function (btn, idx) {
-        btn.classList.toggle('active', idx === 0);
-        btn.setAttribute('aria-pressed', String(idx === 0));
-      });
+      CT.activatePill(filterButtons, function (_, idx) { return idx === 0; });
       fetchTheaters('', '', resetAll);
     }
 
@@ -123,13 +134,8 @@
 
     filterButtons.forEach(function (button) {
       button.addEventListener('click', function () {
-        filterButtons.forEach(function (btn) {
-          btn.classList.remove('active');
-          btn.setAttribute('aria-pressed', 'false');
-        });
-        this.classList.add('active');
-        this.setAttribute('aria-pressed', 'true');
-        const label = this.textContent.trim();
+        CT.activatePill(filterButtons, button);
+        const label = button.textContent.trim();
         activeAmenity = label === 'All Theaters' ? '' : label;
         runSearch();
       });

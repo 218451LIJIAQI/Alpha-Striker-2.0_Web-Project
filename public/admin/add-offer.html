@@ -109,16 +109,19 @@
       const userSelect = document.getElementById('user_code');
       AdminApp.bindCheckControls(movieGrid, 'select-all-movies', 'clear-all-movies');
 
-      const [moviesRes, usersRes] = await Promise.all([
-        AdminApp.apiFetch('/index.php/admin/movie/index'),
-        AdminApp.apiFetch('/index.php/admin/user/index'),
-      ]);
+      try {
+        const [moviesRes, usersRes] = await Promise.all([
+          AdminApp.apiFetch('/index.php/admin/movie/index'),
+          AdminApp.apiFetch('/index.php/admin/user/index'),
+        ]);
+        const movies = moviesRes.success && Array.isArray(moviesRes.data) ? moviesRes.data : [];
+        AdminApp.renderCheckList(movieGrid, movies, 'movie_code', function (m) { return m.movie_name; }, null);
 
-      const movies = moviesRes.success && Array.isArray(moviesRes.data) ? moviesRes.data : [];
-      AdminApp.renderCheckList(movieGrid, movies, 'movie_code', function (m) { return m.movie_name; }, null);
-
-      const users = usersRes.success && Array.isArray(usersRes.data) ? usersRes.data : [];
-      AdminApp.populateUserSelect(userSelect, users);
+        const users = usersRes.success && Array.isArray(usersRes.data) ? usersRes.data : [];
+        AdminApp.populateUserSelect(userSelect, users);
+      } catch (_) {
+        AdminApp.renderCheckList(movieGrid, [], 'movie_code', function (m) { return m.movie_name; }, null);
+      }
 
       document.getElementById('add-offer-form').addEventListener('submit', function (e) {
         e.preventDefault();

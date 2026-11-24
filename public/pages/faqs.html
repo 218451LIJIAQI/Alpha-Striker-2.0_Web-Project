@@ -111,6 +111,7 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', function () {
+      const CT = window.CineTicket;
       const searchInput = document.getElementById('faq-search-input');
       const clearBtn = document.getElementById('faq-clear-btn');
       const catButtons = document.querySelectorAll('#faq-category-filters .btn-filter');
@@ -142,12 +143,7 @@
 
       catButtons.forEach(function (btn) {
         btn.addEventListener('click', function () {
-          catButtons.forEach(function (b) {
-            b.classList.remove('active');
-            b.setAttribute('aria-pressed', 'false');
-          });
-          btn.classList.add('active');
-          btn.setAttribute('aria-pressed', 'true');
+          CT.activatePill(catButtons, btn);
           activeCat = btn.dataset.cat || 'all';
           applyFilter();
         });
@@ -157,11 +153,7 @@
       clearBtn.addEventListener('click', function () {
         searchInput.value = '';
         activeCat = 'all';
-        catButtons.forEach(function (b) {
-          const isAll = b.dataset.cat === 'all';
-          b.classList.toggle('active', isAll);
-          b.setAttribute('aria-pressed', String(isAll));
-        });
+        CT.activatePill(catButtons, function (b) { return b.dataset.cat === 'all'; });
         sections.forEach(function (sec) {
           sec.querySelector('.answer')?.classList.remove('is-hidden');
           sec.querySelector('.question')?.setAttribute('aria-expanded', 'true');

@@ -101,11 +101,8 @@
       AdminApp.renderAdminNav('offers');
       if (!(await AdminApp.ensureAuthenticated())) return;
 
-      const offerCode = (new URLSearchParams(window.location.search).get('offer_code') || '').trim();
-      if (!/^[1-9]\d*$/.test(offerCode)) {
-        window.location.href = 'offers.html';
-        return;
-      }
+      const offerCode = AdminApp.getQueryId('offer_code', 'offers.html');
+      if (!offerCode) return;
 
       const imgInput = document.getElementById('img');
       const syncPreview = AdminApp.bindImagePreview(imgInput, document.getElementById('offer-preview'));
@@ -113,39 +110,44 @@
       const userSelect = document.getElementById('user_code');
       AdminApp.bindCheckControls(movieGrid, 'select-all-movies', 'clear-all-movies');
 
-      const [detailRes, moviesRes, usersRes] = await Promise.all([
-        AdminApp.apiFetch('/index.php/admin/offer/getOfferByCode?offer_code=' + encodeURIComponent(offerCode)),
-        AdminApp.apiFetch('/index.php/admin/movie/index'),
-        AdminApp.apiFetch('/index.php/admin/user/index'),
-      ]);
-      if (!detailRes.success || !detailRes.data) {
-        window.showToast(detailRes.message || 'Offer not found', 'error');
-        setTimeout(function () { window.location.href = 'offers.html'; }, 700);
+      try {
+        const [detailRes, moviesRes, usersRes] = await Promise.all([
+          AdminApp.apiFetch('/index.php/admin/offer/getOfferByCode?offer_code=' + encodeURIComponent(offerCode)),
+          AdminApp.apiFetch('/index.php/admin/movie/index'),
+          AdminApp.apiFetch('/index.php/admin/user/index'),
+        ]);
+        if (!detailRes.success || !detailRes.data) {
+          window.showToast(detailRes.message || 'Offer not found', 'error');
+          setTimeout(function () { window.location.href = 'offers.html'; }, 700);
+          return;
+        }
+
+        const o = detailRes.data;
+        const users = usersRes.success && Array.isArray(usersRes.data) ? usersRes.data : [];
+        AdminApp.populateUserSelect(userSelect, users, o.user_code ? String(o.user_code) : '');
+
+        document.getElementById('offer_title').value = o.offer_title || '';
+        AdminApp.ensureSelectOption(document.getElementById('offer_type'), o.offer_type || 'Student Deals');
+        document.getElementById('promo_code').value = o.promo_code || '';
+        document.getElementById('money').value = o.money !== undefined ? o.money : '5.00';
+        document.getElementById('offer_validity').value = o.offer_validity || '';
+        document.getElementById('badge').value = o.badge || '';
+        imgInput.value = o.img || '';
+        syncPreview();
+        document.getElementById('offer_description').value = o.offer_description || '';
+
+        const movies = moviesRes.success && Array.isArray(moviesRes.data) ? moviesRes.data : [];
+        AdminApp.renderCheckList(
+          movieGrid,
+          movies,
+          'movie_code',
+          function (m) { return m.movie_name; },
+          Array.isArray(o.movie_codes) ? o.movie_codes : []
+        );
+      } catch (_) {
+        window.showToast('Unable to load offer details', 'error');
         return;
       }
-
-      const o = detailRes.data;
-      const users = usersRes.success && Array.isArray(usersRes.data) ? usersRes.data : [];
-      AdminApp.populateUserSelect(userSelect, users, o.user_code ? String(o.user_code) : '');
-
-      document.getElementById('offer_title').value = o.offer_title || '';
-      AdminApp.ensureSelectOption(document.getElementById('offer_type'), o.offer_type || 'Student Deals');
-      document.getElementById('promo_code').value = o.promo_code || '';
-      document.getElementById('money').value = o.money !== undefined ? o.money : '5.00';
-      document.getElementById('offer_validity').value = o.offer_validity || '';
-      document.getElementById('badge').value = o.badge || '';
-      imgInput.value = o.img || '';
-      syncPreview();
-      document.getElementById('offer_description').value = o.offer_description || '';
-
-      const movies = moviesRes.success && Array.isArray(moviesRes.data) ? moviesRes.data : [];
-      AdminApp.renderCheckList(
-        movieGrid,
-        movies,
-        'movie_code',
-        function (m) { return m.movie_name; },
-        Array.isArray(o.movie_codes) ? o.movie_codes : []
-      );
 
       document.getElementById('edit-offer-form').addEventListener('submit', function (e) {
         e.preventDefault();

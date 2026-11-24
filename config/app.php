@@ -1,4 +1,6 @@
 <?php
+use think\facade\Env;
+
 return [
     'app_name'               => 'CineTix',
     'app_host'               => '',
@@ -8,7 +10,7 @@ return [
     'auto_bind_module'       => false,
     'default_return_type'    => 'html',
     'default_ajax_return'    => 'json',
-    'default_timezone'       => 'UTC',
+    'default_timezone'       => Env::get('app.timezone', 'Asia/Kuala_Lumpur'),
     'lang_switch_on'         => false,
     'default_filter'         => '',
     'default_lang'           => 'en',

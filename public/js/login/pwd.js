@@ -20,8 +20,8 @@
       window.showToast('Please enter the 6-digit verification code', 'warning');
       return;
     }
-    if (password.length < 6 || password.length > 72) {
-      window.showToast('New password must be 6-72 characters', 'warning');
+    if (!CT.isValidPasswordBytes(password)) {
+      window.showToast('New password must be 6-72 UTF-8 bytes', 'warning');
       return;
     }
 
@@ -57,8 +57,8 @@
       window.showToast('Please complete all password fields', 'warning');
       return;
     }
-    if (newPassword.length < 6 || newPassword.length > 72) {
-      window.showToast('New password must be 6-72 characters', 'warning');
+    if (!CT.isValidPasswordBytes(newPassword)) {
+      window.showToast('New password must be 6-72 UTF-8 bytes', 'warning');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -96,25 +96,23 @@
     resetForm?.addEventListener('submit', resetPwd);
     changeForm?.addEventListener('submit', changeSignedInPwd);
 
+    const syncTabs = CT.bindTabList([tabCode, tabOldPwd].filter(Boolean), function (btn) {
+      if (btn === tabOldPwd && !CT.AuthStore.getUser().isLoggedIn) {
+        window.showToast('Please sign in first to change password with your current password', 'info');
+        return false;
+      }
+      const isOld = btn === tabOldPwd;
+      resetForm?.classList.toggle('is-hidden', isOld);
+      changeForm?.classList.toggle('is-hidden', !isOld);
+      return true;
+    });
+
     function switchMode(mode) {
       const isOld = mode === 'change';
-      tabCode?.classList.toggle('active', !isOld);
-      tabCode?.setAttribute('aria-selected', String(!isOld));
-      tabOldPwd?.classList.toggle('active', isOld);
-      tabOldPwd?.setAttribute('aria-selected', String(isOld));
+      syncTabs(isOld ? tabOldPwd : tabCode);
       resetForm?.classList.toggle('is-hidden', isOld);
       changeForm?.classList.toggle('is-hidden', !isOld);
     }
-
-    tabCode?.addEventListener('click', function () { switchMode('code'); });
-    tabOldPwd?.addEventListener('click', function () {
-      const user = CT.AuthStore.getUser();
-      if (!user.isLoggedIn) {
-        window.showToast('Please sign in first to change password with your current password', 'info');
-        return;
-      }
-      switchMode('change');
-    });
 
     window.addEventListener('cinetix:authchange', function () {
       if (!CT.AuthStore.getUser().isLoggedIn && tabOldPwd?.classList.contains('active')) {
@@ -130,11 +128,7 @@
     }
 
     const requestedMode = new URLSearchParams(window.location.search).get('mode');
-    if (requestedMode === 'change' && currentUser.isLoggedIn) {
-      switchMode('change');
-    } else {
-      switchMode('code');
-    }
+    switchMode(requestedMode === 'change' && currentUser.isLoggedIn ? 'change' : 'code');
 
     if (!sendBtn) return;
 

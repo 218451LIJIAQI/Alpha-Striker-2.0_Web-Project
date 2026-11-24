@@ -171,12 +171,7 @@
 
       item.addEventListener('click', function () {
         if (state.date === iso) return;
-        dateContainer.querySelectorAll('.date-item').forEach(function (el) {
-          el.classList.remove('active');
-          el.setAttribute('aria-pressed', 'false');
-        });
-        item.classList.add('active');
-        item.setAttribute('aria-pressed', 'true');
+        CT.activatePill(dateContainer.querySelectorAll('.date-item'), item);
         state.date = iso;
         loadOccupiedSeats([]);
       });
@@ -186,36 +181,44 @@
   }
 
   function bindTimeSlots(preferredTime) {
+    const CT = window.CineTicket;
     const slots = Array.from(document.querySelectorAll('.time-slot'));
     if (!slots.length) return;
 
-    if (preferredTime) {
-      const matched = slots.find(function (s) { return s.textContent.trim() === preferredTime; });
-      if (matched) {
-        slots.forEach(function (s) { s.classList.remove('active'); });
-        matched.classList.add('active');
-      }
-    }
+    const matched = preferredTime
+      ? slots.find(function (s) { return s.textContent.trim() === preferredTime; })
+      : null;
+    const initialActive = matched || slots.find(function (s) { return s.classList.contains('active'); }) || slots[0];
+
+    CT.activatePill(slots, initialActive);
+    state.time = initialActive.textContent.trim();
 
     slots.forEach(function (slot) {
-      const isAct = slot.classList.contains('active');
-      slot.setAttribute('aria-pressed', String(isAct));
-      if (isAct) {
-        state.time = slot.textContent.trim();
-      }
       slot.addEventListener('click', function () {
         const chosen = slot.textContent.trim();
         if (state.time === chosen) return;
-        slots.forEach(function (s) {
-          s.classList.remove('active');
-          s.setAttribute('aria-pressed', 'false');
-        });
-        slot.classList.add('active');
-        slot.setAttribute('aria-pressed', 'true');
+        CT.activatePill(slots, slot);
         state.time = chosen;
         loadOccupiedSeats([]);
       });
     });
+  }
+
+  function renderMovieStatusBanner(title, message, onRetry) {
+    const movieInfo = document.querySelector('.movie-info');
+    if (!movieInfo) return;
+    const esc = window.CineTicket.escapeHtml;
+    movieInfo.innerHTML =
+      '<div class="movie-details">' +
+      '<h1>' + esc(title) + '</h1>' +
+      '<p class="muted-note">' + esc(message) + '</p>' +
+      (onRetry
+        ? '<button type="button" class="btn btn-primary booking-retry-btn"><i class="fas fa-undo" aria-hidden="true"></i> Retry Loading</button>'
+        : '<a href="homepage.html" class="inline-action-link">Return to Movies Catalog &rarr;</a>') +
+      '</div>';
+    if (onRetry) {
+      movieInfo.querySelector('.booking-retry-btn')?.addEventListener('click', onRetry);
+    }
   }
 
   async function loadMovieDetails() {
@@ -223,15 +226,7 @@
     const esc = CT.escapeHtml;
     if (!/^\d+$/.test(state.movieCode) || parseInt(state.movieCode, 10) <= 0) {
       state.movieValid = false;
-      const movieInfo = document.querySelector('.movie-info');
-      if (movieInfo) {
-        movieInfo.innerHTML =
-          '<div class="movie-details">' +
-          '<h1>Invalid Movie Parameter</h1>' +
-          '<p class="muted-note">Please return to the Movies catalog and select an active screening.</p>' +
-          '<a href="homepage.html" class="inline-action-link">Return to Movies Catalog &rarr;</a>' +
-          '</div>';
-      }
+      renderMovieStatusBanner('Invalid Movie Parameter', 'Please return to the Movies catalog and select an active screening.');
       syncAuditoriumControls();
       updateSummaryPanel();
       return;
@@ -242,15 +237,7 @@
       if (!payload.success || !payload.data) {
         state.movieValid = false;
         window.showToast(payload.message || 'Movie not found', 'error');
-        const movieInfo = document.querySelector('.movie-info');
-        if (movieInfo) {
-          movieInfo.innerHTML =
-            '<div class="movie-details">' +
-            '<h1>Movie Not Found</h1>' +
-            '<p class="muted-note">Please return to the Movies catalog and choose an active screening.</p>' +
-            '<a href="homepage.html" class="inline-action-link">Return to Movies Catalog &rarr;</a>' +
-            '</div>';
-        }
+        renderMovieStatusBanner('Movie Not Found', 'Please return to the Movies catalog and choose an active screening.');
         syncAuditoriumControls();
         updateSummaryPanel();
         return;
@@ -278,7 +265,14 @@
       syncAuditoriumControls();
       updateSummaryPanel();
     } catch (_) {
+      state.movieValid = false;
       window.showToast('Unable to load movie details', 'error');
+      renderMovieStatusBanner('Connection Error', 'Unable to load screening metadata right now.', async function () {
+        await Promise.all([loadMovieDetails(), loadTheaters()]);
+        await loadOccupiedSeats(state.selectedSeats.slice());
+      });
+      syncAuditoriumControls();
+      updateSummaryPanel();
     }
   }
 
@@ -332,10 +326,13 @@
       };
 
       syncSelected();
-      select.addEventListener('change', function () {
-        syncSelected();
-        loadOccupiedSeats([]);
-      });
+      if (select.dataset.changeBound !== 'true') {
+        select.dataset.changeBound = 'true';
+        select.addEventListener('change', function () {
+          syncSelected();
+          loadOccupiedSeats([]);
+        });
+      }
 
       syncAuditoriumControls();
       updateSummaryPanel();
@@ -344,17 +341,10 @@
     }
   }
 
-  function sortSeatCodes(list) {
-    return list.sort(function (a, b) {
-      return a[0] === b[0]
-        ? parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10)
-        : a.localeCompare(b);
-    });
-  }
-
   async function loadOccupiedSeats(restoreList) {
     if (!isBookingReady() || !state.movieCode || !state.date || !state.time) return;
 
+    const CT = window.CineTicket;
     state.selectedSeats = [];
     state.loadingSeats = true;
     document.querySelectorAll('.seat[data-seat]').forEach(function (seatEl) {
@@ -372,7 +362,7 @@
     });
 
     try {
-      const payload = await window.CineTicket.fetchJson('/index.php/movie/seat/getSeatList?' + params.toString());
+      const payload = await CT.fetchJson('/index.php/movie/seat/getSeatList?' + params.toString());
       if (seq !== state.requestSeq) return;
 
       const occupiedSet = new Set(
@@ -382,12 +372,9 @@
       );
 
       const desiredRestore = new Set(
-        Array.isArray(restoreList)
-          ? restoreList
-              .map(function (c) { return String(c).trim().toUpperCase(); })
-              .filter(function (c) { return /^[A-H](?:[1-9]|1[0-2])$/.test(c) && !occupiedSet.has(c); })
-              .slice(0, MAX_SEATS)
-          : []
+        CT.parseSeatCodes(restoreList)
+          .filter(function (c) { return !occupiedSet.has(c); })
+          .slice(0, MAX_SEATS)
       );
 
       document.querySelectorAll('.seat[data-seat]').forEach(function (seatEl) {
@@ -402,7 +389,7 @@
         }
       });
 
-      sortSeatCodes(state.selectedSeats);
+      CT.sortSeatCodes(state.selectedSeats);
       state.loadingSeats = false;
       updateSummaryPanel();
     } catch (_) {
@@ -424,7 +411,7 @@
         return;
       }
       state.selectedSeats.push(seatCode);
-      sortSeatCodes(state.selectedSeats);
+      window.CineTicket.sortSeatCodes(state.selectedSeats);
       seatEl.classList.add('selected');
     }
     updateSeatAria(seatEl);
@@ -496,10 +483,7 @@
     state.theaterCode = urlParams.get('theater_code') || '1';
     const initialDate = urlParams.get('date') || '';
     const initialTime = urlParams.get('time') || '';
-    const initialSeats = (urlParams.get('seats') || '')
-      .split(',')
-      .map(function (s) { return s.trim().toUpperCase(); })
-      .filter(Boolean);
+    const initialSeats = window.CineTicket.parseSeatCodes(urlParams.get('seats') || '');
 
     buildSeatGrid();
     buildDateSelector(initialDate);

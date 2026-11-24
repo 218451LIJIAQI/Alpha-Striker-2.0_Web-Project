@@ -3,14 +3,16 @@
 Static, Security, Accessibility & Relational Contract Audit Suite for CineTix (Alpha Striker 2.0).
 Verifies:
 1. movies.sql relational schema, foreign keys, unique constraints, and seed asset paths (case-sensitive) in SQLite (PRAGMA foreign_keys=ON).
-2. PHP syntax structure, balanced delimiters, zero bare mb_* calls, zero hardcoded '888888', strict non-empty CSRF check in BaseAdmin,
-   shared BaseAdmin relation helpers (resolveValidIds, mapRelationIds, syncScheduleRows), ApiController strict scalar/integer/date/password
-   validation parity, and 3-way route parity across Frontend <-> PHP Controllers <-> mock_thinkphp_server.py.
-3. JavaScript syntax across all external .js modules and inline HTML <script> blocks via `node --check`, plus zero leaked window.* globals.
+2. PHP syntax structure, balanced delimiters, zero bare mb_* calls, zero hardcoded '888888', strict non-empty CSRF + same-origin check,
+   shared BaseAdmin relation & partial-update helpers (resolveValidIds, mapRelationIds, syncScheduleRows, syncMovieOfferRows, mergeExistingPayload),
+   ApiController strict scalar/integer/date/password/CSV-formula-injection/cent-rounding parity, SameSite=Lax + Asia/Kuala_Lumpur configs,
+   and 3-way route parity across Frontend <-> PHP Controllers <-> mock_thinkphp_server.py.
+3. JavaScript syntax across all external .js modules and inline HTML <script> blocks via `node --check`, zero leaked window.* globals,
+   and presence of shared security/UI primitives (sanitizeCsvCell, sanitizeRedirectPath, isValidPasswordBytes, parseSeatCodes, activatePill, bindTabList, renderStateCard).
 4. HTML/JS zero `href="#"` dead links, zero external CDN <link>/<script> dependencies, case-sensitive local asset integrity,
    100% offline CSS coverage for every `fa-*` icon class, and all 39 binary images/icons readability.
-5. CSS brace balance, single centralized dark-mode variable block, `:focus-visible`, `prefers-reduced-motion`, sticky table headers,
-   viewport-safe sidebar/modal scroll rules, `.theater-distance-pill` coverage, and absence of destructive global overrides.
+5. CSS brace balance, zero undefined or unused CSS custom properties, single centralized dark-mode variable block, `:focus-visible`,
+   `prefers-reduced-motion`, sticky table headers, viewport-safe sidebar/modal scroll rules, and absence of destructive global overrides.
 """
 
 from __future__ import annotations
@@ -213,13 +215,25 @@ def verify_php_and_security_contracts() -> None:
                     f"Admin controller {path} must extend BaseAdmin",
                 )
 
+    app_cfg = (ROOT / "config/app.php").read_text(encoding="utf-8")
+    cookie_cfg = (ROOT / "config/cookie.php").read_text(encoding="utf-8")
+    session_cfg = (ROOT / "config/session.php").read_text(encoding="utf-8")
+    assert_true("Asia/Kuala_Lumpur" in app_cfg, "config/app.php must set Asia/Kuala_Lumpur timezone")
+    assert_true("'samesite'" in cookie_cfg and "Lax" in cookie_cfg, "config/cookie.php missing samesite Lax")
+    assert_true("'samesite'" in session_cfg and "Lax" in session_cfg, "config/session.php missing samesite Lax")
+
     api_ctrl_src = (ROOT / "application/common/controller/ApiController.php").read_text(encoding="utf-8")
     for helper_sig in (
         "function parsePositiveInt(",
+        "function parseFiniteFloat(",
         "function rawStrParam(",
         "function isValidIsoDate(",
         "function optionalIdWithDefault(",
         "function applyDateWindow(",
+        "function sanitizeCsvCell(",
+        "function formatCsvRow(",
+        "function verifySameOrigin(",
+        "function roundCents(",
     ):
         assert_true(helper_sig in api_ctrl_src, f"ApiController.php missing {helper_sig}")
     assert_true(re.search(r"MAX_PASSWORD_BYTES\s*=\s*72", api_ctrl_src) is not None, "ApiController.php missing MAX_PASSWORD_BYTES = 72")
@@ -230,7 +244,15 @@ def verify_php_and_security_contracts() -> None:
         "$clientToken === '' ||" not in base_admin_src and "hash_equals($sessionToken, $clientToken)" in base_admin_src,
         "BaseAdmin.php CSRF short-circuit vulnerability not remediated!",
     )
-    for admin_helper in ("function resolveValidIds(", "function mapRelationIds(", "function syncScheduleRows("):
+    for admin_helper in (
+        "function resolveValidIds(",
+        "function queryRelationIds(",
+        "function mapRelationIds(",
+        "function syncScheduleRows(",
+        "function syncMovieOfferRows(",
+        "function mergeExistingPayload(",
+        "function csvResponse(",
+    ):
         assert_true(admin_helper in base_admin_src, f"BaseAdmin.php missing shared {admin_helper}")
 
     for admin_ctrl_name in ("Movie.php", "Theater.php", "Offer.php"):
@@ -238,6 +260,10 @@ def verify_php_and_security_contracts() -> None:
         assert_true(
             "$this->resolveValidIds(" in ctrl_src and "$this->mapRelationIds(" in ctrl_src,
             f"{admin_ctrl_name} must delegate relation handling to BaseAdmin helpers",
+        )
+        assert_true(
+            "function syncMovieOffers(" not in ctrl_src and "function syncOfferMovies(" not in ctrl_src,
+            f"{admin_ctrl_name} retains duplicate private movie_offer sync method",
         )
 
     admin_user_src = (ROOT / "application/admin/controller/User.php").read_text(encoding="utf-8")
@@ -256,10 +282,14 @@ def verify_php_and_security_contracts() -> None:
         "def is_valid_iso_date(",
         "def parse_positive_int(",
         "def scalar_str(",
+        "def sanitize_csv_cell(",
+        "def round_cents(",
+        "def _verify_same_origin(",
         "def _rotate_session(",
     ):
         assert_true(mock_sig in mock_src, f"mock_thinkphp_server.py missing 1:1 {mock_sig} parity")
     assert_true(re.search(r"MAX_PASSWORD_BYTES\s*=\s*72", mock_src) is not None, "mock_thinkphp_server.py missing MAX_PASSWORD_BYTES = 72")
+    assert_true("(4300, 4399)" in mock_src, "mock_thinkphp_server.py must bind strictly within 4300-4399")
     mock_routes = set(re.findall(r'route\s*==\s*"([a-z0-9_]+/[a-z0-9_]+/[a-z0-9_]+)"', mock_src))
 
     all_php_routes = {
@@ -312,6 +342,21 @@ def verify_js_html_css_and_binaries() -> None:
         "clickLink",
     }
 
+    common_js_src = (ROOT / "public/js/common.js").read_text(encoding="utf-8")
+    for common_fn in (
+        "function sanitizeRedirectPath(",
+        "function isValidPasswordBytes(",
+        "function parseSeatCodes(",
+        "function activatePill(",
+        "function bindTabList(",
+        "function renderStateCard(",
+    ):
+        assert_true(common_fn in common_js_src, f"public/js/common.js missing {common_fn}")
+
+    admin_js_src = (ROOT / "public/js/admin/admin.js").read_text(encoding="utf-8")
+    assert_true("function sanitizeCsvCell(" in admin_js_src, "public/js/admin/admin.js missing sanitizeCsvCell")
+    assert_true("function getQueryId(" in admin_js_src, "public/js/admin/admin.js missing getQueryId")
+
     for jf in js_files:
         proc = subprocess.run(["node", "--check", str(jf)], capture_output=True, text=True)
         assert_true(proc.returncode == 0, f"JS syntax error in {jf}: {proc.stderr}")
@@ -348,7 +393,9 @@ def verify_js_html_css_and_binaries() -> None:
             if not code:
                 continue
             inline_script_count += 1
-            with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as tmp:
+            with tempfile.NamedTemporaryFile(
+                "w", prefix="cinetix_inline_", suffix=".js", dir="/tmp", delete=False, encoding="utf-8"
+            ) as tmp:
                 tmp.write(code)
                 tmp_path = tmp.name
             try:
@@ -400,9 +447,13 @@ def verify_js_html_css_and_binaries() -> None:
 
     css_files = sorted((ROOT / "public" / "css").rglob("*.css"))
     assert_true(len(css_files) == 14, f"Expected 14 CSS files, found {len(css_files)}")
+    defined_css_vars: set[str] = set()
+    used_css_vars: set[str] = set()
     for cf in css_files:
         raw = cf.read_text(encoding="utf-8")
         no_comments = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
+        defined_css_vars.update(re.findall(r"(--[a-zA-Z0-9_-]+)\s*:", no_comments))
+        used_css_vars.update(re.findall(r"var\((--[a-zA-Z0-9_-]+)", no_comments))
         assert_true(
             no_comments.count("{") == no_comments.count("}"),
             f"Unbalanced CSS braces in {cf}",
@@ -416,6 +467,15 @@ def verify_js_html_css_and_binaries() -> None:
                 "body.dark-mode" not in no_comments,
                 f"Unconsolidated duplicate body.dark-mode rule found in {cf}",
             )
+
+    assert_true(
+        len(used_css_vars - defined_css_vars) == 0,
+        f"Undefined CSS custom properties referenced: {sorted(used_css_vars - defined_css_vars)}",
+    )
+    assert_true(
+        len(defined_css_vars - used_css_vars) == 0,
+        f"Unused dead CSS custom properties defined: {sorted(defined_css_vars - used_css_vars)}",
+    )
 
     binary_files = [ROOT / "public" / "favicon.ico"] + sorted(
         p for p in (ROOT / "public" / "img").rglob("*") if p.is_file()
@@ -438,7 +498,8 @@ def verify_js_html_css_and_binaries() -> None:
     print(
         f"[PASS] {len(js_files)} JS modules, {inline_script_count} inline scripts, "
         f"{len(html_files)} HTML pages ({local_ref_count} case-exact refs, 0 CDN links, 0 href='#'), "
-        f"{len(css_files)} CSS stylesheets ({len(defined_fa_icons)} offline icon glyphs), and {len(binary_files)} binary images verified"
+        f"{len(css_files)} CSS stylesheets ({len(defined_css_vars)} clean tokens, {len(defined_fa_icons)} offline icon glyphs), "
+        f"and {len(binary_files)} binary images verified"
     )
 
 

@@ -50,6 +50,7 @@
 
       const esc = AdminApp.escapeHtml;
       const tableCtrl = AdminApp.createTableController({
+        endpoint: '/index.php/admin/seat/index',
         toolbarId: 'seats-toolbar',
         tbodyId: 'seats-tbody',
         colSpan: 9,
@@ -73,7 +74,13 @@
           idKey: 'seat_code',
           confirmText: function (n) { return 'Cancel ' + n + ' selected seat reservation(s) and release seats back to inventory?'; },
           successPrefix: 'Cancelled',
-          onSuccess: loadSeats,
+        },
+        deleteAction: {
+          selector: '.refund-btn',
+          endpoint: '/index.php/admin/seat/delete',
+          idKey: 'seat_code',
+          confirmText: function (id) { return 'Cancel seat reservation #' + id + '?'; },
+          successText: function (id) { return 'Reservation #' + id + ' cancelled'; },
         },
         exportCsv: {
           filename: 'cinetix-seat-bookings.csv',
@@ -117,24 +124,9 @@
             '</tr>'
           );
         },
-        afterRender: function (tbody) {
-          AdminApp.bindDeleteActions(tbody, {
-            selector: '.refund-btn',
-            endpoint: '/index.php/admin/seat/delete',
-            idKey: 'seat_code',
-            confirmText: function (id) { return 'Cancel seat reservation #' + id + '?'; },
-            successText: function (id) { return 'Reservation #' + id + ' cancelled'; },
-            onSuccess: loadSeats,
-          });
-        },
       });
 
-      async function loadSeats() {
-        const res = await AdminApp.apiFetch('/index.php/admin/seat/index');
-        tableCtrl.setItems(res.success && Array.isArray(res.data) ? res.data : []);
-      }
-
-      loadSeats();
+      tableCtrl.reload();
     });
   </script>
 </body>

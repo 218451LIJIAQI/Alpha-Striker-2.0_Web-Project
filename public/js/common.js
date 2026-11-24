@@ -1,16 +1,20 @@
 /**
  * CineTix (Alpha Striker 2.0) — Shared Frontend Runtime
- * Centralizes path resolution, XSS-safe escaping, calendar/email validation, JSON API requests,
- * server-synced & multi-tab user session state, reversible light/dark theme switching,
- * authoritative pricing/expiry helpers, toast notifications, keyboard Escape dismissal, and shared header/footer/FAQ UI.
+ * Centralizes path resolution, XSS-safe escaping, calendar/email/password/redirect validation,
+ * JSON API requests, server-synced & multi-tab user session state, reversible light/dark theme switching,
+ * integer-cent pricing/expiry helpers, pill/tab/state-card UI primitives, focus-restoring modals, and shared header/footer.
  */
 (function () {
   'use strict';
 
-  const SERVICE_FEE = 2.50;
+  const SERVICE_FEE_CENTS = 250;
   const GROUP_DISCOUNT_MIN_SEATS = 5;
   const GROUP_DISCOUNT_RATE = 0.30;
+  const MAX_PASSWORD_BYTES = 72;
   const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const SEAT_CODE_PATTERN = /^[A-H](?:[1-9]|1[0-2])$/;
+
+  let lastDialogTrigger = null;
 
   function currentDepthPrefix() {
     const path = window.location.pathname || '';
@@ -48,6 +52,26 @@
     return currentDepthPrefix() + trimmed.replace(/^(\.\.\/|\.\/)+/, '');
   }
 
+  function sanitizeRedirectPath(rawPath, fallbackPath) {
+    const fallback = fallbackPath || pageUrl('homepage.html');
+    const candidate = String(rawPath || '').trim();
+    if (
+      !candidate ||
+      /[\x00-\x1f\x7f\\]/.test(candidate) ||
+      candidate.startsWith('//') ||
+      /^[a-z][a-z0-9+.-]*:/i.test(candidate)
+    ) {
+      return fallback;
+    }
+    if (
+      candidate.startsWith('/') ||
+      /^(?:\.\.?\/)?[A-Za-z0-9_\-]+(?:\/[A-Za-z0-9_\-.]+)*(?:\.[A-Za-z0-9]+)?(?:[?#][^\s]*)?$/.test(candidate)
+    ) {
+      return candidate;
+    }
+    return fallback;
+  }
+
   function escapeHtml(value) {
     if (value === null || value === undefined) return '';
     return String(value)
@@ -56,6 +80,19 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  function utf8ByteLength(value) {
+    const str = String(value || '');
+    if (typeof TextEncoder === 'function') {
+      return new TextEncoder().encode(str).length;
+    }
+    return unescape(encodeURIComponent(str)).length;
+  }
+
+  function isValidPasswordBytes(value) {
+    const str = String(value || '');
+    return str.length >= 6 && utf8ByteLength(str) <= MAX_PASSWORD_BYTES;
   }
 
   function toIsoDate(dateObj) {
@@ -87,48 +124,78 @@
     return str.length > 0 && str.length <= 100 && EMAIL_PATTERN.test(str);
   }
 
+  function sortSeatCodes(list) {
+    return list.sort(function (a, b) {
+      return a[0] === b[0]
+        ? parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10)
+        : a.localeCompare(b);
+    });
+  }
+
+  function parseSeatCodes(raw, maxSeats) {
+    const source = Array.isArray(raw) ? raw : String(raw || '').split(',');
+    const unique = [];
+    const seen = new Set();
+    source.forEach(function (item) {
+      const code = String(item || '').trim().toUpperCase();
+      if (SEAT_CODE_PATTERN.test(code) && !seen.has(code)) {
+        seen.add(code);
+        unique.push(code);
+      }
+    });
+    sortSeatCodes(unique);
+    return maxSeats > 0 ? unique.slice(0, maxSeats) : unique;
+  }
+
+  function splitStars(score, fallback) {
+    const val = Math.max(0, Math.min(5, parseFloat(score) || fallback));
+    const full = Math.floor(val);
+    const half = val - full >= 0.5 ? 1 : 0;
+    return { full: full, half: half, empty: 5 - full - half };
+  }
+
   function formatStars(score) {
-    const num = Math.max(0, Math.min(5, parseFloat(score) || 0));
-    const full = Math.floor(num);
-    const half = num - full >= 0.5 ? 1 : 0;
-    const empty = 5 - full - half;
-    return '★'.repeat(full) + (half ? '½' : '') + '☆'.repeat(empty);
+    const s = splitStars(score, 0);
+    return '★'.repeat(s.full) + (s.half ? '½' : '') + '☆'.repeat(s.empty);
   }
 
   function renderStarIcons(score) {
-    const rating = Math.max(0, Math.min(5, parseFloat(score) || 5.0));
-    const full = Math.floor(rating);
-    const half = rating - full >= 0.5 ? 1 : 0;
-    const empty = 5 - full - half;
+    const s = splitStars(score, 5.0);
     return (
-      '<i class="fas fa-star"></i>'.repeat(full) +
-      (half ? '<i class="fas fa-star-half-alt"></i>' : '') +
-      '<i class="far fa-star"></i>'.repeat(empty)
+      '<i class="fas fa-star"></i>'.repeat(s.full) +
+      (s.half ? '<i class="fas fa-star-half-alt"></i>' : '') +
+      '<i class="far fa-star"></i>'.repeat(s.empty)
     );
   }
 
+  function roundCents(value) {
+    return Math.round((parseFloat(value) || 0) * 100) / 100;
+  }
+
   function calcGroupDiscount(subtotal, seatCount) {
-    return seatCount >= GROUP_DISCOUNT_MIN_SEATS ? +(subtotal * GROUP_DISCOUNT_RATE).toFixed(2) : 0;
+    if ((parseInt(seatCount, 10) || 0) < GROUP_DISCOUNT_MIN_SEATS) return 0;
+    const subtotalCents = Math.round(Math.max(0, parseFloat(subtotal) || 0) * 100);
+    return Math.round(subtotalCents * GROUP_DISCOUNT_RATE) / 100;
   }
 
   function calculateCheckoutPricing(unitPrice, seatCount, promoMoney) {
     const count = Math.max(0, parseInt(seatCount, 10) || 0);
-    const unit = +(Math.max(0, parseFloat(unitPrice) || 0)).toFixed(2);
-    const subtotal = +(unit * count).toFixed(2);
-    const groupDiscount = calcGroupDiscount(subtotal, count);
-    const promoDiscount = +(Math.max(0, parseFloat(promoMoney) || 0)).toFixed(2);
-    const totalDiscount = +(groupDiscount + promoDiscount).toFixed(2);
-    const serviceFee = count > 0 ? SERVICE_FEE : 0;
-    const totalAmount = Math.max(0, +(subtotal - totalDiscount + serviceFee).toFixed(2));
+    const unitCents = Math.round(Math.max(0, parseFloat(unitPrice) || 0) * 100);
+    const subtotalCents = unitCents * count;
+    const groupCents = Math.round(calcGroupDiscount(subtotalCents / 100, count) * 100);
+    const promoCents = Math.round(Math.max(0, parseFloat(promoMoney) || 0) * 100);
+    const totalDiscountCents = groupCents + promoCents;
+    const feeCents = count > 0 ? SERVICE_FEE_CENTS : 0;
+    const totalCents = Math.max(0, subtotalCents - totalDiscountCents + feeCents);
     return {
-      unitPrice: unit,
+      unitPrice: unitCents / 100,
       seatCount: count,
-      subtotal: subtotal,
-      groupDiscount: groupDiscount,
-      promoDiscount: promoDiscount,
-      totalDiscount: totalDiscount,
-      serviceFee: serviceFee,
-      totalAmount: totalAmount,
+      subtotal: subtotalCents / 100,
+      groupDiscount: groupCents / 100,
+      promoDiscount: promoCents / 100,
+      totalDiscount: totalDiscountCents / 100,
+      serviceFee: feeCents / 100,
+      totalAmount: totalCents / 100,
     };
   }
 
@@ -143,6 +210,106 @@
     if (expYear < curYear) return false;
     if (expYear === curYear && expMonth < curMonth) return false;
     return true;
+  }
+
+  function activatePill(buttons, activeTarget) {
+    const matchFn = typeof activeTarget === 'function'
+      ? activeTarget
+      : function (btn) { return btn === activeTarget; };
+    Array.from(buttons || []).forEach(function (btn, idx) {
+      const isActive = Boolean(matchFn(btn, idx));
+      btn.classList.toggle('active', isActive);
+      if (typeof btn.setAttribute === 'function') {
+        btn.setAttribute('aria-pressed', String(isActive));
+      }
+    });
+  }
+
+  function bindTabList(buttons, onActivate) {
+    const list = Array.from(buttons || []);
+    if (!list.length) return function () {};
+
+    function syncTabState(activeBtn) {
+      list.forEach(function (btn) {
+        const isActive = btn === activeBtn;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', String(isActive));
+        btn.setAttribute('tabindex', isActive ? '0' : '-1');
+      });
+    }
+
+    list.forEach(function (btn, idx) {
+      btn.setAttribute('role', 'tab');
+      const isInitial = btn.classList.contains('active');
+      btn.setAttribute('aria-selected', String(isInitial));
+      btn.setAttribute('tabindex', isInitial ? '0' : '-1');
+
+      btn.addEventListener('click', function () {
+        if (typeof onActivate === 'function' && onActivate(btn, idx) === false) return;
+        syncTabState(btn);
+      });
+
+      btn.addEventListener('keydown', function (e) {
+        let nextIdx = -1;
+        if (e.key === 'ArrowRight') nextIdx = (idx + 1) % list.length;
+        else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + list.length) % list.length;
+        else if (e.key === 'Home') nextIdx = 0;
+        else if (e.key === 'End') nextIdx = list.length - 1;
+        if (nextIdx < 0) return;
+
+        e.preventDefault();
+        const candidate = list[nextIdx];
+        if (typeof onActivate === 'function' && onActivate(candidate, nextIdx) === false) return;
+        syncTabState(candidate);
+        candidate.focus();
+      });
+    });
+
+    return syncTabState;
+  }
+
+  function renderStateCard(container, opts) {
+    if (!container || !opts) return;
+    const isError = Boolean(opts.isError);
+    const cls = (opts.className || 'grid-empty-state') + (isError ? ' is-error-state' : '');
+    const roleAttr = isError ? ' role="alert"' : '';
+    const tag = opts.headingTag === 'h2' ? 'h2' : 'h3';
+    const btnClass = opts.buttonClass || 'btn btn-primary empty-reset-btn';
+    const iconHtml = opts.iconClass ? '<i class="' + escapeHtml(opts.iconClass) + '" aria-hidden="true"></i>' : '';
+    const actionHtml = opts.actionLabel
+      ? (typeof opts.onAction === 'function'
+          ? '<button type="button" class="' + escapeHtml(btnClass) + '" data-state-action="1">' + escapeHtml(opts.actionLabel) + '</button>'
+          : (opts.actionHref
+              ? '<a href="' + escapeHtml(opts.actionHref) + '" class="' + escapeHtml(btnClass) + '">' + escapeHtml(opts.actionLabel) + '</a>'
+              : ''))
+      : '';
+
+    container.innerHTML =
+      '<div class="' + escapeHtml(cls) + '"' + roleAttr + '>' +
+      iconHtml +
+      '<' + tag + '>' + escapeHtml(opts.heading || 'Notice') + '</' + tag + '>' +
+      '<p>' + escapeHtml(opts.message || '') + '</p>' +
+      actionHtml +
+      '</div>';
+
+    if (typeof opts.onAction === 'function') {
+      container.querySelector('[data-state-action="1"]')?.addEventListener('click', opts.onAction);
+    }
+  }
+
+  function rememberDialogTrigger(triggerEl) {
+    const candidate = triggerEl || document.activeElement;
+    if (candidate && candidate !== document.body && typeof candidate.focus === 'function') {
+      lastDialogTrigger = candidate;
+    }
+  }
+
+  function restoreDialogFocus() {
+    const target = lastDialogTrigger;
+    lastDialogTrigger = null;
+    if (target && target.isConnected !== false && typeof target.focus === 'function') {
+      target.focus();
+    }
   }
 
   async function fetchJson(url, options) {
@@ -358,6 +525,7 @@
   }
 
   function openContactPopup(title, lines) {
+    rememberDialogTrigger();
     const existing = document.querySelector('.contact-popup');
     if (existing) existing.remove();
 
@@ -381,12 +549,15 @@
       '</div>' +
       '</div>';
 
-    const closeBtn = popup.querySelector('.close-btn');
-    closeBtn.addEventListener('click', function () {
+    const closePopup = function () {
       popup.remove();
-    });
+      restoreDialogFocus();
+    };
+
+    const closeBtn = popup.querySelector('.close-btn');
+    closeBtn.addEventListener('click', closePopup);
     popup.addEventListener('click', function (e) {
-      if (e.target === popup) popup.remove();
+      if (e.target === popup) closePopup();
     });
     document.body.appendChild(popup);
     if (closeBtn && typeof closeBtn.focus === 'function') {
@@ -397,6 +568,7 @@
   function clickEmailUs() {
     const modal = document.getElementById('email-modal');
     if (modal) {
+      rememberDialogTrigger();
       modal.style.display = 'flex';
       modal.querySelector('.close-modal')?.focus();
       return;
@@ -409,6 +581,7 @@
   function clickCallUs() {
     const modal = document.getElementById('call-modal');
     if (modal) {
+      rememberDialogTrigger();
       modal.style.display = 'flex';
       modal.querySelector('.close-modal')?.focus();
       return;
@@ -536,6 +709,14 @@
         dropdown.classList.toggle('show', nextOpen);
         profileTrigger.setAttribute('aria-expanded', String(nextOpen));
       });
+      profileTrigger.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          dropdown.classList.add('show');
+          profileTrigger.setAttribute('aria-expanded', 'true');
+          dropdown.querySelector('.dropdown-item')?.focus();
+        }
+      });
     }
 
     document.getElementById('header-auth-btn')?.addEventListener('click', async function (e) {
@@ -662,18 +843,28 @@
       trigger?.focus();
     }
 
+    let closedAnyDialog = false;
     const popup = document.querySelector('.contact-popup');
-    if (popup) popup.remove();
+    if (popup) {
+      popup.remove();
+      closedAnyDialog = true;
+    }
 
     document.querySelectorAll('.contact-modal').forEach(function (modal) {
       if (modal.style && modal.style.display && modal.style.display !== 'none') {
         modal.style.display = 'none';
+        closedAnyDialog = true;
       }
     });
 
     const chatDialog = document.getElementById('chat-dialog');
     if (chatDialog && chatDialog.style && chatDialog.style.display && chatDialog.style.display !== 'none') {
       chatDialog.style.display = 'none';
+      closedAnyDialog = true;
+    }
+
+    if (closedAnyDialog) {
+      restoreDialogFocus();
     }
 
     if (typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
@@ -694,6 +885,8 @@
 
   window.CineTicket = {
     AuthStore: AuthStore,
+    activatePill: activatePill,
+    bindTabList: bindTabList,
     calcGroupDiscount: calcGroupDiscount,
     calculateCheckoutPricing: calculateCheckoutPricing,
     escapeHtml: escapeHtml,
@@ -702,15 +895,24 @@
     isCardExpiryValid: isCardExpiryValid,
     isValidEmail: isValidEmail,
     isValidIsoDate: isValidIsoDate,
+    isValidPasswordBytes: isValidPasswordBytes,
     pageUrl: pageUrl,
+    parseSeatCodes: parseSeatCodes,
+    rememberDialogTrigger: rememberDialogTrigger,
     renderStarIcons: renderStarIcons,
+    renderStateCard: renderStateCard,
     resolveAssetUrl: resolveAssetUrl,
+    restoreDialogFocus: restoreDialogFocus,
     rootUrl: rootUrl,
+    roundCents: roundCents,
+    sanitizeRedirectPath: sanitizeRedirectPath,
     showToast: showToast,
+    sortSeatCodes: sortSeatCodes,
     themeToggleSvgMarkup: themeToggleSvgMarkup,
     todayIso: todayIso,
     toggleDarkMode: toggleDarkMode,
     toIsoDate: toIsoDate,
+    utf8ByteLength: utf8ByteLength,
   };
 
   window.toggleDarkMode = toggleDarkMode;

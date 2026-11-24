@@ -12,7 +12,7 @@
       height: 100%;
       overflow: hidden;
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: radial-gradient(circle at 50% 22%, #19243e 0%, #070a11 100%);
+      background: radial-gradient(circle at 50% 20%, #241224 0%, #10182b 48%, #070a11 100%);
       color: #f1f5f9;
       user-select: none;
     }
@@ -28,13 +28,13 @@
 
     .top-bar {
       position: absolute;
-      top: 18px;
+      top: 16px;
       left: 20px;
       right: 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       flex-wrap: wrap;
       z-index: 30;
       pointer-events: none;
@@ -43,10 +43,10 @@
     .top-bar > * { pointer-events: auto; }
 
     .hud-btn {
-      padding: 9px 16px;
-      background: rgba(15, 23, 42, 0.88);
+      padding: 8px 15px;
+      background: rgba(15, 23, 42, 0.9);
       color: #f8fafc;
-      border: 1px solid rgba(148, 163, 184, 0.34);
+      border: 1px solid rgba(148, 163, 184, 0.36);
       border-radius: 999px;
       cursor: pointer;
       font-size: 13px;
@@ -57,8 +57,8 @@
 
     .hud-btn:hover,
     .hud-btn.active {
-      background: #1d4ed8;
-      border-color: #60a5fa;
+      background: #be123c;
+      border-color: #fbbf24;
     }
 
     .hud-btn:focus-visible,
@@ -82,7 +82,7 @@
       background: #475569;
       border-color: #64748b;
       cursor: not-allowed;
-      opacity: 0.78;
+      opacity: 0.85;
     }
 
     .preset-group {
@@ -120,15 +120,15 @@
       width: 560px;
       height: 124px;
       transform: translateX(-50%) translateZ(-135px) rotateX(-6deg);
-      background: linear-gradient(180deg, #f0f9ff 0%, #93c5fd 48%, #2563eb 100%);
+      background: linear-gradient(180deg, #fffbeb 0%, #fde68a 38%, #93c5fd 100%);
       border-radius: 14px 14px 44% 44% / 10px 10px 22px 22px;
-      box-shadow: 0 0 65px rgba(96, 165, 250, 0.55), 0 28px 60px rgba(37, 99, 235, 0.35);
+      box-shadow: 0 0 65px rgba(251, 191, 36, 0.36), 0 28px 60px rgba(37, 99, 235, 0.32);
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       color: #0f172a;
-      border: 2px solid rgba(255, 255, 255, 0.85);
+      border: 2px solid rgba(255, 255, 255, 0.9);
     }
 
     .screen-3d-title {
@@ -152,8 +152,8 @@
       height: 392px;
       transform: translateX(-50%) rotateX(34deg);
       transform-style: preserve-3d;
-      background: linear-gradient(180deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.97) 100%);
-      border: 1px solid rgba(148, 163, 184, 0.28);
+      background: linear-gradient(180deg, rgba(30, 41, 59, 0.92) 0%, rgba(15, 23, 42, 0.98) 100%);
+      border: 1px solid rgba(251, 191, 36, 0.28);
       border-radius: 18px;
       padding: 24px 26px;
       display: flex;
@@ -174,7 +174,7 @@
       width: 18px;
       font-size: 11px;
       font-weight: 700;
-      color: #cbd5e1;
+      color: #e2e8f0;
       text-align: center;
     }
 
@@ -182,7 +182,7 @@
       width: 34px;
       height: 28px;
       border-radius: 6px 6px 10px 10px;
-      border: 1px solid rgba(255, 255, 255, 0.18);
+      border: 1px solid rgba(255, 255, 255, 0.2);
       background: #334155;
       color: #f8fafc;
       font-size: 9.5px;
@@ -206,12 +206,12 @@
       background: #7f1d1d;
       border-color: #ef4444;
       color: #fecaca;
-      opacity: 0.78;
+      opacity: 0.8;
     }
 
     .seat-3d:hover {
       transform: translateZ(20px) scale(1.12);
-      background: #60a5fa;
+      background: #fbbf24;
       color: #0f172a;
     }
 
@@ -228,13 +228,13 @@
     /* Bottom Telemetry & Controls */
     .bottom-hud {
       position: absolute;
-      bottom: 18px;
+      bottom: 16px;
       left: 20px;
       right: 20px;
       display: flex;
       justify-content: space-between;
       align-items: flex-end;
-      gap: 16px;
+      gap: 14px;
       flex-wrap: wrap;
       z-index: 30;
       pointer-events: none;
@@ -243,45 +243,46 @@
     .bottom-hud > * { pointer-events: auto; }
 
     #infoBox {
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.28);
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(148, 163, 184, 0.3);
       color: #e2e8f0;
-      padding: 15px 18px;
+      padding: 13px 16px;
       border-radius: 14px;
       max-width: 440px;
       font-size: 13px;
-      line-height: 1.5;
+      line-height: 1.45;
       backdrop-filter: blur(8px);
     }
 
     .info-heading {
       color: #ffffff;
-      font-size: 14.5px;
+      font-size: 14px;
       font-weight: 700;
-      margin-bottom: 5px;
+      margin-bottom: 4px;
     }
 
     .telemetry-badges {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
-      margin-top: 10px;
+      margin-top: 8px;
     }
 
     .telemetry-pill {
-      padding: 4px 10px;
+      padding: 3px 10px;
       border-radius: 999px;
-      background: rgba(29, 78, 216, 0.32);
-      border: 1px solid rgba(96, 165, 250, 0.42);
+      background: rgba(190, 18, 60, 0.28);
+      border: 1px solid rgba(251, 191, 36, 0.48);
+      color: #fef3c7;
       font-size: 12px;
       font-weight: 600;
       font-variant-numeric: tabular-nums;
     }
 
     .controls-panel {
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.28);
-      padding: 13px 16px;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      padding: 11px 15px;
       border-radius: 14px;
       display: flex;
       gap: 14px;
@@ -295,12 +296,12 @@
       flex-direction: column;
       gap: 4px;
       font-size: 12px;
-      color: #cbd5e1;
+      color: #e2e8f0;
     }
 
     .slider-group input[type="range"] {
-      width: 104px;
-      accent-color: #3b82f6;
+      width: 100px;
+      accent-color: #f59e0b;
     }
 
     #external-frame-wrap {
@@ -314,9 +315,19 @@
     #external-frame-wrap.active { display: block; }
     #external-frame-wrap iframe { width: 100%; height: 100%; border: none; }
 
-    @media (max-width: 900px) {
-      #auditorium-3d-room { transform: scale(0.82); }
-      #infoBox { max-width: 100%; padding: 12px 14px; }
+    @media (max-height: 620px), (max-width: 900px) {
+      #auditorium-3d-stage { padding-bottom: 16px; }
+      .top-bar { top: 6px; left: 10px; right: 10px; gap: 5px; }
+      .bottom-hud { bottom: 6px; left: 10px; right: 10px; gap: 8px; }
+      .hud-btn { padding: 4px 9px; font-size: 11px; }
+      #infoBox { padding: 6px 10px; font-size: 11px; max-width: 56%; }
+      .info-heading { font-size: 12px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #infoBox .hud-hint { display: none; }
+      .telemetry-badges { margin-top: 3px; gap: 4px; }
+      .telemetry-pill { padding: 1px 7px; font-size: 10.5px; }
+      .controls-panel { padding: 6px 9px; gap: 7px; }
+      .slider-group { font-size: 10.5px; gap: 2px; }
+      .slider-group input[type="range"] { width: 64px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -358,7 +369,7 @@
     <div class="bottom-hud">
       <div id="infoBox">
         <div class="info-heading" id="hall-heading">Auditorium Hall A — 3D Sightline Simulator</div>
-        <div>Drag to orbit, use arrow keys, press Esc to exit, or click any seat (A1–H12) to inspect screen elevation and acoustic balance.</div>
+        <div class="hud-hint">Drag to orbit, use arrow keys, press Esc to exit, or click any seat (A1–H12) to inspect screen elevation and acoustic balance.</div>
         <div class="telemetry-badges">
           <span class="telemetry-pill" id="pov-seat-label">Seat: D6</span>
           <span class="telemetry-pill" id="pov-angle-label">Angle: 36° THX Optimal</span>
@@ -471,8 +482,16 @@
         toggleExtBtn.setAttribute('aria-pressed', 'false');
       }
 
+      function computeViewportFit() {
+        if (window.innerWidth < 240 || window.innerHeight < 240) return 1;
+        const wFit = (window.innerWidth - 28) / 740;
+        const hReserve = window.innerHeight <= 620 ? 156 : 180;
+        const hFit = (window.innerHeight - hReserve) / 540;
+        return Math.max(0.34, Math.min(1, wFit, hFit));
+      }
+
       function applyTransform() {
-        const scale = (zoom / 100).toFixed(2);
+        const scale = ((zoom / 100) * computeViewportFit()).toFixed(2);
         room.style.transform = 'scale(' + scale + ') rotateX(' + pitch + 'deg) rotateY(' + yaw + 'deg)';
         yawSlider.value = String(Math.round(yaw));
         pitchSlider.value = String(Math.round(pitch));
@@ -584,6 +603,7 @@
         applyTransform();
       });
       window.addEventListener('pointerup', function () { dragging = false; });
+      window.addEventListener('resize', applyTransform);
 
       window.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {

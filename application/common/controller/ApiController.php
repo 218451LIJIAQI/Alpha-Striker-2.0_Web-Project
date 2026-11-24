@@ -7,10 +7,10 @@ use think\facade\Request;
 use think\facade\Session;
 
 /**
- * Shared JSON API base controller.
- * Centralizes payload parsing, strict integer/scalar guards, mbstring-free UTF-8 helpers,
- * ISO calendar validation, role-aware session lifecycle, date-window query scoping,
- * authoritative promo verification, checkout pricing calculation, and SQL conflict detection.
+ * Shared JSON & CSV API base controller.
+ * Centralizes payload parsing, strict integer/float/scalar/email/password guards, mbstring-free UTF-8 helpers,
+ * ISO calendar validation, same-origin CSRF verification, CSV formula-injection sanitization,
+ * role-aware session lifecycle, cent-exact pricing math, promo validation, and SQL conflict detection.
  */
 abstract class ApiController
 {
@@ -61,6 +61,18 @@ abstract class ApiController
         return $val > 0 ? $val : 0;
     }
 
+    protected function parseFiniteFloat($raw, $min = 0.0, $max = INF)
+    {
+        if ($raw === null || $raw === '' || is_bool($raw) || is_array($raw) || is_object($raw) || !is_numeric($raw)) {
+            return null;
+        }
+        $val = (float) $raw;
+        if (!is_finite($val) || $val < $min || $val > $max) {
+            return null;
+        }
+        return $val;
+    }
+
     protected function idParam($key, $direct = '')
     {
         if ($direct !== '' && $direct !== null) {
@@ -109,6 +121,24 @@ abstract class ApiController
         return checkdate((int) $m[2], (int) $m[3], (int) $m[1]);
     }
 
+    protected function isValidEmail($value)
+    {
+        if (is_array($value) || is_object($value) || is_bool($value) || $value === null) {
+            return false;
+        }
+        $str = trim((string) $value);
+        return $str !== '' && strlen($str) <= 100 && filter_var($str, FILTER_VALIDATE_EMAIL) !== false;
+    }
+
+    protected function isValidPasswordLength($password)
+    {
+        if (!is_string($password)) {
+            return false;
+        }
+        $bytes = strlen($password);
+        return $bytes >= 6 && $bytes <= self::MAX_PASSWORD_BYTES;
+    }
+
     /**
      * Exact UTF-8 character count without requiring ext-mbstring.
      */
@@ -129,6 +159,76 @@ abstract class ApiController
             return (int) $matched;
         }
         return strlen((string) preg_replace('/[\x80-\xBF]/', '', $str));
+    }
+
+    /**
+     * Verifies Same-Origin boundary on state-mutating and privileged requests when Origin or Referer is present.
+     */
+    protected function verifySameOrigin()
+    {
+        $source = Request::header('origin');
+        if (!is_string($source) || trim($source) === '') {
+            $source = Request::header('referer');
+        }
+        if (!is_string($source) || trim($source) === '') {
+            return true;
+        }
+
+        $trimmed = trim($source);
+        if (strtolower($trimmed) === 'null') {
+            return false;
+        }
+
+        $parsedHost = parse_url($trimmed, PHP_URL_HOST);
+        if (!is_string($parsedHost) || $parsedHost === '') {
+            return false;
+        }
+        $parsedPort      = parse_url($trimmed, PHP_URL_PORT);
+        $sourceAuthority = strtolower($parsedHost) . ($parsedPort ? ':' . $parsedPort : '');
+
+        $expectedHost = strtolower(trim((string) Request::header('host')));
+        if ($expectedHost === '') {
+            return true;
+        }
+
+        if ($sourceAuthority === $expectedHost) {
+            return true;
+        }
+        $expectedHostnameOnly = explode(':', $expectedHost)[0];
+        return $parsedPort === null && strtolower($parsedHost) === $expectedHostnameOnly;
+    }
+
+    /**
+     * Neutralizes spreadsheet formula injection (OWASP CSV Injection: =, +, -, @, TAB, CR).
+     */
+    protected function sanitizeCsvCell($value)
+    {
+        if ($value === null || is_array($value) || is_object($value) || is_bool($value)) {
+            return '';
+        }
+        if (is_int($value) || is_float($value)) {
+            return is_finite((float) $value) ? (string) $value : '';
+        }
+        $str = (string) $value;
+        if ($str !== '' && preg_match('/^(?:[\t\r\n ]*[=+\-@]|[\t\r])/', $str)) {
+            return "'" . $str;
+        }
+        return $str;
+    }
+
+    /**
+     * Formats an array of cells into a formula-safe RFC 4180 CSV line.
+     */
+    protected function formatCsvRow(array $cells)
+    {
+        $encoded = [];
+        foreach ($cells as $cell) {
+            $safe      = $this->sanitizeCsvCell($cell);
+            $encoded[] = preg_match('/[",\r\n]/', $safe)
+                ? '"' . str_replace('"', '""', $safe) . '"'
+                : $safe;
+        }
+        return implode(',', $encoded);
     }
 
     protected function rotateSession()
@@ -197,21 +297,26 @@ abstract class ApiController
         return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], trim((string) $keyword));
     }
 
+    protected function roundCents($amount)
+    {
+        return round((float) $amount, 2, PHP_ROUND_HALF_UP);
+    }
+
     /**
-     * Authoritative checkout pricing calculation shared across Offer preview and Seat transaction.
+     * Authoritative checkout pricing calculation using half-up cent rounding.
      */
     protected function calculatePricing($unitPrice, $seatCount, $promoMoney = 0.0)
     {
         $count         = max(0, (int) $seatCount);
-        $unit          = round(max(0.0, (float) $unitPrice), 2);
-        $subtotal      = round($unit * $count, 2);
+        $unit          = $this->roundCents(max(0.0, (float) $unitPrice));
+        $subtotal      = $this->roundCents($unit * $count);
         $groupDiscount = $count >= self::GROUP_DISCOUNT_MIN_SEATS
-            ? round($subtotal * self::GROUP_DISCOUNT_RATE, 2)
+            ? $this->roundCents($subtotal * self::GROUP_DISCOUNT_RATE)
             : 0.00;
-        $promoDiscount = round(max(0.0, (float) $promoMoney), 2);
-        $totalDiscount = round($groupDiscount + $promoDiscount, 2);
+        $promoDiscount = $this->roundCents(max(0.0, (float) $promoMoney));
+        $totalDiscount = $this->roundCents($groupDiscount + $promoDiscount);
         $serviceFee    = $count > 0 ? self::SERVICE_FEE : 0.00;
-        $totalAmount   = max(0.00, round($subtotal - $totalDiscount + $serviceFee, 2));
+        $totalAmount   = max(0.00, $this->roundCents($subtotal - $totalDiscount + $serviceFee));
 
         return [
             'unit_price'     => $unit,
@@ -305,7 +410,9 @@ abstract class ApiController
             $checkDate = ($screeningDate !== '' && $this->isValidIsoDate($screeningDate))
                 ? $screeningDate
                 : $today;
-            if (!empty($link['valid_from']) && $checkDate < $link['valid_from']) {
+            $validFrom = trim((string) ($link['valid_from'] ?? ''));
+            $validTo   = trim((string) ($link['valid_to'] ?? ''));
+            if ($validFrom !== '' && $checkDate < $validFrom) {
                 return [
                     'valid'   => false,
                     'status'  => 200,
@@ -313,7 +420,7 @@ abstract class ApiController
                     'offer'   => null,
                 ];
             }
-            if (!empty($link['valid_to']) && $checkDate > $link['valid_to']) {
+            if ($validTo !== '' && $checkDate > $validTo) {
                 return [
                     'valid'   => false,
                     'status'  => 200,
@@ -330,7 +437,7 @@ abstract class ApiController
             'promo_code'     => $offer['promo_code'],
             'offer_validity' => $offer['offer_validity'],
             'badge'          => $offer['badge'],
-            'money'          => round((float) $offer['money'], 2),
+            'money'          => $this->roundCents((float) $offer['money']),
             'user_code'      => $ownerUserId > 0 ? $ownerUserId : null,
         ];
 

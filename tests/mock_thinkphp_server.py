@@ -2,19 +2,19 @@
 """
 1:1 SQLite-Backed ThinkPHP 5.1 Contract Server for End-to-End & Concurrency Verification.
 Mirrors every PHP controller in `application/` line-for-line:
-- Bcrypt ($2y$10$) password & reset-code hashing (6–72 byte ceiling), role-preserving session rotation, and isolated logout
-- Strict non-empty constant-time X-Admin-Token / Bearer CSRF enforcement (401 unauthenticated vs 403 CSRF missing/invalid)
-- Strict base-10 positive integer (`parse_positive_int`) and scalar string (`raw_str_param`) guards matching ApiController
-- Authoritative Session::get('user_id') enforcement in Seat (401 guest view/cancel, 403 IDOR/guest ticket cancel, NULL guest user_code)
-- Thread-safe transactional seat locking (`BEGIN IMMEDIATE` + `uk_seat_booking` IntegrityError -> rollback -> 409 with conflict_seats)
-- Unified promo validation (`offer_validity`, `user_code` ownership, `movie_offer` applicability & date range) and active offer filtering
-- Full Admin CRUD across Movie, Theater, Offer, Seat, and User with bidirectional `theater_movie` & `movie_offer` syncing
+- Bcrypt ($2y$10$) password & reset-code hashing (6–72 byte ceiling on both write and login), session rotation, and isolated logout
+- Same-Origin CSRF verification (`Origin`/`Referer` host matching), `SameSite=Lax` cookies, and non-empty constant-time X-Admin-Token CSRF check
+- Strict base-10 positive integer (`parse_positive_int`), scalar string (`scalar_str`), CSV formula-injection guard (`sanitize_csv_cell`), and `"0"` preservation
+- Partial-update field merging (`merge_existing_payload`) and non-destructive `theater_movie` / `movie_offer` schedule & discount syncing
+- Authoritative Session::get('user_id') enforcement in Seat, atomic transactional seat locking & cancellation, and ROUND_HALF_UP cent math
+- Strictly binds local HTTP listeners inside isolated port range 4300–4399
 """
 
 from __future__ import annotations
 
 import crypt
 import datetime as dt
+from decimal import Decimal, ROUND_HALF_UP
 import hmac
 import json
 import math
@@ -41,6 +41,36 @@ MAX_RESET_ATTEMPTS = 5
 ALLOWED_PAYMENT_METHODS = {"card", "paypal", "applepay", "googlepay"}
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 POS_INT_RE = re.compile(r"^\d+$")
+CSV_FORMULA_RE = re.compile(r"^(?:[\t\r\n ]*[=+\-@]|[\t\r])")
+MOVIE_ALLOWED_FIELDS = ("movie_name", "tag", "star", "movie_type", "img", "money", "times")
+THEATER_ALLOWED_FIELDS = ("theater_name", "address", "amenity", "star", "img", "reviews", "distance", "theater_id")
+OFFER_ALLOWED_FIELDS = ("offer_title", "offer_type", "offer_description", "promo_code", "offer_validity", "img", "badge", "money", "user_code")
+
+
+def round_cents(val: float) -> float:
+    return float(Decimal(str(val)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def sanitize_csv_cell(value) -> str:
+    if value is None or isinstance(value, (bool, list, dict)):
+        return ""
+    if isinstance(value, (int, float)):
+        return str(value) if math.isfinite(float(value)) else ""
+    s = str(value)
+    if s and CSV_FORMULA_RE.match(s):
+        return "'" + s
+    return s
+
+
+def format_csv_row(cells: list) -> str:
+    encoded: list[str] = []
+    for cell in cells:
+        safe = sanitize_csv_cell(cell)
+        if any(ch in safe for ch in ('"', ',', '\r', '\n')):
+            encoded.append('"' + safe.replace('"', '""') + '"')
+        else:
+            encoded.append(safe)
+    return ",".join(encoded)
 
 
 def hash_password_bcrypt(password: str) -> str:
@@ -49,7 +79,7 @@ def hash_password_bcrypt(password: str) -> str:
 
 
 def verify_password_bcrypt(password: str, stored_hash: str) -> bool:
-    if not stored_hash:
+    if not stored_hash or not password or len(password.encode("utf-8")) > MAX_PASSWORD_BYTES:
         return False
     if stored_hash.startswith(("$2y$", "$2b$", "$2a$")):
         computed = crypt.crypt(password, stored_hash)
@@ -106,6 +136,16 @@ def scalar_str(val, trim: bool = True, default: str = "") -> str:
     return s.strip() if trim else s
 
 
+def merge_existing_payload(existing: dict, payload: dict, allowed_fields: tuple[str, ...]) -> dict:
+    merged: dict = {}
+    for field in allowed_fields:
+        if field in payload:
+            merged[field] = payload[field]
+        elif field in existing:
+            merged[field] = existing[field]
+    return merged
+
+
 def normalize_id_array(raw) -> list[int]:
     if isinstance(raw, str):
         raw = [] if not raw.strip() else raw.split(",")
@@ -136,15 +176,69 @@ def map_relation_ids(db: sqlite3.Connection, table: str, group_col: str, val_col
     return {k: sorted(v) for k, v in grouped.items()}
 
 
+def sync_schedule_rows(db: sqlite3.Connection, where_col: str, where_id: int, target_ids: list[int], target_col: str, now_str: str) -> None:
+    if not target_ids:
+        db.execute(f"DELETE FROM theater_movie WHERE {where_col} = ?", (where_id,))
+        return
+    ph = ",".join("?" for _ in target_ids)
+    db.execute(f"DELETE FROM theater_movie WHERE {where_col} = ? AND {target_col} NOT IN ({ph})", [where_id, *target_ids])
+    existing = {
+        int(r[target_col])
+        for r in db.execute(f"SELECT {target_col} FROM theater_movie WHERE {where_col} = ?", (where_id,)).fetchall()
+    }
+    for tid in target_ids:
+        if tid not in existing:
+            db.execute(
+                f"INSERT INTO theater_movie ({where_col}, {target_col}, start_date, end_date, daily_showtimes, created_time) VALUES (?,?,?,?,?,?)",
+                (where_id, int(tid), "2026-01-01", "2027-12-31", 4, now_str),
+            )
+
+
+def sync_movie_offer_rows(
+    db: sqlite3.Connection,
+    where_col: str,
+    where_id: int,
+    target_ids: list[int],
+    target_col: str,
+    now_str: str,
+    fixed_valid_to: str | None = None,
+) -> None:
+    if not target_ids:
+        db.execute(f"DELETE FROM movie_offer WHERE {where_col} = ?", (where_id,))
+        return
+    ph = ",".join("?" for _ in target_ids)
+    db.execute(f"DELETE FROM movie_offer WHERE {where_col} = ? AND {target_col} NOT IN ({ph})", [where_id, *target_ids])
+    if fixed_valid_to and is_valid_iso_date(fixed_valid_to):
+        db.execute(f"UPDATE movie_offer SET valid_to = ? WHERE {where_col} = ?", (fixed_valid_to, where_id))
+    existing = {
+        int(r[target_col])
+        for r in db.execute(f"SELECT {target_col} FROM movie_offer WHERE {where_col} = ?", (where_id,)).fetchall()
+    }
+    for tid in target_ids:
+        if tid in existing:
+            continue
+        if fixed_valid_to and is_valid_iso_date(fixed_valid_to):
+            vto = fixed_valid_to
+        elif target_col == "offer_code":
+            orow = db.execute("SELECT offer_validity FROM t_offer WHERE offer_code = ?", (tid,)).fetchone()
+            vto = orow["offer_validity"] if orow and is_valid_iso_date(orow["offer_validity"] or "") else "2027-12-31"
+        else:
+            vto = "2027-12-31"
+        db.execute(
+            f"INSERT INTO movie_offer ({where_col}, {target_col}, discount_percent, valid_from, valid_to, created_time) VALUES (?,?,?,?,?,?)",
+            (where_id, int(tid), 0.0, "2026-01-01", vto, now_str),
+        )
+
+
 def calculate_pricing(unit_price: float, seat_count: int, promo_money: float = 0.0) -> dict:
     count = max(0, int(seat_count))
-    unit = round(max(0.0, float(unit_price)), 2)
-    subtotal = round(unit * count, 2)
-    group_discount = round(subtotal * GROUP_DISCOUNT_RATE, 2) if count >= GROUP_DISCOUNT_MIN_SEATS else 0.0
-    promo_discount = round(max(0.0, float(promo_money)), 2)
-    total_discount = round(group_discount + promo_discount, 2)
+    unit = round_cents(max(0.0, float(unit_price)))
+    subtotal = round_cents(unit * count)
+    group_discount = round_cents(subtotal * GROUP_DISCOUNT_RATE) if count >= GROUP_DISCOUNT_MIN_SEATS else 0.0
+    promo_discount = round_cents(max(0.0, float(promo_money)))
+    total_discount = round_cents(group_discount + promo_discount)
     service_fee = SERVICE_FEE if count > 0 else 0.0
-    total_amount = max(0.0, round(subtotal - total_discount + service_fee, 2))
+    total_amount = max(0.0, round_cents(subtotal - total_discount + service_fee))
     return {
         "unit_price": unit,
         "seat_count": count,
@@ -167,7 +261,6 @@ class ContractState:
         sql_text = (ROOT / "movies.sql").read_text(encoding="utf-8")
         self.conn.executescript(translate_mysql_to_sqlite(sql_text))
         self.sessions: dict[str, dict] = {}
-        # Simulated server-side mail delivery sink (not exposed via HTTP unless CINETIX_EXPOSE_RESET_CODE=1)
         self.mail_outbox: dict[str, str] = {}
 
 
@@ -232,14 +325,16 @@ def validate_promo_for_context(
                 "offer": None,
             }
         check_date = screening_date if is_valid_iso_date(screening_date or "") else today
-        if link["valid_from"] and check_date < link["valid_from"]:
+        vfrom = str(link["valid_from"] or "").strip()
+        vto = str(link["valid_to"] or "").strip()
+        if vfrom and check_date < vfrom:
             return {
                 "valid": False,
                 "status": 200,
                 "message": "This promo code is not yet active for the selected date",
                 "offer": None,
             }
-        if link["valid_to"] and check_date > link["valid_to"]:
+        if vto and check_date > vto:
             return {
                 "valid": False,
                 "status": 200,
@@ -254,7 +349,7 @@ def validate_promo_for_context(
         "promo_code": offer["promo_code"],
         "offer_validity": offer["offer_validity"],
         "badge": offer["badge"],
-        "money": round(float(offer["money"]), 2),
+        "money": round_cents(float(offer["money"])),
         "user_code": owner_uid if owner_uid > 0 else None,
     }
     return {"valid": True, "status": 200, "message": "Promo code applied", "offer": safe_offer}
@@ -267,15 +362,15 @@ def prepare_movie_data(p: dict) -> tuple[dict | None, str | None]:
     mtimes = scalar_str(p.get("times"))
     mtag = scalar_str(p.get("tag"))
 
-    if not mname or len(mname) > 200:
+    if mname == "" or len(mname) > 200:
         return None, "Movie title (1-200 characters) is required"
-    if not mtype or len(mtype) > 50:
+    if mtype == "" or len(mtype) > 50:
         return None, "Movie genre (1-50 characters) is required"
-    if not mimg or len(mimg) > 500:
+    if mimg == "" or len(mimg) > 500:
         return None, "Poster image path or URL (1-500 characters) is required"
-    if not mtimes or len(mtimes) > 50:
+    if mtimes == "" or len(mtimes) > 50:
         return None, "Movie duration (1-50 characters) is required"
-    if len(mtag) > 50:
+    if mtag != "" and len(mtag) > 50:
         return None, "Highlight badge must be 50 characters or fewer"
 
     star_val = parse_finite_float(p.get("star"))
@@ -292,7 +387,7 @@ def prepare_movie_data(p: dict) -> tuple[dict | None, str | None]:
         "star": round(star_val, 1),
         "movie_type": mtype,
         "img": mimg,
-        "money": round(money_val, 2),
+        "money": round_cents(money_val),
         "times": mtimes,
     }, None
 
@@ -306,19 +401,19 @@ def prepare_theater_data(p: dict) -> tuple[dict | None, str | None]:
     tdist = scalar_str(p.get("distance"))
     tid_str = scalar_str(p.get("theater_id"))
 
-    if not tname or len(tname) > 200:
+    if tname == "" or len(tname) > 200:
         return None, "Theater name (1-200 characters) is required"
-    if not taddr or len(taddr) > 500:
+    if taddr == "" or len(taddr) > 500:
         return None, "Theater address (1-500 characters) is required"
-    if not timg or len(timg) > 500:
+    if timg == "" or len(timg) > 500:
         return None, "Theater image path or URL (1-500 characters) is required"
-    if len(tam) > 500:
+    if tam != "" and len(tam) > 500:
         return None, "Amenities list must be 500 characters or fewer"
-    if len(trev) > 50:
+    if trev != "" and len(trev) > 50:
         return None, "Reviews label must be 50 characters or fewer"
-    if len(tdist) > 50:
+    if tdist != "" and len(tdist) > 50:
         return None, "Distance label must be 50 characters or fewer"
-    if len(tid_str) > 100:
+    if tid_str != "" and len(tid_str) > 100:
         return None, "Theater code label must be 100 characters or fewer"
 
     raw_star = p.get("star")
@@ -329,12 +424,12 @@ def prepare_theater_data(p: dict) -> tuple[dict | None, str | None]:
     return {
         "theater_name": tname,
         "address": taddr,
-        "amenity": tam or None,
+        "amenity": tam if tam != "" else None,
         "star": round(star_val, 1),
         "img": timg,
-        "reviews": trev or None,
-        "distance": tdist or None,
-        "theater_id": tid_str or None,
+        "reviews": trev if trev != "" else None,
+        "distance": tdist if tdist != "" else None,
+        "theater_id": tid_str if tid_str != "" else None,
     }, None
 
 
@@ -347,19 +442,19 @@ def prepare_offer_data(db: sqlite3.Connection, p: dict, exclude_offer_id: int) -
     oimg = scalar_str(p.get("img"))
     obadge = scalar_str(p.get("badge"))
 
-    if not otitle or len(otitle) > 200:
+    if otitle == "" or len(otitle) > 200:
         return None, "Offer title (1-200 characters) is required"
-    if not otype or len(otype) > 100:
+    if otype == "" or len(otype) > 100:
         return None, "Offer category (1-100 characters) is required"
-    if not odesc or len(odesc) > 500:
+    if odesc == "" or len(odesc) > 500:
         return None, "Offer description (1-500 characters) is required"
-    if not ocode or len(ocode) > 100:
+    if ocode == "" or len(ocode) > 100:
         return None, "Promo code (1-100 characters) is required"
-    if not oval or not is_valid_iso_date(oval):
+    if oval == "" or not is_valid_iso_date(oval):
         return None, "Validity date must use YYYY-MM-DD format"
-    if not oimg or len(oimg) > 500:
+    if oimg == "" or len(oimg) > 500:
         return None, "Offer image path or URL (1-500 characters) is required"
-    if len(obadge) > 50:
+    if obadge != "" and len(obadge) > 50:
         return None, "Highlight badge must be 50 characters or fewer"
 
     money_val = parse_finite_float(p.get("money"))
@@ -369,10 +464,7 @@ def prepare_offer_data(db: sqlite3.Connection, p: dict, exclude_offer_id: int) -
     owner_uid = None
     if "user_code" in p and p["user_code"] is not None:
         raw_uc_val = p["user_code"]
-        if isinstance(raw_uc_val, (bool, list, dict)):
-            raw_uc = ""
-        else:
-            raw_uc = str(raw_uc_val).strip()
+        raw_uc = "" if isinstance(raw_uc_val, (bool, list, dict)) else str(raw_uc_val).strip()
         if raw_uc != "":
             cand_uid = parse_positive_int(raw_uc)
             if cand_uid <= 0 or not db.execute("SELECT 1 FROM t_user WHERE user_code = ?", (cand_uid,)).fetchone():
@@ -395,8 +487,8 @@ def prepare_offer_data(db: sqlite3.Connection, p: dict, exclude_offer_id: int) -
         "promo_code": upper_code,
         "offer_validity": oval,
         "img": oimg,
-        "badge": obadge or None,
-        "money": round(money_val, 2),
+        "badge": obadge if obadge != "" else None,
+        "money": round_cents(money_val),
         "user_code": owner_uid,
     }, None
 
@@ -410,9 +502,9 @@ def validate_admin_user_input(
     exclude_user_id: int,
 ) -> str | None:
     pw_bytes = len(password.encode("utf-8"))
-    if not name or len(name) > 50:
+    if name == "" or len(name) > 50:
         return "Valid username (1-50 characters) is required"
-    if not email or not EMAIL_RE.match(email) or len(email) > 100:
+    if email == "" or not EMAIL_RE.match(email) or len(email) > 100:
         return "Valid email address is required"
     if require_password and (pw_bytes < 6 or pw_bytes > MAX_PASSWORD_BYTES):
         return "Password must be 6-72 characters"
@@ -456,15 +548,49 @@ def make_handler(state: ContractState):
             with state.session_lock:
                 state.sessions.pop(sid, None)
 
+        def _verify_same_origin(self) -> bool:
+            source = (self.headers.get("Origin") or "").strip()
+            if not source:
+                source = (self.headers.get("Referer") or "").strip()
+            if not source:
+                return True
+            if source.lower() == "null":
+                return False
+            parsed = urllib.parse.urlparse(source)
+            if not parsed.hostname:
+                return False
+            source_auth = parsed.hostname.lower() + (f":{parsed.port}" if parsed.port else "")
+            expected_host = (self.headers.get("Host") or "").strip().lower()
+            if not expected_host:
+                return True
+            if source_auth == expected_host:
+                return True
+            expected_hostname_only = expected_host.split(":", 1)[0]
+            return parsed.port is None and parsed.hostname.lower() == expected_hostname_only
+
         def _send_json(self, body: dict, status: int = 200, sid: str | None = None, clear_cookie: bool = False) -> None:
             raw = json.dumps(body).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(raw)))
             if clear_cookie:
-                self.send_header("Set-Cookie", "PHPSESSID=; Path=/; Max-Age=0; HttpOnly")
+                self.send_header("Set-Cookie", "PHPSESSID=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax")
             elif sid:
-                self.send_header("Set-Cookie", f"PHPSESSID={sid}; Path=/; HttpOnly")
+                self.send_header("Set-Cookie", f"PHPSESSID={sid}; Path=/; HttpOnly; SameSite=Lax")
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def _send_csv(self, filename: str, headers: list[str], rows: list[list], sid: str | None = None) -> None:
+            clean_name = re.sub(r"[^A-Za-z0-9._-]", "_", filename) or "export.csv"
+            lines = [format_csv_row(headers), *(format_csv_row(r) for r in rows)]
+            raw = ("\ufeff" + "\r\n".join(lines)).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/csv; charset=UTF-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{clean_name}"')
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Length", str(len(raw)))
+            if sid:
+                self.send_header("Set-Cookie", f"PHPSESSID={sid}; Path=/; HttpOnly; SameSite=Lax")
             self.end_headers()
             self.wfile.write(raw)
 
@@ -589,6 +715,8 @@ def make_handler(state: ContractState):
 
             # 1. Admin Auth
             if route == "admin/auth/login":
+                if not self._verify_same_origin():
+                    return self._send_json({"success": False, "message": "Forbidden: cross-origin request rejected"}, 403, sid)
                 u = self._str_param(p, "username")
                 pw = self._raw_str_param(p, "password")
                 if not u or not pw:
@@ -597,7 +725,8 @@ def make_handler(state: ContractState):
                 exp_hash = os.environ.get("ADMIN_PASSWORD_HASH", "")
                 exp_pass = os.environ.get("ADMIN_PASSWORD", "admin")
                 user_ok = hmac.compare_digest(exp_user, u)
-                pass_ok = verify_password_bcrypt(pw, exp_hash) if exp_hash else hmac.compare_digest(exp_pass, pw)
+                within_bytes = len(pw.encode("utf-8")) <= MAX_PASSWORD_BYTES
+                pass_ok = within_bytes and (verify_password_bcrypt(pw, exp_hash) if exp_hash else hmac.compare_digest(exp_pass, pw))
                 if not user_ok or not pass_ok:
                     return self._send_json({"success": False, "message": "Invalid username or password"}, 401, sid)
 
@@ -610,6 +739,8 @@ def make_handler(state: ContractState):
                 )
 
             if route == "admin/auth/logout":
+                if not self._verify_same_origin():
+                    return self._send_json({"success": False, "message": "Forbidden: cross-origin request rejected"}, 403, sid)
                 if self._has_admin_session(session) and not self._check_admin_csrf(session):
                     return self._send_json({"success": False, "message": "Forbidden: valid X-Admin-Token header is required"}, 403, sid)
                 for k in ("admin_auth", "admin_token", "admin_user"):
@@ -631,8 +762,10 @@ def make_handler(state: ContractState):
                     sid,
                 )
 
-            # Enforce BaseAdmin (401 without session, 403 without valid X-Admin-Token)
+            # Enforce BaseAdmin (403 cross-origin, 401 without session, 403 without valid X-Admin-Token)
             if route.startswith("admin/"):
+                if not self._verify_same_origin():
+                    return self._send_json({"success": False, "message": "Forbidden: cross-origin request rejected"}, 403, sid)
                 if not self._has_admin_session(session):
                     return self._send_json({"success": False, "message": "Unauthorized: admin login required"}, 401, sid)
                 if not self._check_admin_csrf(session):
@@ -814,6 +947,8 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "OK", "data": rows_to_dicts(rows)}, 200, sid)
 
             if route == "movie/seat/saveseats":
+                if not self._verify_same_origin():
+                    return self._send_json({"success": False, "message": "Forbidden: cross-origin request rejected"}, 403, sid)
                 mc = self._id_param(p, "movie_code")
                 tc = self._optional_id_with_default(p, "theater_code", 1)
                 d = self._str_param(p, "date")
@@ -830,13 +965,14 @@ def make_handler(state: ContractState):
                     or not is_valid_iso_date(d)
                     or not t
                     or len(t) > 30
+                    or re.search(r"[\x00-\x1f\x7f]", t)
                     or not raw_seats
                     or isinstance(raw_seats, (bool, dict))
                 ):
                     return self._send_json({"success": False, "message": "Complete screening and seat parameters are required"}, 200, sid)
 
                 seat_list = raw_seats if isinstance(raw_seats, list) else str(raw_seats).split(",")
-                seats: list[str] = []
+                seats_map: dict[str, str] = {}
                 for s in seat_list:
                     if isinstance(s, (bool, list, dict)):
                         return self._send_json({"success": False, "message": "Invalid seat coordinate"}, 200, sid)
@@ -845,15 +981,14 @@ def make_handler(state: ContractState):
                         continue
                     if not re.match(r"^[A-H](?:[1-9]|1[0-2])$", code):
                         return self._send_json({"success": False, "message": f"Invalid seat coordinate: {code}"}, 200, sid)
-                    if code not in seats:
-                        seats.append(code)
+                    seats_map[code] = code
 
+                seats = sorted(seats_map.values(), key=lambda c: (c[0], int(c[1:])))
                 if not seats:
                     return self._send_json({"success": False, "message": "At least one valid seat must be selected"}, 200, sid)
                 if len(seats) > MAX_SEATS_PER_ORDER:
                     return self._send_json({"success": False, "message": f"Maximum {MAX_SEATS_PER_ORDER} seats allowed per transaction"}, 200, sid)
 
-                # Strictly trust server session user_id ONLY (never client user_code)
                 sess_uid = int(session.get("user_id") or 0)
 
                 with state.db_lock:
@@ -879,7 +1014,9 @@ def make_handler(state: ContractState):
                         if not sched:
                             db.execute("ROLLBACK")
                             return self._send_json({"success": False, "message": "Selected movie is not scheduled at this theater"}, 200, sid)
-                        if (sched["start_date"] and d < sched["start_date"]) or (sched["end_date"] and d > sched["end_date"]):
+                        s_start = str(sched["start_date"] or "").strip()
+                        s_end = str(sched["end_date"] or "").strip()
+                        if (s_start and d < s_start) or (s_end and d > s_end):
                             db.execute("ROLLBACK")
                             return self._send_json({"success": False, "message": "Selected screening date is outside the theater schedule window"}, 200, sid)
 
@@ -983,6 +1120,8 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "OK", "data": srows}, 200, sid)
 
             if route == "movie/seat/delete":
+                if not self._verify_same_origin():
+                    return self._send_json({"success": False, "message": "Forbidden: cross-origin request rejected"}, 403, sid)
                 sess_uid = int(session.get("user_id") or 0)
                 if sess_uid <= 0:
                     return self._send_json({"success": False, "message": "Authentication required to cancel a booking"}, 401, sid)
@@ -990,24 +1129,37 @@ def make_handler(state: ContractState):
                 if seat_id <= 0:
                     return self._send_json({"success": False, "message": "Valid seat_code is required"}, 200, sid)
                 with state.db_lock:
-                    srow = db.execute("SELECT * FROM t_seat WHERE seat_code = ?", (seat_id,)).fetchone()
-                    if not srow:
-                        return self._send_json({"success": False, "message": "Ticket record not found"}, 404, sid)
-                    owner_uid = int(srow["user_code"]) if srow["user_code"] is not None else 0
-                    if owner_uid <= 0 or owner_uid != sess_uid:
-                        return self._send_json({"success": False, "message": "Not authorized to cancel this booking"}, 403, sid)
-                    db.execute("DELETE FROM t_seat WHERE seat_code = ? AND user_code = ?", (seat_id, sess_uid))
+                    db.execute("BEGIN IMMEDIATE")
+                    try:
+                        srow = db.execute("SELECT * FROM t_seat WHERE seat_code = ?", (seat_id,)).fetchone()
+                        if not srow:
+                            db.execute("ROLLBACK")
+                            return self._send_json({"success": False, "message": "Ticket record not found"}, 404, sid)
+                        owner_uid = int(srow["user_code"]) if srow["user_code"] is not None else 0
+                        if owner_uid <= 0 or owner_uid != sess_uid:
+                            db.execute("ROLLBACK")
+                            return self._send_json({"success": False, "message": "Not authorized to cancel this booking"}, 403, sid)
+                        cur = db.execute("DELETE FROM t_seat WHERE seat_code = ? AND user_code = ?", (seat_id, sess_uid))
+                        if cur.rowcount == 0:
+                            db.execute("ROLLBACK")
+                            return self._send_json({"success": False, "message": "Ticket record not found"}, 404, sid)
+                        db.execute("COMMIT")
+                    except Exception:
+                        db.execute("ROLLBACK")
+                        raise
                 return self._send_json({"success": True, "message": "Booking cancelled", "data": {"seat_code": seat_id}}, 200, sid)
 
             # 6. Customer Auth & Password Security
             if route == "user/user/reg":
+                if not self._verify_same_origin():
+                    return self._send_json({"success": False, "message": "Forbidden: cross-origin request rejected"}, 403, sid)
                 name = self._str_param(p, "name")
                 email = self._str_param(p, "email").lower()
                 pw = self._raw_str_param(p, "password")
                 pw_bytes = len(pw.encode("utf-8"))
-                if not name or len(name) > 50:
+                if name == "" or len(name) > 50:
                     return self._send_json({"success": False, "message": "Please enter a valid name (1-50 characters)"}, 200, sid)
-                if not email or not EMAIL_RE.match(email) or len(email) > 100:
+                if email == "" or not EMAIL_RE.match(email) or len(email) > 100:
                     return self._send_json({"success": False, "message": "Please enter a valid email address"}, 200, sid)
                 if pw_bytes < 6 or pw_bytes > MAX_PASSWORD_BYTES:
                     return self._send_json({"success": False, "message": "Password must be 6-72 characters"}, 200, sid)
@@ -1031,6 +1183,8 @@ def make_handler(state: ContractState):
                 )
 
             if route == "user/user/login":
+                if not self._verify_same_origin():
+                    return self._send_json({"success": False, "message": "Forbidden: cross-origin request rejected"}, 403, sid)
                 email = self._str_param(p, "email").lower()
                 pw = self._raw_str_param(p, "password")
                 if not email or not pw:
@@ -1053,6 +1207,8 @@ def make_handler(state: ContractState):
                 )
 
             if route == "user/user/logout":
+                if not self._verify_same_origin():
+                    return self._send_json({"success": False, "message": "Forbidden: cross-origin request rejected"}, 403, sid)
                 session.pop("user_id", None)
                 session.pop("user_email", None)
                 clear_reset_challenge(session)
@@ -1079,6 +1235,8 @@ def make_handler(state: ContractState):
                 )
 
             if route == "user/user/sendresetcode":
+                if not self._verify_same_origin():
+                    return self._send_json({"success": False, "message": "Forbidden: cross-origin request rejected"}, 403, sid)
                 email = self._str_param(p, "email").lower()
                 if not email or not EMAIL_RE.match(email) or len(email) > 100:
                     return self._send_json({"success": False, "message": "Please enter a valid email address"}, 200, sid)
@@ -1108,6 +1266,8 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "Verification code generated and sent", "data": resp_data}, 200, sid)
 
             if route == "user/user/changepassword":
+                if not self._verify_same_origin():
+                    return self._send_json({"success": False, "message": "Forbidden: cross-origin request rejected"}, 403, sid)
                 sess_uid = int(session.get("user_id") or 0)
                 old_pw = self._raw_str_param(p, "old_password")
                 new_pw = self._raw_str_param(p, "pwd")
@@ -1237,18 +1397,8 @@ def make_handler(state: ContractState):
                             (data["movie_name"], data["tag"], data["star"], data["movie_type"], data["img"], data["money"], data["times"], now_str),
                         )
                         mid = int(cur.lastrowid)
-                        for tid in valid_t:
-                            db.execute(
-                                "INSERT INTO theater_movie (theater_code, movie_code, start_date, end_date, daily_showtimes, created_time) VALUES (?,?,?,?,?,?)",
-                                (tid, mid, "2026-01-01", "2027-12-31", 4, now_str),
-                            )
-                        for oid in valid_o:
-                            orow = db.execute("SELECT offer_validity FROM t_offer WHERE offer_code = ?", (oid,)).fetchone()
-                            vto = orow["offer_validity"] if orow and is_valid_iso_date(orow["offer_validity"] or "") else "2027-12-31"
-                            db.execute(
-                                "INSERT INTO movie_offer (movie_code, offer_code, discount_percent, valid_from, valid_to, created_time) VALUES (?,?,?,?,?,?)",
-                                (mid, oid, 0.0, "2026-01-01", vto, now_str),
-                            )
+                        sync_schedule_rows(db, "movie_code", mid, valid_t, "theater_code", now_str)
+                        sync_movie_offer_rows(db, "movie_code", mid, valid_o, "offer_code", now_str)
                         db.execute("COMMIT")
                     except Exception:
                         db.execute("ROLLBACK")
@@ -1264,9 +1414,11 @@ def make_handler(state: ContractState):
                 if mid <= 0:
                     return self._send_json({"success": False, "message": "Valid movie_code is required"}, 200, sid)
                 with state.db_lock:
-                    if not db.execute("SELECT 1 FROM t_movies WHERE movie_code = ?", (mid,)).fetchone():
+                    existing_row = db.execute("SELECT * FROM t_movies WHERE movie_code = ?", (mid,)).fetchone()
+                    if not existing_row:
                         return self._send_json({"success": False, "message": "Movie not found"}, 404, sid)
-                    data, err = prepare_movie_data(p)
+                    merged = merge_existing_payload(dict(existing_row), p, MOVIE_ALLOWED_FIELDS)
+                    data, err = prepare_movie_data(merged)
                     if err is not None or data is None:
                         return self._send_json({"success": False, "message": err or "Invalid movie fields"}, 200, sid)
 
@@ -1280,21 +1432,9 @@ def make_handler(state: ContractState):
                             (data["movie_name"], data["tag"], data["star"], data["movie_type"], data["img"], data["money"], data["times"], now_str, mid),
                         )
                         if valid_t is not None:
-                            db.execute("DELETE FROM theater_movie WHERE movie_code = ?", (mid,))
-                            for tid in valid_t:
-                                db.execute(
-                                    "INSERT INTO theater_movie (theater_code, movie_code, start_date, end_date, daily_showtimes, created_time) VALUES (?,?,?,?,?,?)",
-                                    (tid, mid, "2026-01-01", "2027-12-31", 4, now_str),
-                                )
+                            sync_schedule_rows(db, "movie_code", mid, valid_t, "theater_code", now_str)
                         if valid_o is not None:
-                            db.execute("DELETE FROM movie_offer WHERE movie_code = ?", (mid,))
-                            for oid in valid_o:
-                                orow = db.execute("SELECT offer_validity FROM t_offer WHERE offer_code = ?", (oid,)).fetchone()
-                                vto = orow["offer_validity"] if orow and is_valid_iso_date(orow["offer_validity"] or "") else "2027-12-31"
-                                db.execute(
-                                    "INSERT INTO movie_offer (movie_code, offer_code, discount_percent, valid_from, valid_to, created_time) VALUES (?,?,?,?,?,?)",
-                                    (mid, oid, 0.0, "2026-01-01", vto, now_str),
-                                )
+                            sync_movie_offer_rows(db, "movie_code", mid, valid_o, "offer_code", now_str)
                         db.execute("COMMIT")
                     except Exception:
                         db.execute("ROLLBACK")
@@ -1373,13 +1513,9 @@ def make_handler(state: ContractState):
                             ),
                         )
                         new_tid = int(cur.lastrowid)
-                        if not data["theater_id"]:
+                        if data["theater_id"] is None or data["theater_id"] == "":
                             db.execute("UPDATE t_theater SET theater_id = ? WHERE theater_code = ?", (f"TH-{new_tid:03d}", new_tid))
-                        for mid in valid_m:
-                            db.execute(
-                                "INSERT INTO theater_movie (theater_code, movie_code, start_date, end_date, daily_showtimes, created_time) VALUES (?,?,?,?,?,?)",
-                                (new_tid, mid, "2026-01-01", "2027-12-31", 4, now_str),
-                            )
+                        sync_schedule_rows(db, "theater_code", new_tid, valid_m, "movie_code", now_str)
                         db.execute("COMMIT")
                     except Exception:
                         db.execute("ROLLBACK")
@@ -1391,12 +1527,14 @@ def make_handler(state: ContractState):
                 if tid <= 0:
                     return self._send_json({"success": False, "message": "Valid theater_code is required"}, 200, sid)
                 with state.db_lock:
-                    if not db.execute("SELECT 1 FROM t_theater WHERE theater_code = ?", (tid,)).fetchone():
+                    existing_row = db.execute("SELECT * FROM t_theater WHERE theater_code = ?", (tid,)).fetchone()
+                    if not existing_row:
                         return self._send_json({"success": False, "message": "Theater not found"}, 404, sid)
-                    data, err = prepare_theater_data(p)
+                    merged = merge_existing_payload(dict(existing_row), p, THEATER_ALLOWED_FIELDS)
+                    data, err = prepare_theater_data(merged)
                     if err is not None or data is None:
                         return self._send_json({"success": False, "message": err or "Invalid theater fields"}, 200, sid)
-                    if not data["theater_id"]:
+                    if data["theater_id"] is None or data["theater_id"] == "":
                         data["theater_id"] = f"TH-{tid:03d}"
                     valid_m = resolve_valid_ids(db, "t_movies", "movie_code", p["movie_codes"]) if "movie_codes" in p else None
                     db.execute("BEGIN IMMEDIATE")
@@ -1417,12 +1555,7 @@ def make_handler(state: ContractState):
                             ),
                         )
                         if valid_m is not None:
-                            db.execute("DELETE FROM theater_movie WHERE theater_code = ?", (tid,))
-                            for mid in valid_m:
-                                db.execute(
-                                    "INSERT INTO theater_movie (theater_code, movie_code, start_date, end_date, daily_showtimes, created_time) VALUES (?,?,?,?,?,?)",
-                                    (tid, mid, "2026-01-01", "2027-12-31", 4, now_str),
-                                )
+                            sync_schedule_rows(db, "theater_code", tid, valid_m, "movie_code", now_str)
                         db.execute("COMMIT")
                     except Exception:
                         db.execute("ROLLBACK")
@@ -1460,7 +1593,7 @@ def make_handler(state: ContractState):
                         mcodes = mmap.get(int(o["offer_code"]), [])
                         o["movie_codes"] = mcodes
                         o["movie_count"] = len(mcodes)
-                        ucode = int(o["user_code"]) if o.get("user_code") else 0
+                        ucode = int(o["user_code"]) if o.get("user_code") is not None else 0
                         o["owner"] = users.get(ucode) if ucode > 0 else None
                 return self._send_json({"success": True, "message": "OK", "data": offers}, 200, sid)
 
@@ -1507,11 +1640,7 @@ def make_handler(state: ContractState):
                             ),
                         )
                         oid = int(cur.lastrowid)
-                        for mid in valid_m:
-                            db.execute(
-                                "INSERT INTO movie_offer (movie_code, offer_code, discount_percent, valid_from, valid_to, created_time) VALUES (?,?,?,?,?,?)",
-                                (mid, oid, 0.0, "2026-01-01", data["offer_validity"], now_str),
-                            )
+                        sync_movie_offer_rows(db, "offer_code", oid, valid_m, "movie_code", now_str, data["offer_validity"])
                         db.execute("COMMIT")
                     except sqlite3.IntegrityError:
                         db.execute("ROLLBACK")
@@ -1526,9 +1655,11 @@ def make_handler(state: ContractState):
                 if oid <= 0:
                     return self._send_json({"success": False, "message": "Valid offer_code is required"}, 200, sid)
                 with state.db_lock:
-                    if not db.execute("SELECT 1 FROM t_offer WHERE offer_code = ?", (oid,)).fetchone():
+                    existing_row = db.execute("SELECT * FROM t_offer WHERE offer_code = ?", (oid,)).fetchone()
+                    if not existing_row:
                         return self._send_json({"success": False, "message": "Offer not found"}, 404, sid)
-                    data, err = prepare_offer_data(db, p, oid)
+                    merged = merge_existing_payload(dict(existing_row), p, OFFER_ALLOWED_FIELDS)
+                    data, err = prepare_offer_data(db, merged, oid)
                     if err is not None or data is None:
                         return self._send_json({"success": False, "message": err or "Invalid offer fields"}, 200, sid)
                     valid_m = resolve_valid_ids(db, "t_movies", "movie_code", p["movie_codes"]) if "movie_codes" in p else None
@@ -1551,12 +1682,7 @@ def make_handler(state: ContractState):
                             ),
                         )
                         if valid_m is not None:
-                            db.execute("DELETE FROM movie_offer WHERE offer_code = ?", (oid,))
-                            for mid in valid_m:
-                                db.execute(
-                                    "INSERT INTO movie_offer (movie_code, offer_code, discount_percent, valid_from, valid_to, created_time) VALUES (?,?,?,?,?,?)",
-                                    (mid, oid, 0.0, "2026-01-01", data["offer_validity"], now_str),
-                                )
+                            sync_movie_offer_rows(db, "offer_code", oid, valid_m, "movie_code", now_str, data["offer_validity"])
                         else:
                             db.execute("UPDATE movie_offer SET valid_to = ? WHERE offer_code = ?", (data["offer_validity"], oid))
                         db.execute("COMMIT")
@@ -1586,17 +1712,42 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "Offer deleted successfully", "data": {"offer_code": oid}}, 200, sid)
 
             # Admin Seats
+            def load_enriched_seats() -> list[dict]:
+                srows = rows_to_dicts(db.execute("SELECT * FROM t_seat ORDER BY seat_code DESC").fetchall())
+                for s in srows:
+                    mrow = db.execute("SELECT * FROM t_movies WHERE movie_code = ?", (s["movie_code"],)).fetchone()
+                    urow = db.execute("SELECT user_code, user_name, email FROM t_user WHERE user_code = ?", (s["user_code"],)).fetchone() if s["user_code"] else None
+                    trow = db.execute("SELECT theater_code, theater_name, address FROM t_theater WHERE theater_code = ?", (s["theater_code"] or 1,)).fetchone()
+                    s["movie"] = dict(mrow) if mrow else None
+                    s["user"] = dict(urow) if urow else None
+                    s["theater"] = dict(trow) if trow else None
+                return srows
+
             if route == "admin/seat/index":
                 with state.db_lock:
-                    srows = rows_to_dicts(db.execute("SELECT * FROM t_seat ORDER BY seat_code DESC").fetchall())
-                    for s in srows:
-                        mrow = db.execute("SELECT * FROM t_movies WHERE movie_code = ?", (s["movie_code"],)).fetchone()
-                        urow = db.execute("SELECT user_code, user_name, email FROM t_user WHERE user_code = ?", (s["user_code"],)).fetchone() if s["user_code"] else None
-                        trow = db.execute("SELECT theater_code, theater_name, address FROM t_theater WHERE theater_code = ?", (s["theater_code"] or 1,)).fetchone()
-                        s["movie"] = dict(mrow) if mrow else None
-                        s["user"] = dict(urow) if urow else None
-                        s["theater"] = dict(trow) if trow else None
+                    srows = load_enriched_seats()
                 return self._send_json({"success": True, "message": "OK", "data": srows}, 200, sid)
+
+            if route == "admin/seat/exportcsv":
+                with state.db_lock:
+                    srows = load_enriched_seats()
+                headers = ["Booking ID", "Movie", "Theater", "Date", "Time", "Seat", "Zone", "Customer", "Email", "Created At"]
+                csv_rows = [
+                    [
+                        s["seat_code"],
+                        (s["movie"] or {}).get("movie_name") or f"Movie #{s['movie_code']}",
+                        (s["theater"] or {}).get("theater_name") or f"Theater #{s.get('theater_code') or 1}",
+                        s.get("date") or "",
+                        s.get("time") or "",
+                        s.get("seat_num") or "",
+                        "Prime VIP" if int(s.get("seat_zone") or 1) == 2 else "Standard",
+                        (s["user"] or {}).get("user_name") or "Guest Checkout",
+                        (s["user"] or {}).get("email") or "",
+                        s.get("create_time") or "",
+                    ]
+                    for s in srows
+                ]
+                return self._send_csv("cinetix-seat-bookings.csv", headers, csv_rows, sid)
 
             if route == "admin/seat/delete":
                 seat_id = self._id_param(p, "seat_code", allow_direct=True)
@@ -1646,12 +1797,13 @@ def make_handler(state: ContractState):
                 uid = self._id_param(p, "user_code", allow_direct=True)
                 if uid <= 0:
                     return self._send_json({"success": False, "message": "Valid user_code is required"}, 200, sid)
-                uname = self._str_param(p, "user_name")
-                uemail = self._str_param(p, "email").lower()
-                upw = self._raw_str_param(p, "login_pwd")
                 with state.db_lock:
-                    if not db.execute("SELECT 1 FROM t_user WHERE user_code = ?", (uid,)).fetchone():
+                    existing_row = db.execute("SELECT * FROM t_user WHERE user_code = ?", (uid,)).fetchone()
+                    if not existing_row:
                         return self._send_json({"success": False, "message": "User not found"}, 404, sid)
+                    uname = self._str_param(p, "user_name") if "user_name" in p else str(existing_row["user_name"])
+                    uemail = self._str_param(p, "email").lower() if "email" in p else str(existing_row["email"]).lower()
+                    upw = self._raw_str_param(p, "login_pwd")
                     err = validate_admin_user_input(db, uname, uemail, upw, False, uid)
                     if err is not None:
                         return self._send_json({"success": False, "message": err}, 200, sid)
@@ -1687,9 +1839,22 @@ def make_handler(state: ContractState):
     return Handler
 
 
-def start_background_server() -> tuple[ThreadingHTTPServer, str]:
+class ReusableThreadingHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+
+
+def start_background_server(port_range: tuple[int, int] = (4300, 4399)) -> tuple[ThreadingHTTPServer, str]:
     state = ContractState()
-    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(state))
+    handler_cls = make_handler(state)
+    server: ThreadingHTTPServer | None = None
+    for candidate_port in range(port_range[0], port_range[1] + 1):
+        try:
+            server = ReusableThreadingHTTPServer(("127.0.0.1", candidate_port), handler_cls)
+            break
+        except OSError:
+            continue
+    if server is None:
+        raise RuntimeError(f"No free port available in isolated range {port_range[0]}-{port_range[1]}")
     server.state = state  # type: ignore[attr-defined]
     port = server.server_address[1]
     thread = threading.Thread(target=server.serve_forever, daemon=True)

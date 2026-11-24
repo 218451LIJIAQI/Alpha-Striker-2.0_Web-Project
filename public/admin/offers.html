@@ -54,6 +54,7 @@
       const todayIso = window.CineTicket.todayIso();
 
       const tableCtrl = AdminApp.createTableController({
+        endpoint: '/index.php/admin/offer/index',
         toolbarId: 'offers-toolbar',
         tbodyId: 'offers-tbody',
         colSpan: 10,
@@ -77,7 +78,12 @@
           idKey: 'offer_code',
           confirmText: function (n) { return 'Delete ' + n + ' selected offer(s)? Movie applicability links will also be removed.'; },
           successPrefix: 'Deleted',
-          onSuccess: loadOffers,
+        },
+        deleteAction: {
+          endpoint: '/index.php/admin/offer/delete',
+          idKey: 'offer_code',
+          confirmText: function (id) { return 'Delete offer #' + id + '? Movie applicability links will also be removed.'; },
+          successText: 'Offer deleted',
         },
         exportCsv: {
           filename: 'cinetix-offers.csv',
@@ -125,23 +131,9 @@
             '</tr>'
           );
         },
-        afterRender: function (tbody) {
-          AdminApp.bindDeleteActions(tbody, {
-            endpoint: '/index.php/admin/offer/delete',
-            idKey: 'offer_code',
-            confirmText: function (id) { return 'Delete offer #' + id + '? Movie applicability links will also be removed.'; },
-            successText: 'Offer deleted',
-            onSuccess: loadOffers,
-          });
-        },
       });
 
-      async function loadOffers() {
-        const res = await AdminApp.apiFetch('/index.php/admin/offer/index');
-        tableCtrl.setItems(res.success && Array.isArray(res.data) ? res.data : []);
-      }
-
-      loadOffers();
+      tableCtrl.reload();
     });
   </script>
 </body>

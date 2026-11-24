@@ -57,6 +57,9 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
       click() {
         this.clicked = true;
       },
+      focus() {
+        this.focused = true;
+      },
       setAttribute: (k, v) => attrs.set(k, String(v)),
       getAttribute: (k) => (attrs.has(k) ? attrs.get(k) : null),
       remove() {
@@ -72,6 +75,8 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
   const sandbox = {
     window: null,
     Date: Date,
+    TextEncoder: TextEncoder,
+    URLSearchParams: URLSearchParams,
     Blob: class Blob {
       constructor(parts, opts) {
         this.parts = parts;
@@ -127,6 +132,7 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
       head: {
         appendChild: (el) => appended.push(el),
       },
+      activeElement: null,
       getElementById: (id) => domById.get(id) || null,
       querySelector: () => null,
       querySelectorAll: () => [],
@@ -416,4 +422,109 @@ test('AdminApp.createTableController, populateUserSelect, ensureSelectOption, an
   sandbox.AdminApp.ensureSelectOption(genreSel, 'Documentary');
   assert.equal(genreSel.value, 'Documentary');
   assert.equal(genreSel.options.length, 1);
+});
+
+test('sanitizeRedirectPath, UTF-8 password byte bounds, parseSeatCodes, activatePill, and renderStateCard enforce security & UI invariants', () => {
+  const { sandbox, makeElement } = createBrowserSandbox('/login.html');
+  const CT = sandbox.CineTicket;
+
+  // Open-redirect defense
+  assert.equal(CT.sanitizeRedirectPath('https://evil.example/phish', 'pages/homepage.html'), 'pages/homepage.html');
+  assert.equal(CT.sanitizeRedirectPath('//evil.example', 'pages/homepage.html'), 'pages/homepage.html');
+  assert.equal(CT.sanitizeRedirectPath('\\\\evil.example', 'pages/homepage.html'), 'pages/homepage.html');
+  assert.equal(CT.sanitizeRedirectPath('javascript:alert(1)', 'pages/homepage.html'), 'pages/homepage.html');
+  assert.equal(CT.sanitizeRedirectPath('data:text/html,<h1>x</h1>', 'pages/homepage.html'), 'pages/homepage.html');
+  assert.equal(CT.sanitizeRedirectPath('pages/booking3.html?movie_code=1', 'pages/homepage.html'), 'pages/booking3.html?movie_code=1');
+  assert.equal(CT.sanitizeRedirectPath('/pages/generate_ticket.html', 'pages/homepage.html'), '/pages/generate_ticket.html');
+
+  // UTF-8 byte ceiling (19 x 4-byte emoji = 76 UTF-8 bytes even though .length is 38)
+  assert.equal(CT.isValidPasswordBytes('short'), false);
+  assert.equal(CT.isValidPasswordBytes('x'.repeat(72)), true);
+  assert.equal(CT.isValidPasswordBytes('x'.repeat(73)), false);
+  assert.equal(CT.utf8ByteLength('🎬'.repeat(19)), 76);
+  assert.equal(CT.isValidPasswordBytes('🎬'.repeat(19)), false);
+
+  // Canonical natural seat code parsing, deduplication & invalid filtering
+  assert.deepEqual(
+    Array.from(CT.parseSeatCodes('d10, a2, D2, Z9, A13, d2, b1', 10)),
+    ['A2', 'B1', 'D2', 'D10']
+  );
+  assert.equal(CT.parseSeatCodes('A1,A2,A3,A4,A5,A6,A7,A8,A9,A10,A11,A12', 10).length, 10);
+
+  // Pill activation + ARIA pressed sync
+  const b1 = makeElement('button');
+  const b2 = makeElement('button');
+  CT.activatePill([b1, b2], b2);
+  assert.equal(b1.classList.contains('active'), false);
+  assert.equal(b1.getAttribute('aria-pressed'), 'false');
+  assert.equal(b2.classList.contains('active'), true);
+  assert.equal(b2.getAttribute('aria-pressed'), 'true');
+
+  // State card alert rendering
+  const box = makeElement('div');
+  let retried = false;
+  CT.renderStateCard(box, {
+    heading: 'Connection <Error>',
+    message: 'Unable to load catalog',
+    actionLabel: 'Retry',
+    onAction: () => { retried = true; },
+    isError: true,
+  });
+  assert.ok(box.innerHTML.includes('role="alert"'));
+  assert.ok(box.innerHTML.includes('is-error-state'));
+  assert.ok(box.innerHTML.includes('Connection &lt;Error&gt;'));
+  assert.equal(retried, false);
+});
+
+test('AdminApp.sanitizeCsvCell neutralizes spreadsheet formula injection and createTableController renders error/retry state', async () => {
+  let shouldFail = true;
+  const { sandbox, storage, domById, makeElement } = createBrowserSandbox('/admin/offers.html', async () => {
+    if (shouldFail) throw new Error('offline');
+    return { status: 200, json: async () => ({ success: true, data: [{ id: 7, title: '=CMD|\' /C calc\'!A0' }] }) };
+  });
+  storage.set('adminToken', 'csrf-token-456');
+  const adminCode = fs.readFileSync(path.join(ROOT, 'public/js/admin/admin.js'), 'utf8');
+  vm.runInNewContext(adminCode, sandbox);
+
+  const sanitize = sandbox.AdminApp.sanitizeCsvCell;
+  assert.equal(sanitize('=1+1'), "'=1+1");
+  assert.equal(sanitize('+SUM(A1:A2)'), "'+SUM(A1:A2)");
+  assert.equal(sanitize('-2+3'), "'-2+3");
+  assert.equal(sanitize('@IMPORTXML("http://x","//a")'), '\'@IMPORTXML(""http://x"",""//a"")"'.startsWith("'") ? '"\'@IMPORTXML(""http://x"",""//a"")"' : '');
+  assert.equal(sanitize('  =HYPERLINK("http://evil")'), '"\'  =HYPERLINK(""http://evil"")"');
+  assert.equal(sanitize('\t+cmd'), "'\t+cmd");
+  assert.equal(sanitize('Frozen 2'), 'Frozen 2');
+
+  const tbody = makeElement('tbody');
+  let retryBtn = null;
+  tbody.querySelector = (sel) => {
+    if (sel === '.retry-table-btn') {
+      retryBtn = makeElement('button');
+      return retryBtn;
+    }
+    return null;
+  };
+  domById.set('err-tbody', tbody);
+
+  const ctrl = sandbox.AdminApp.createTableController({
+    endpoint: '/index.php/admin/offer/index',
+    tbodyId: 'err-tbody',
+    colSpan: 5,
+    exportCsv: {
+      filename: 'offers.csv',
+      headers: ['ID', 'Title'],
+      row: (it) => [it.id, it.title],
+    },
+    renderRow: (it) => `<tr><td>${sandbox.AdminApp.escapeHtml(it.title)}</td></tr>`,
+  });
+
+  await ctrl.reload();
+  assert.ok(tbody.innerHTML.includes('table-error-state'));
+  assert.ok(tbody.innerHTML.includes('Unable to load records:'));
+  assert.ok(retryBtn !== null);
+
+  shouldFail = false;
+  await retryBtn.trigger('click');
+  assert.ok(tbody.innerHTML.includes('=CMD|'));
+  assert.ok(!tbody.innerHTML.includes('table-error-state'));
 });

@@ -49,6 +49,7 @@
 
       const esc = AdminApp.escapeHtml;
       const tableCtrl = AdminApp.createTableController({
+        endpoint: '/index.php/admin/user/index',
         toolbarId: 'users-toolbar',
         tbodyId: 'users-tbody',
         colSpan: 7,
@@ -65,7 +66,12 @@
           idKey: 'user_code',
           confirmText: function (n) { return 'Delete ' + n + ' selected user account(s)?'; },
           successPrefix: 'Deleted',
-          onSuccess: loadUsers,
+        },
+        deleteAction: {
+          endpoint: '/index.php/admin/user/delete',
+          idKey: 'user_code',
+          confirmText: function (id) { return 'Delete user #' + id + '?'; },
+          successText: 'User deleted',
         },
         exportCsv: {
           filename: 'cinetix-users.csv',
@@ -93,23 +99,9 @@
             '</tr>'
           );
         },
-        afterRender: function (tbody) {
-          AdminApp.bindDeleteActions(tbody, {
-            endpoint: '/index.php/admin/user/delete',
-            idKey: 'user_code',
-            confirmText: function (id) { return 'Delete user #' + id + '?'; },
-            successText: 'User deleted',
-            onSuccess: loadUsers,
-          });
-        },
       });
 
-      async function loadUsers() {
-        const res = await AdminApp.apiFetch('/index.php/admin/user/index');
-        tableCtrl.setItems(res.success && Array.isArray(res.data) ? res.data : []);
-      }
-
-      loadUsers();
+      tableCtrl.reload();
     });
   </script>
 </body>

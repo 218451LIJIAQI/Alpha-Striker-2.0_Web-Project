@@ -104,11 +104,8 @@
       AdminApp.renderAdminNav('movies');
       if (!(await AdminApp.ensureAuthenticated())) return;
 
-      const movieCode = (new URLSearchParams(window.location.search).get('movie_code') || '').trim();
-      if (!/^[1-9]\d*$/.test(movieCode)) {
-        window.location.href = 'movies.html';
-        return;
-      }
+      const movieCode = AdminApp.getQueryId('movie_code', 'movies.html');
+      if (!movieCode) return;
 
       const imgInput = document.getElementById('img');
       const syncPreview = AdminApp.bindImagePreview(imgInput, document.getElementById('poster-preview'));
@@ -117,43 +114,48 @@
       AdminApp.bindCheckControls(theaterGrid, 'select-all-theaters', 'clear-all-theaters');
       AdminApp.bindCheckControls(offerGrid, 'select-all-offers', 'clear-all-offers');
 
-      const [detailRes, theatersRes, offersRes] = await Promise.all([
-        AdminApp.apiFetch('/index.php/admin/movie/getMovieByCode?movie_code=' + encodeURIComponent(movieCode)),
-        AdminApp.apiFetch('/index.php/admin/theater/index'),
-        AdminApp.apiFetch('/index.php/admin/offer/index'),
-      ]);
-      if (!detailRes.success || !detailRes.data) {
-        window.showToast(detailRes.message || 'Movie not found', 'error');
-        setTimeout(function () { window.location.href = 'movies.html'; }, 700);
+      try {
+        const [detailRes, theatersRes, offersRes] = await Promise.all([
+          AdminApp.apiFetch('/index.php/admin/movie/getMovieByCode?movie_code=' + encodeURIComponent(movieCode)),
+          AdminApp.apiFetch('/index.php/admin/theater/index'),
+          AdminApp.apiFetch('/index.php/admin/offer/index'),
+        ]);
+        if (!detailRes.success || !detailRes.data) {
+          window.showToast(detailRes.message || 'Movie not found', 'error');
+          setTimeout(function () { window.location.href = 'movies.html'; }, 700);
+          return;
+        }
+
+        const m = detailRes.data;
+        document.getElementById('movie_name').value = m.movie_name || '';
+        AdminApp.ensureSelectOption(document.getElementById('movie_type'), m.movie_type || 'Action');
+        document.getElementById('times').value = m.times || '';
+        document.getElementById('star').value = m.star !== undefined ? m.star : '5.0';
+        document.getElementById('money').value = m.money !== undefined ? m.money : '39.00';
+        document.getElementById('tag').value = m.tag || '';
+        imgInput.value = m.img || '';
+        syncPreview();
+
+        const theaters = theatersRes.success && Array.isArray(theatersRes.data) ? theatersRes.data : [];
+        const offers = offersRes.success && Array.isArray(offersRes.data) ? offersRes.data : [];
+        AdminApp.renderCheckList(
+          theaterGrid,
+          theaters,
+          'theater_code',
+          function (t) { return t.theater_name; },
+          Array.isArray(m.theater_codes) ? m.theater_codes : []
+        );
+        AdminApp.renderCheckList(
+          offerGrid,
+          offers,
+          'offer_code',
+          function (o) { return o.promo_code + ' — ' + o.offer_title + ' (-$' + (parseFloat(o.money) || 0).toFixed(2) + ')'; },
+          Array.isArray(m.offer_codes) ? m.offer_codes : []
+        );
+      } catch (_) {
+        window.showToast('Unable to load movie details', 'error');
         return;
       }
-
-      const m = detailRes.data;
-      document.getElementById('movie_name').value = m.movie_name || '';
-      AdminApp.ensureSelectOption(document.getElementById('movie_type'), m.movie_type || 'Action');
-      document.getElementById('times').value = m.times || '';
-      document.getElementById('star').value = m.star !== undefined ? m.star : '5.0';
-      document.getElementById('money').value = m.money !== undefined ? m.money : '39.00';
-      document.getElementById('tag').value = m.tag || '';
-      imgInput.value = m.img || '';
-      syncPreview();
-
-      const theaters = theatersRes.success && Array.isArray(theatersRes.data) ? theatersRes.data : [];
-      const offers = offersRes.success && Array.isArray(offersRes.data) ? offersRes.data : [];
-      AdminApp.renderCheckList(
-        theaterGrid,
-        theaters,
-        'theater_code',
-        function (t) { return t.theater_name; },
-        Array.isArray(m.theater_codes) ? m.theater_codes : []
-      );
-      AdminApp.renderCheckList(
-        offerGrid,
-        offers,
-        'offer_code',
-        function (o) { return o.promo_code + ' — ' + o.offer_title + ' (-$' + (parseFloat(o.money) || 0).toFixed(2) + ')'; },
-        Array.isArray(m.offer_codes) ? m.offer_codes : []
-      );
 
       document.getElementById('edit-movie-form').addEventListener('submit', function (e) {
         e.preventDefault();

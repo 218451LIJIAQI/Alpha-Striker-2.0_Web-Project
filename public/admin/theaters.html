@@ -120,18 +120,32 @@
       const movieGrid = document.getElementById('theater-movies-grid');
       const imgInput = document.getElementById('img');
       const saveBtn = document.getElementById('save-theater-btn');
+      const openAddBtn = document.getElementById('open-add-theater-btn');
       const syncPreview = AdminApp.bindImagePreview(imgInput, document.getElementById('theater-preview'));
       const esc = AdminApp.escapeHtml;
       let catalogMovies = [];
+      let lastFormTrigger = null;
 
       AdminApp.bindCheckControls(movieGrid, 'theater-select-all-movies', 'theater-clear-movies');
 
+      function closeEditorForm() {
+        form.classList.add('is-hidden');
+        const target = lastFormTrigger && lastFormTrigger.isConnected ? lastFormTrigger : openAddBtn;
+        lastFormTrigger = null;
+        target?.focus();
+      }
+
       async function loadCatalogMovies() {
-        const res = await AdminApp.apiFetch('/index.php/admin/movie/index');
-        catalogMovies = res.success && Array.isArray(res.data) ? res.data : [];
+        try {
+          const res = await AdminApp.apiFetch('/index.php/admin/movie/index');
+          catalogMovies = res.success && Array.isArray(res.data) ? res.data : [];
+        } catch (_) {
+          catalogMovies = [];
+        }
       }
 
       function openCreateForm() {
+        lastFormTrigger = openAddBtn;
         document.getElementById('theater_code').value = '';
         document.getElementById('theater_name').value = '';
         document.getElementById('theater_id').value = '';
@@ -148,36 +162,42 @@
         document.getElementById('theater_name').focus();
       }
 
-      async function openEditForm(theaterCode) {
-        const res = await AdminApp.apiFetch('/index.php/admin/theater/getTheaterByCode?theater_code=' + encodeURIComponent(theaterCode));
-        if (!res.success || !res.data) {
-          window.showToast(res.message || 'Theater not found', 'error');
-          return;
+      async function openEditForm(theaterCode, triggerBtn) {
+        lastFormTrigger = triggerBtn || openAddBtn;
+        try {
+          const res = await AdminApp.apiFetch('/index.php/admin/theater/getTheaterByCode?theater_code=' + encodeURIComponent(theaterCode));
+          if (!res.success || !res.data) {
+            window.showToast(res.message || 'Theater not found', 'error');
+            return;
+          }
+          const t = res.data;
+          document.getElementById('theater_code').value = String(t.theater_code);
+          document.getElementById('theater_name').value = t.theater_name || '';
+          document.getElementById('theater_id').value = t.theater_id || '';
+          document.getElementById('address').value = t.address || '';
+          document.getElementById('amenity').value = t.amenity || '';
+          document.getElementById('star').value = t.star !== undefined ? t.star : '4.8';
+          document.getElementById('distance').value = t.distance || '';
+          document.getElementById('reviews').value = t.reviews || '';
+          imgInput.value = t.img || '';
+          syncPreview();
+          heading.innerHTML = '<i class="fas fa-edit" aria-hidden="true"></i> Edit Theater #' + esc(t.theater_code);
+          AdminApp.renderCheckList(
+            movieGrid,
+            catalogMovies,
+            'movie_code',
+            function (m) { return m.movie_name; },
+            Array.isArray(t.movie_codes) ? t.movie_codes : []
+          );
+          form.classList.remove('is-hidden');
+          document.getElementById('theater_name').focus();
+        } catch (_) {
+          window.showToast('Unable to load theater details', 'error');
         }
-        const t = res.data;
-        document.getElementById('theater_code').value = String(t.theater_code);
-        document.getElementById('theater_name').value = t.theater_name || '';
-        document.getElementById('theater_id').value = t.theater_id || '';
-        document.getElementById('address').value = t.address || '';
-        document.getElementById('amenity').value = t.amenity || '';
-        document.getElementById('star').value = t.star !== undefined ? t.star : '4.8';
-        document.getElementById('distance').value = t.distance || '';
-        document.getElementById('reviews').value = t.reviews || '';
-        imgInput.value = t.img || '';
-        syncPreview();
-        heading.innerHTML = '<i class="fas fa-edit" aria-hidden="true"></i> Edit Theater #' + esc(t.theater_code);
-        AdminApp.renderCheckList(
-          movieGrid,
-          catalogMovies,
-          'movie_code',
-          function (m) { return m.movie_name; },
-          Array.isArray(t.movie_codes) ? t.movie_codes : []
-        );
-        form.classList.remove('is-hidden');
-        document.getElementById('theater_name').focus();
       }
 
       const tableCtrl = AdminApp.createTableController({
+        endpoint: '/index.php/admin/theater/index',
         toolbarId: 'theaters-toolbar',
         tbodyId: 'theaters-tbody',
         colSpan: 9,
@@ -202,7 +222,12 @@
           idKey: 'theater_code',
           confirmText: function (n) { return 'Delete ' + n + ' selected theater(s)? Related schedules and seat bookings will also be removed.'; },
           successPrefix: 'Deleted',
-          onSuccess: loadTheaters,
+        },
+        deleteAction: {
+          endpoint: '/index.php/admin/theater/delete',
+          idKey: 'theater_code',
+          confirmText: function (id) { return 'Delete theater #' + id + '? Related schedules and seat bookings will also be removed.'; },
+          successText: 'Theater deleted',
         },
         exportCsv: {
           filename: 'cinetix-theaters.csv',
@@ -241,31 +266,17 @@
         afterRender: function (tbody) {
           tbody.querySelectorAll('.edit-theater-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
-              openEditForm(btn.getAttribute('data-id'));
+              openEditForm(btn.getAttribute('data-id'), btn);
             });
-          });
-          AdminApp.bindDeleteActions(tbody, {
-            endpoint: '/index.php/admin/theater/delete',
-            idKey: 'theater_code',
-            confirmText: function (id) { return 'Delete theater #' + id + '? Related schedules and seat bookings will also be removed.'; },
-            successText: 'Theater deleted',
-            onSuccess: loadTheaters,
           });
         },
       });
 
-      async function loadTheaters() {
-        const res = await AdminApp.apiFetch('/index.php/admin/theater/index');
-        tableCtrl.setItems(res.success && Array.isArray(res.data) ? res.data : []);
-      }
-
-      document.getElementById('open-add-theater-btn').addEventListener('click', openCreateForm);
-      document.getElementById('cancel-theater-form').addEventListener('click', function () {
-        form.classList.add('is-hidden');
-      });
+      openAddBtn.addEventListener('click', openCreateForm);
+      document.getElementById('cancel-theater-form').addEventListener('click', closeEditorForm);
       window.addEventListener('cinetix:escape', function () {
         if (!form.classList.contains('is-hidden')) {
-          form.classList.add('is-hidden');
+          closeEditorForm();
         }
       });
 
@@ -293,18 +304,19 @@
           const res = await AdminApp.apiFetch(endpoint, { method: 'POST', body: payload });
           if (res.success) {
             window.showToast(editingCode ? 'Theater updated successfully' : 'Theater created successfully', 'success');
-            form.classList.add('is-hidden');
-            await loadTheaters();
+            await tableCtrl.reload();
+            closeEditorForm();
           } else {
             window.showToast(res.message || 'Failed to save theater', 'error');
           }
+        } catch (_) {
+          window.showToast('Network error while saving theater', 'error');
         } finally {
           saveBtn.disabled = false;
         }
       });
 
-      await loadCatalogMovies();
-      await loadTheaters();
+      await Promise.all([loadCatalogMovies(), tableCtrl.reload()]);
     });
   </script>
 </body>

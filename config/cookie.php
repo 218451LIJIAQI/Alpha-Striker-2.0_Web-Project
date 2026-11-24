@@ -6,5 +6,6 @@ return [
     'domain'    => '',
     'secure'    => false,
     'httponly'  => true,
+    'samesite'  => 'Lax',
     'setcookie' => true,
 ];

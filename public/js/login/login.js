@@ -30,6 +30,10 @@
       window.showToast('Please enter your email and password', 'warning');
       return;
     }
+    if (CT.utf8ByteLength(password) > 72) {
+      window.showToast('Password must be 6-72 bytes', 'warning');
+      return;
+    }
 
     if (submitBtn) submitBtn.disabled = true;
     try {
@@ -45,10 +49,7 @@
         }
         CT.AuthStore.setUser(result.data);
         const rawRedirect = new URLSearchParams(window.location.search).get('redirect') || '';
-        const safeRedirect = rawRedirect && !/^(?:https?:|javascript:|\/\/)/i.test(rawRedirect)
-          ? rawRedirect
-          : CT.pageUrl('homepage.html');
-        window.location.href = safeRedirect;
+        window.location.href = CT.sanitizeRedirectPath(rawRedirect, CT.pageUrl('homepage.html'));
         return;
       }
       window.showToast(result.message || 'Invalid email or password', 'error');
@@ -72,8 +73,12 @@
       window.showToast('Please complete all required fields', 'warning');
       return;
     }
-    if (password.length < 6 || password.length > 72) {
-      window.showToast('Password must be 6-72 characters', 'warning');
+    if (!CT.isValidEmail(email)) {
+      window.showToast('Please enter a valid email address', 'warning');
+      return;
+    }
+    if (!CT.isValidPasswordBytes(password)) {
+      window.showToast('Password must be 6-72 UTF-8 bytes', 'warning');
       return;
     }
     if (password !== confirmPassword) {

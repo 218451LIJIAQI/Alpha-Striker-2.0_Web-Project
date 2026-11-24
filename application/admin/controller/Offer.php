@@ -36,7 +36,7 @@ class Offer extends BaseAdmin
                 $mCodes           = $movieMap[$oid] ?? [];
                 $o['movie_codes'] = $mCodes;
                 $o['movie_count'] = count($mCodes);
-                $uCode            = !empty($o['user_code']) ? (int) $o['user_code'] : 0;
+                $uCode            = isset($o['user_code']) && $o['user_code'] !== null ? (int) $o['user_code'] : 0;
                 $o['owner']       = $uCode > 0 ? ($users[$uCode] ?? null) : null;
             }
             unset($o);
@@ -60,11 +60,7 @@ class Offer extends BaseAdmin
                 return $this->fail('Offer not found', 404);
             }
 
-            $mCodes = Db::table('movie_offer')
-                ->where('offer_code', $offerId)
-                ->order('movie_code', 'asc')
-                ->column('movie_code');
-            $offer['movie_codes'] = array_map('intval', $mCodes ?: []);
+            $offer['movie_codes'] = $this->queryRelationIds('movie_offer', 'offer_code', $offerId, 'movie_code');
 
             return $this->ok($offer);
         } catch (\Throwable $e) {
@@ -94,7 +90,7 @@ class Offer extends BaseAdmin
                     return $this->fail('Failed to create offer');
                 }
 
-                $this->syncOfferMovies($offerId, $movieCodes, $data['offer_validity']);
+                $this->syncMovieOfferRows('offer_code', $offerId, $movieCodes, 'movie_code', $data['offer_validity']);
                 Db::commit();
 
                 return $this->ok([
@@ -122,11 +118,13 @@ class Offer extends BaseAdmin
                 return $this->fail('Valid offer_code is required');
             }
 
-            if (!Db::name('offer')->where('offer_code', $offerId)->find()) {
+            $existing = Db::name('offer')->where('offer_code', $offerId)->find();
+            if (!$existing) {
                 return $this->fail('Offer not found', 404);
             }
 
-            [$data, $error] = $this->prepareOfferData($payload, $offerId);
+            $merged         = $this->mergeExistingPayload($existing, $payload, self::ALLOWED_FIELDS);
+            [$data, $error] = $this->prepareOfferData($merged, $offerId);
             if ($error !== null) {
                 return $this->fail($error);
             }
@@ -144,7 +142,7 @@ class Offer extends BaseAdmin
                 }
 
                 if ($movieCodes !== null) {
-                    $this->syncOfferMovies($offerId, $movieCodes, $data['offer_validity']);
+                    $this->syncMovieOfferRows('offer_code', $offerId, $movieCodes, 'movie_code', $data['offer_validity']);
                 } else {
                     Db::table('movie_offer')
                         ->where('offer_code', $offerId)
@@ -194,59 +192,47 @@ class Offer extends BaseAdmin
         }
     }
 
-    private function syncOfferMovies($offerId, array $movieCodes, $validUntil)
-    {
-        Db::table('movie_offer')->where('offer_code', $offerId)->delete();
-        if (empty($movieCodes)) {
-            return;
-        }
-
-        $now  = date('Y-m-d H:i:s');
-        $rows = [];
-        foreach ($movieCodes as $mid) {
-            $rows[] = [
-                'movie_code'       => (int) $mid,
-                'offer_code'       => (int) $offerId,
-                'discount_percent' => 0.00,
-                'valid_from'       => '2026-01-01',
-                'valid_to'         => $validUntil,
-                'created_time'     => $now,
-            ];
-        }
-        Db::table('movie_offer')->insertAll($rows);
-    }
-
     private function prepareOfferData(array $payload, $excludeOfferId)
     {
         $data = $this->pickAllowed($payload, self::ALLOWED_FIELDS);
 
-        if (empty($data['offer_title']) || $this->textLen($data['offer_title']) > 200) {
+        $title = isset($data['offer_title']) ? (string) $data['offer_title'] : '';
+        $type  = isset($data['offer_type']) ? (string) $data['offer_type'] : '';
+        $desc  = isset($data['offer_description']) ? (string) $data['offer_description'] : '';
+        $code  = isset($data['promo_code']) ? (string) $data['promo_code'] : '';
+        $valid = isset($data['offer_validity']) ? (string) $data['offer_validity'] : '';
+        $img   = isset($data['img']) ? (string) $data['img'] : '';
+        $badge = isset($data['badge']) && $data['badge'] !== null ? (string) $data['badge'] : '';
+
+        if ($title === '' || $this->textLen($title) > 200) {
             return [null, 'Offer title (1-200 characters) is required'];
         }
-        if (empty($data['offer_type']) || $this->textLen($data['offer_type']) > 100) {
+        if ($type === '' || $this->textLen($type) > 100) {
             return [null, 'Offer category (1-100 characters) is required'];
         }
-        if (empty($data['offer_description']) || $this->textLen($data['offer_description']) > 500) {
+        if ($desc === '' || $this->textLen($desc) > 500) {
             return [null, 'Offer description (1-500 characters) is required'];
         }
-        if (empty($data['promo_code']) || $this->textLen($data['promo_code']) > 100) {
+        if ($code === '' || $this->textLen($code) > 100) {
             return [null, 'Promo code (1-100 characters) is required'];
         }
-        if (empty($data['offer_validity']) || !$this->isValidIsoDate($data['offer_validity'])) {
+        if ($valid === '' || !$this->isValidIsoDate($valid)) {
             return [null, 'Validity date must use YYYY-MM-DD format'];
         }
-        if (empty($data['img']) || $this->textLen($data['img']) > 500) {
+        if ($img === '' || $this->textLen($img) > 500) {
             return [null, 'Offer image path or URL (1-500 characters) is required'];
         }
-        if (isset($data['badge']) && $this->textLen($data['badge']) > 50) {
+        if ($badge !== '' && $this->textLen($badge) > 50) {
             return [null, 'Highlight badge must be 50 characters or fewer'];
         }
-        if (!isset($data['money']) || !is_numeric($data['money']) || !is_finite((float) $data['money']) || (float) $data['money'] < 0) {
+
+        $money = $this->parseFiniteFloat($data['money'] ?? null, 0.0);
+        if ($money === null) {
             return [null, 'Discount amount must be a non-negative number'];
         }
 
         $ownerUserCode = null;
-        if (isset($data['user_code']) && $data['user_code'] !== '') {
+        if (array_key_exists('user_code', $data) && $data['user_code'] !== null && $data['user_code'] !== '') {
             $candidateUid = $this->parsePositiveInt($data['user_code']);
             if ($candidateUid <= 0 || !Db::name('user')->where('user_code', $candidateUid)->find()) {
                 return [null, 'Selected exclusive member account does not exist'];
@@ -254,7 +240,7 @@ class Offer extends BaseAdmin
             $ownerUserCode = $candidateUid;
         }
 
-        $promoCode  = strtoupper($data['promo_code']);
+        $promoCode  = strtoupper($code);
         $promoQuery = Db::name('offer')->where('promo_code', $promoCode);
         if ($excludeOfferId > 0) {
             $promoQuery->where('offer_code', '<>', $excludeOfferId);
@@ -263,11 +249,16 @@ class Offer extends BaseAdmin
             return [null, 'Promo code is already in use by another offer'];
         }
 
-        $data['promo_code'] = $promoCode;
-        $data['badge']      = isset($data['badge']) && $data['badge'] !== '' ? $data['badge'] : null;
-        $data['money']      = round((float) $data['money'], 2);
-        $data['user_code']  = $ownerUserCode;
-
-        return [$data, null];
+        return [[
+            'offer_title'       => $title,
+            'offer_type'        => $type,
+            'offer_description' => $desc,
+            'promo_code'        => $promoCode,
+            'offer_validity'    => $valid,
+            'img'               => $img,
+            'badge'             => $badge !== '' ? $badge : null,
+            'money'             => $this->roundCents($money),
+            'user_code'         => $ownerUserCode,
+        ], null];
     }
 }

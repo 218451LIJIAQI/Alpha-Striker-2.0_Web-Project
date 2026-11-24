@@ -8,18 +8,13 @@ document.addEventListener('DOMContentLoaded', function () {
   const theaterCode = urlParams.get('theater_code') || '1';
   const date = urlParams.get('date') || '';
   const time = urlParams.get('time') || '';
-  const uniqueSeats = Array.from(new Set(
-    (urlParams.get('seats') || '')
-      .split(',')
-      .map(function (s) { return s.trim().toUpperCase(); })
-      .filter(function (s) { return /^[A-H](?:[1-9]|1[0-2])$/.test(s); })
-  ));
+  const allParsedSeats = CT.parseSeatCodes(urlParams.get('seats') || '');
 
   const layoutEl = document.querySelector('.payment-layout');
   const emptyStateEl = document.getElementById('checkout-empty-state');
   const payBtn = document.querySelector('.pay-now-btn');
 
-  function showBlockedCheckout(heading, message) {
+  function showBlockedCheckout(heading, message, withRetry) {
     if (layoutEl) layoutEl.classList.add('is-hidden');
     if (emptyStateEl) {
       if (heading) {
@@ -29,6 +24,20 @@ document.addEventListener('DOMContentLoaded', function () {
       if (message) {
         const p = emptyStateEl.querySelector('p');
         if (p) p.textContent = message;
+      }
+      const existingRetry = emptyStateEl.querySelector('.checkout-retry-btn');
+      if (existingRetry) existingRetry.remove();
+      if (withRetry) {
+        const retryBtn = document.createElement('button');
+        retryBtn.type = 'button';
+        retryBtn.className = 'btn btn-primary checkout-retry-btn';
+        retryBtn.textContent = 'Retry Loading Checkout';
+        retryBtn.addEventListener('click', function () {
+          emptyStateEl.classList.add('is-hidden');
+          if (layoutEl) layoutEl.classList.remove('is-hidden');
+          loadCheckoutContext();
+        });
+        emptyStateEl.querySelector('.empty-context-actions')?.prepend(retryBtn);
       }
       emptyStateEl.classList.remove('is-hidden');
     }
@@ -42,17 +51,17 @@ document.addEventListener('DOMContentLoaded', function () {
     parseInt(theaterCode, 10) <= 0 ||
     !CT.isValidIsoDate(date) ||
     !time ||
-    uniqueSeats.length === 0
+    allParsedSeats.length === 0
   ) {
     showBlockedCheckout();
     window.showToast('No active seat selection found — choose a movie and seats first', 'info');
     return;
   }
 
-  if (uniqueSeats.length > 10) {
+  if (allParsedSeats.length > 10) {
     window.showToast('Maximum 10 seats allowed per transaction', 'warning');
   }
-  const seats = uniqueSeats.slice(0, 10);
+  const seats = allParsedSeats.slice(0, 10);
 
   let movieTitle = 'Selected Movie';
   let theaterName = 'Cinema Auditorium #' + theaterCode;
@@ -60,7 +69,15 @@ document.addEventListener('DOMContentLoaded', function () {
   let promoDiscount = 0;
   let appliedPromoCode = '';
   let isSubmitting = false;
+  let isVerifyingPromo = false;
+  let promoVerifySeq = 0;
   let contextVerified = false;
+
+  function syncPayButtonState() {
+    if (payBtn) {
+      payBtn.disabled = !contextVerified || isSubmitting || isVerifyingPromo;
+    }
+  }
 
   const setText = function (id, val) {
     const el = document.getElementById(id);
@@ -103,6 +120,7 @@ document.addEventListener('DOMContentLoaded', function () {
   setText('booking-date', date);
   setText('booking-time', time);
   setText('booking-seats', seats.join(', '));
+  syncPayButtonState();
 
   initPaymentMethods();
   initCardFormatting();
@@ -129,58 +147,65 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  Promise.all([
-    CT.fetchJson('/index.php/movie/movies/getMovieByCode?movie_code=' + encodeURIComponent(movieCode)),
-    CT.fetchJson('/index.php/theater/theater/getTheaterDetails?theater_code=' + encodeURIComponent(theaterCode)).catch(function () { return null; }),
-    refreshEligiblePromoTags(),
-  ]).then(function (results) {
-    const moviePayload = results[0];
-    const theaterPayload = results[1];
+  function loadCheckoutContext() {
+    contextVerified = false;
+    syncPayButtonState();
 
-    if (!moviePayload || !moviePayload.success || !moviePayload.data) {
-      showBlockedCheckout('Screening Unavailable', (moviePayload && moviePayload.message) || 'The requested movie could not be found.');
-      window.showToast((moviePayload && moviePayload.message) || 'Movie not found', 'error');
-      return;
-    }
-    if (theaterPayload && !theaterPayload.success) {
-      showBlockedCheckout('Theater Unavailable', theaterPayload.message || 'The requested theater could not be found.');
-      window.showToast(theaterPayload.message || 'Theater not found', 'error');
-      return;
-    }
+    Promise.all([
+      CT.fetchJson('/index.php/movie/movies/getMovieByCode?movie_code=' + encodeURIComponent(movieCode)),
+      CT.fetchJson('/index.php/theater/theater/getTheaterDetails?theater_code=' + encodeURIComponent(theaterCode)).catch(function () { return null; }),
+      refreshEligiblePromoTags(),
+    ]).then(function (results) {
+      const moviePayload = results[0];
+      const theaterPayload = results[1];
 
-    const movie = moviePayload.data;
-    if (Array.isArray(movie.theater_codes) && !movie.theater_codes.includes(parseInt(theaterCode, 10))) {
-      showBlockedCheckout('Unscheduled Screening', 'This movie is not currently scheduled at the selected theater.');
-      window.showToast('Selected movie is not scheduled at this theater', 'error');
-      return;
-    }
+      if (!moviePayload || !moviePayload.success || !moviePayload.data) {
+        showBlockedCheckout('Screening Unavailable', (moviePayload && moviePayload.message) || 'The requested movie could not be found.');
+        window.showToast((moviePayload && moviePayload.message) || 'Movie not found', 'error');
+        return;
+      }
+      if (theaterPayload && !theaterPayload.success) {
+        showBlockedCheckout('Theater Unavailable', theaterPayload.message || 'The requested theater could not be found.');
+        window.showToast(theaterPayload.message || 'Theater not found', 'error');
+        return;
+      }
 
-    if (theaterPayload && theaterPayload.success && theaterPayload.data) {
-      theaterName = theaterPayload.data.theater_name;
-    }
-    setText('booking-theater', theaterName);
+      const movie = moviePayload.data;
+      if (Array.isArray(movie.theater_codes) && !movie.theater_codes.includes(parseInt(theaterCode, 10))) {
+        showBlockedCheckout('Unscheduled Screening', 'This movie is not currently scheduled at the selected theater.');
+        window.showToast('Selected movie is not scheduled at this theater', 'error');
+        return;
+      }
 
-    movieTitle = movie.movie_name;
-    unitPrice = parseFloat(movie.money) || 39.0;
-    contextVerified = true;
-    if (payBtn) payBtn.disabled = false;
-    renderMovieSummary(movie);
-    updatePriceBreakdown();
+      if (theaterPayload && theaterPayload.success && theaterPayload.data) {
+        theaterName = theaterPayload.data.theater_name;
+      }
+      setText('booking-theater', theaterName);
 
-    const savedPromo = sessionStorage.getItem('selectedPromoCode');
-    const couponInput = document.getElementById('coupon-code');
-    if (savedPromo && couponInput && !couponInput.value) {
-      couponInput.value = savedPromo.trim().toUpperCase();
-      syncPromoClearButton();
-    }
-  }).catch(function () {
-    window.showToast('Unable to load order details', 'error');
-  });
+      movieTitle = movie.movie_name;
+      unitPrice = parseFloat(movie.money) || 39.0;
+      contextVerified = true;
+      syncPayButtonState();
+      renderMovieSummary(movie);
+      updatePriceBreakdown();
 
+      const savedPromo = sessionStorage.getItem('selectedPromoCode');
+      const couponInput = document.getElementById('coupon-code');
+      if (savedPromo && couponInput && !couponInput.value) {
+        couponInput.value = savedPromo.trim().toUpperCase();
+        syncPromoClearButton();
+      }
+    }).catch(function () {
+      showBlockedCheckout('Connection Error', 'Unable to load screening details from the box office server. Please retry.', true);
+      window.showToast('Unable to load order details', 'error');
+    });
+  }
+
+  loadCheckoutContext();
   window.addEventListener('cinetix:authchange', refreshEligiblePromoTags);
 
   payBtn?.addEventListener('click', async function () {
-    if (isSubmitting || !contextVerified) return;
+    if (isSubmitting || isVerifyingPromo || !contextVerified) return;
 
     const checkedRadio = document.querySelector('input[name="payment"]:checked');
     const selectedMethod = checkedRadio ? checkedRadio.value : 'card';
@@ -192,7 +217,7 @@ document.addEventListener('DOMContentLoaded', function () {
     isSubmitting = true;
     const originalMarkup = payBtn.innerHTML;
     payBtn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> <span>Processing...</span>';
-    payBtn.disabled = true;
+    syncPayButtonState();
 
     try {
       const payload = await CT.fetchJson('/index.php/movie/seat/saveSeats', {
@@ -250,13 +275,13 @@ document.addEventListener('DOMContentLoaded', function () {
       window.showToast(payload.message || 'Seat booking failed', 'error');
       isSubmitting = false;
       payBtn.innerHTML = originalMarkup;
-      payBtn.disabled = false;
+      syncPayButtonState();
       updatePriceBreakdown();
     } catch (_) {
       window.showToast('Network error while completing payment', 'error');
       isSubmitting = false;
       payBtn.innerHTML = originalMarkup;
-      payBtn.disabled = false;
+      syncPayButtonState();
       updatePriceBreakdown();
     }
   });
@@ -278,6 +303,22 @@ document.addEventListener('DOMContentLoaded', function () {
       '</div>' +
       '</div>' +
       '</div>';
+  }
+
+  function clearFieldError(inputEl) {
+    if (!inputEl) return;
+    inputEl.classList.remove('input-error');
+    inputEl.removeAttribute('aria-invalid');
+  }
+
+  function flagFieldError(inputEl, message) {
+    if (inputEl) {
+      inputEl.classList.add('input-error');
+      inputEl.setAttribute('aria-invalid', 'true');
+      inputEl.focus();
+    }
+    window.showToast(message, 'error');
+    return false;
   }
 
   function initPaymentMethods() {
@@ -315,16 +356,27 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function initCardFormatting() {
-    document.getElementById('card-number')?.addEventListener('input', function (e) {
+    const cardNumEl = document.getElementById('card-number');
+    const expiryEl = document.getElementById('expiry');
+    const cvvEl = document.getElementById('cvv');
+    const holderEl = document.getElementById('cardholder-name');
+
+    cardNumEl?.addEventListener('input', function (e) {
+      clearFieldError(cardNumEl);
       const digits = e.target.value.replace(/\D/g, '').slice(0, 16);
       e.target.value = (digits.match(/.{1,4}/g) || []).join(' ');
     });
-    document.getElementById('expiry')?.addEventListener('input', function (e) {
+    expiryEl?.addEventListener('input', function (e) {
+      clearFieldError(expiryEl);
       const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
       e.target.value = digits.length >= 3 ? digits.slice(0, 2) + '/' + digits.slice(2) : digits;
     });
-    document.getElementById('cvv')?.addEventListener('input', function (e) {
+    cvvEl?.addEventListener('input', function (e) {
+      clearFieldError(cvvEl);
       e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4);
+    });
+    holderEl?.addEventListener('input', function () {
+      clearFieldError(holderEl);
     });
   }
 
@@ -344,6 +396,9 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!couponInput || !verifyBtn) return function () {};
 
     function resetPromoState(clearInputValue) {
+      promoVerifySeq += 1;
+      isVerifyingPromo = false;
+      syncPayButtonState();
       if (clearInputValue) {
         couponInput.value = '';
         sessionStorage.removeItem('selectedPromoCode');
@@ -405,6 +460,9 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
+      const seq = ++promoVerifySeq;
+      isVerifyingPromo = true;
+      syncPayButtonState();
       const originalText = verifyBtn.innerHTML;
       verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Checking...';
       verifyBtn.disabled = true;
@@ -417,6 +475,7 @@ document.addEventListener('DOMContentLoaded', function () {
           date: date,
         });
         const payload = await CT.fetchJson('/index.php/offer/offer/getMoneyByBadge?' + params.toString());
+        if (seq !== promoVerifySeq) return;
         if (payload.success && payload.data && payload.data.money !== undefined) {
           promoDiscount = parseFloat(payload.data.money) || 0;
           appliedPromoCode = payload.data.promo_code || code;
@@ -439,10 +498,16 @@ document.addEventListener('DOMContentLoaded', function () {
         syncPromoClearButton();
         updatePriceBreakdown();
       } catch (_) {
-        window.showToast('Could not verify promo code', 'error');
+        if (seq === promoVerifySeq) {
+          window.showToast('Could not verify promo code', 'error');
+        }
       } finally {
-        verifyBtn.innerHTML = originalText;
-        verifyBtn.disabled = false;
+        if (seq === promoVerifySeq) {
+          isVerifyingPromo = false;
+          verifyBtn.innerHTML = originalText;
+          verifyBtn.disabled = false;
+          syncPayButtonState();
+        }
       }
     });
 
@@ -450,35 +515,32 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function validateCardInputs() {
-    const cardNumber = (document.getElementById('card-number')?.value || '').replace(/\s/g, '');
-    const expiry = (document.getElementById('expiry')?.value || '').trim();
-    const cvv = (document.getElementById('cvv')?.value || '').trim();
-    const holder = (document.getElementById('cardholder-name')?.value || '').trim();
+    const cardNumEl = document.getElementById('card-number');
+    const expiryEl = document.getElementById('expiry');
+    const cvvEl = document.getElementById('cvv');
+    const holderEl = document.getElementById('cardholder-name');
+
+    const cardNumber = (cardNumEl?.value || '').replace(/\s/g, '');
+    const expiry = (expiryEl?.value || '').trim();
+    const cvv = (cvvEl?.value || '').trim();
+    const holder = (holderEl?.value || '').trim();
+
+    [cardNumEl, expiryEl, cvvEl, holderEl].forEach(clearFieldError);
 
     if (!/^\d{13,19}$/.test(cardNumber)) {
-      window.showToast('Please enter a valid 13-19 digit card number', 'error');
-      document.getElementById('card-number')?.focus();
-      return false;
+      return flagFieldError(cardNumEl, 'Please enter a valid 13-19 digit card number');
     }
     if (!/^(0[1-9]|1[0-2])\/(\d{2})$/.test(expiry)) {
-      window.showToast('Please enter a valid expiry date (MM/YY)', 'error');
-      document.getElementById('expiry')?.focus();
-      return false;
+      return flagFieldError(expiryEl, 'Please enter a valid expiry date (MM/YY)');
     }
     if (!CT.isCardExpiryValid(expiry)) {
-      window.showToast('This card has expired — please enter a future expiry date', 'error');
-      document.getElementById('expiry')?.focus();
-      return false;
+      return flagFieldError(expiryEl, 'This card has expired — please enter a future expiry date');
     }
     if (!/^\d{3,4}$/.test(cvv)) {
-      window.showToast('Please enter a valid 3 or 4 digit CVV', 'error');
-      document.getElementById('cvv')?.focus();
-      return false;
+      return flagFieldError(cvvEl, 'Please enter a valid 3 or 4 digit CVV');
     }
     if (!holder) {
-      window.showToast('Please enter the cardholder name', 'error');
-      document.getElementById('cardholder-name')?.focus();
-      return false;
+      return flagFieldError(holderEl, 'Please enter the cardholder name');
     }
     return true;
   }

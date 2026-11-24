@@ -14,6 +14,10 @@ class User extends ApiController
     public function reg()
     {
         try {
+            if (!$this->verifySameOrigin()) {
+                return $this->fail('Forbidden: cross-origin request rejected', 403);
+            }
+
             $name     = $this->strParam('name');
             $email    = strtolower($this->strParam('email'));
             $password = $this->rawStrParam('password');
@@ -21,10 +25,10 @@ class User extends ApiController
             if ($name === '' || $this->textLen($name) > 50) {
                 return $this->fail('Please enter a valid name (1-50 characters)');
             }
-            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100) {
+            if (!$this->isValidEmail($email)) {
                 return $this->fail('Please enter a valid email address');
             }
-            if (strlen($password) < 6 || strlen($password) > self::MAX_PASSWORD_BYTES) {
+            if (!$this->isValidPasswordLength($password)) {
                 return $this->fail('Password must be 6-72 characters');
             }
             if (Db::name('user')->where('email', $email)->find()) {
@@ -58,6 +62,10 @@ class User extends ApiController
     public function login()
     {
         try {
+            if (!$this->verifySameOrigin()) {
+                return $this->fail('Forbidden: cross-origin request rejected', 403);
+            }
+
             $email    = strtolower($this->strParam('email'));
             $password = $this->rawStrParam('password');
 
@@ -84,6 +92,10 @@ class User extends ApiController
     public function logout()
     {
         try {
+            if (!$this->verifySameOrigin()) {
+                return $this->fail('Forbidden: cross-origin request rejected', 403);
+            }
+
             Session::delete('user_id');
             Session::delete('user_email');
             $this->clearResetChallenge();
@@ -143,8 +155,12 @@ class User extends ApiController
     public function sendResetCode()
     {
         try {
+            if (!$this->verifySameOrigin()) {
+                return $this->fail('Forbidden: cross-origin request rejected', 403);
+            }
+
             $email = strtolower($this->strParam('email'));
-            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100) {
+            if (!$this->isValidEmail($email)) {
                 return $this->fail('Please enter a valid email address');
             }
 
@@ -189,12 +205,16 @@ class User extends ApiController
     public function changePassword()
     {
         try {
+            if (!$this->verifySameOrigin()) {
+                return $this->fail('Forbidden: cross-origin request rejected', 403);
+            }
+
             $sessionUserId    = (int) Session::get('user_id', 0);
             $oldPassword      = $this->rawStrParam('old_password');
             $newPassword      = $this->rawStrParam('pwd');
             $verificationCode = $this->strParam('verification_code');
 
-            if (strlen($newPassword) < 6 || strlen($newPassword) > self::MAX_PASSWORD_BYTES) {
+            if (!$this->isValidPasswordLength($newPassword)) {
                 return $this->fail('New password must be 6-72 characters');
             }
 
@@ -240,7 +260,7 @@ class User extends ApiController
 
             // Path B: Dynamic 6-digit verification code reset bound to session & email
             $email = strtolower($this->strParam('email'));
-            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100) {
+            if (!$this->isValidEmail($email)) {
                 return $this->fail('Please enter a valid email address');
             }
             if (!preg_match('/^\d{6}$/', $verificationCode)) {
@@ -310,17 +330,22 @@ class User extends ApiController
 
     private function verifyAndUpgradePassword(array $user, $password)
     {
-        $storedHash = (string) ($user['login_pwd'] ?? '');
-        if (preg_match('/^\$2[ayb]\$/', $storedHash)) {
-            return password_verify($password, $storedHash);
+        $rawPassword = (string) $password;
+        if ($rawPassword === '' || strlen($rawPassword) > self::MAX_PASSWORD_BYTES) {
+            return false;
         }
 
-        $authenticated = $storedHash !== '' && hash_equals($storedHash, (string) $password);
+        $storedHash = (string) ($user['login_pwd'] ?? '');
+        if (preg_match('/^\$2[ayb]\$/', $storedHash)) {
+            return password_verify($rawPassword, $storedHash);
+        }
+
+        $authenticated = $storedHash !== '' && hash_equals($storedHash, $rawPassword);
         if ($authenticated) {
             Db::name('user')
                 ->where('user_code', $user['user_code'])
                 ->update([
-                    'login_pwd'   => password_hash((string) $password, PASSWORD_BCRYPT),
+                    'login_pwd'   => password_hash($rawPassword, PASSWORD_BCRYPT),
                     'update_time' => date('Y-m-d H:i:s'),
                 ]);
         }

@@ -9,11 +9,10 @@
 
   function setGenreActive(targetGenre) {
     activeGenre = targetGenre || 'all';
-    document.querySelectorAll('.filters .btn-filter').forEach(function (btn) {
-      const isActive = (btn.dataset.genre || 'all') === activeGenre;
-      btn.classList.toggle('active', isActive);
-      btn.setAttribute('aria-pressed', String(isActive));
-    });
+    window.CineTicket.activatePill(
+      document.querySelectorAll('.filters .btn-filter'),
+      function (btn) { return (btn.dataset.genre || 'all') === activeGenre; }
+    );
   }
 
   function bindGenreButton(button) {
@@ -54,6 +53,20 @@
     setGenreActive(activeGenre);
   }
 
+  function renderCatalogError(message, onRetry) {
+    const movieGrid = document.querySelector('.movie-grid');
+    if (!movieGrid) return;
+    const countBadge = document.getElementById('catalog-count-badge');
+    if (countBadge) countBadge.textContent = 'Unavailable';
+    window.CineTicket.renderStateCard(movieGrid, {
+      heading: 'Unable to load screenings',
+      message: message || 'The box office catalog could not be reached. Please check your connection and try again.',
+      actionLabel: 'Retry Catalog',
+      onAction: onRetry,
+      isError: true,
+    });
+  }
+
   async function fetchMovies(genre) {
     const seq = ++requestSeq;
     const target = genre || 'all';
@@ -69,11 +82,14 @@
         }
         renderMovies(list);
       } else {
-        window.showToast(payload.message || 'Failed to load movies', 'error');
+        const msg = payload.message || 'Failed to load movies';
+        window.showToast(msg, 'error');
+        renderCatalogError(msg, function () { fetchMovies(target); });
       }
     } catch (_) {
       if (seq !== requestSeq) return;
       window.showToast('Unable to connect to movie service', 'error');
+      renderCatalogError('Unable to connect to the movie catalog service right now.', function () { fetchMovies(target); });
     }
   }
 
@@ -98,13 +114,12 @@
     }
 
     if (!Array.isArray(movies) || movies.length === 0) {
-      movieGrid.innerHTML =
-        '<div class="grid-empty-state">' +
-        '<h3>No matching movies found</h3>' +
-        '<p>Try another search term or reset the genre filter to view all scheduled screenings.</p>' +
-        '<button type="button" class="btn btn-primary empty-reset-btn">Show All Movies</button>' +
-        '</div>';
-      movieGrid.querySelector('.empty-reset-btn')?.addEventListener('click', fetchAllMovies);
+      CT.renderStateCard(movieGrid, {
+        heading: 'No matching movies found',
+        message: 'Try another search term or reset the genre filter to view all scheduled screenings.',
+        actionLabel: 'Show All Movies',
+        onAction: fetchAllMovies,
+      });
       return;
     }
 
@@ -173,11 +188,14 @@
         if (payload.success) {
           renderMovies(payload.data || []);
         } else {
-          window.showToast(payload.message || 'Search failed', 'error');
+          const msg = payload.message || 'Search failed';
+          window.showToast(msg, 'error');
+          renderCatalogError(msg, triggerSearch);
         }
       } catch (_) {
         if (seq !== requestSeq) return;
         window.showToast('Unable to search movies right now', 'error');
+        renderCatalogError('Search request could not reach the server right now.', triggerSearch);
       }
     }
 

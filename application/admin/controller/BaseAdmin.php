@@ -9,13 +9,20 @@ use think\facade\Session;
 
 /**
  * Base controller for authenticated admin endpoints.
- * Enforces both active admin session AND non-empty constant-time X-Admin-Token / Bearer verification,
- * and centralizes foreign-key ID resolution, relation mapping, and schedule row synchronization.
+ * Enforces Same-Origin check, active admin session, and non-empty constant-time X-Admin-Token / Bearer verification,
+ * and centralizes partial-update merging, foreign-key ID resolution, relation mapping, non-destructive junction syncing,
+ * and formula-safe UTF-8 BOM CSV streaming.
  */
 abstract class BaseAdmin extends ApiController
 {
     public function __construct()
     {
+        if (!$this->verifySameOrigin()) {
+            throw new HttpResponseException(
+                $this->fail('Forbidden: cross-origin request rejected', 403)
+            );
+        }
+
         if (!self::hasAdminSession()) {
             throw new HttpResponseException(
                 $this->fail('Unauthorized: admin login required', 401)
@@ -50,6 +57,23 @@ abstract class BaseAdmin extends ApiController
         return hash_equals($sessionToken, $clientToken);
     }
 
+    /**
+     * Merges an existing database record with submitted payload fields for partial-update support.
+     * Unsubmitted keys inherit existing values; submitted empty strings explicitly clear nullable columns; "0" is preserved.
+     */
+    protected function mergeExistingPayload(array $existing, array $payload, array $allowedFields)
+    {
+        $merged = [];
+        foreach ($allowedFields as $field) {
+            if (array_key_exists($field, $payload)) {
+                $merged[$field] = $payload[$field];
+            } elseif (array_key_exists($field, $existing)) {
+                $merged[$field] = $existing[$field];
+            }
+        }
+        return $merged;
+    }
+
     protected function resolveValidIds($table, $pk, $raw)
     {
         $ids = $this->normalizeIdArray($raw);
@@ -58,6 +82,15 @@ abstract class BaseAdmin extends ApiController
         }
         $valid = Db::name($table)->where($pk, 'in', $ids)->order($pk, 'asc')->column($pk);
         return array_map('intval', $valid ?: []);
+    }
+
+    protected function queryRelationIds($table, $whereCol, $whereId, $targetCol)
+    {
+        $vals = Db::table($table)
+            ->where($whereCol, (int) $whereId)
+            ->order($targetCol, 'asc')
+            ->column($targetCol);
+        return array_map('intval', $vals ?: []);
     }
 
     protected function mapRelationIds($table, $groupCol, $valueCol)
@@ -75,18 +108,34 @@ abstract class BaseAdmin extends ApiController
         return $grouped;
     }
 
+    /**
+     * Synchronizes `theater_movie` rows non-destructively so existing start_date, end_date,
+     * and daily_showtimes values are preserved for retained links.
+     */
     protected function syncScheduleRows($whereCol, $whereId, array $targetIds, $targetCol)
     {
-        Db::table('theater_movie')->where($whereCol, (int) $whereId)->delete();
+        $ownerId = (int) $whereId;
         if (empty($targetIds)) {
+            Db::table('theater_movie')->where($whereCol, $ownerId)->delete();
+            return;
+        }
+
+        Db::table('theater_movie')
+            ->where($whereCol, $ownerId)
+            ->where($targetCol, 'not in', $targetIds)
+            ->delete();
+
+        $existingIds = $this->queryRelationIds('theater_movie', $whereCol, $ownerId, $targetCol);
+        $toInsert    = array_values(array_diff($targetIds, $existingIds));
+        if (empty($toInsert)) {
             return;
         }
 
         $now  = date('Y-m-d H:i:s');
         $rows = [];
-        foreach ($targetIds as $targetId) {
+        foreach ($toInsert as $targetId) {
             $rows[] = [
-                $whereCol         => (int) $whereId,
+                $whereCol         => $ownerId,
                 $targetCol        => (int) $targetId,
                 'start_date'      => '2026-01-01',
                 'end_date'        => '2027-12-31',
@@ -95,6 +144,79 @@ abstract class BaseAdmin extends ApiController
             ];
         }
         Db::table('theater_movie')->insertAll($rows);
+    }
+
+    /**
+     * Synchronizes `movie_offer` rows non-destructively across both Movie and Offer controllers,
+     * preserving existing discount_percent and valid_from metadata on retained pairs.
+     */
+    protected function syncMovieOfferRows($whereCol, $whereId, array $targetIds, $targetCol, $fixedValidTo = null)
+    {
+        $ownerId = (int) $whereId;
+        if (empty($targetIds)) {
+            Db::table('movie_offer')->where($whereCol, $ownerId)->delete();
+            return;
+        }
+
+        Db::table('movie_offer')
+            ->where($whereCol, $ownerId)
+            ->where($targetCol, 'not in', $targetIds)
+            ->delete();
+
+        if ($fixedValidTo !== null && $this->isValidIsoDate((string) $fixedValidTo)) {
+            Db::table('movie_offer')
+                ->where($whereCol, $ownerId)
+                ->update(['valid_to' => (string) $fixedValidTo]);
+        }
+
+        $existingIds = $this->queryRelationIds('movie_offer', $whereCol, $ownerId, $targetCol);
+        $toInsert    = array_values(array_diff($targetIds, $existingIds));
+        if (empty($toInsert)) {
+            return;
+        }
+
+        $offerValidities = $targetCol === 'offer_code'
+            ? Db::name('offer')->where('offer_code', 'in', $toInsert)->column('offer_validity', 'offer_code')
+            : [];
+
+        $now  = date('Y-m-d H:i:s');
+        $rows = [];
+        foreach ($toInsert as $targetId) {
+            $tid     = (int) $targetId;
+            $validTo = $fixedValidTo !== null && $this->isValidIsoDate((string) $fixedValidTo)
+                ? (string) $fixedValidTo
+                : (isset($offerValidities[$tid]) && $this->isValidIsoDate((string) $offerValidities[$tid])
+                    ? (string) $offerValidities[$tid]
+                    : '2027-12-31');
+
+            $rows[] = [
+                $whereCol          => $ownerId,
+                $targetCol         => $tid,
+                'discount_percent' => 0.00,
+                'valid_from'       => '2026-01-01',
+                'valid_to'         => $validTo,
+                'created_time'     => $now,
+            ];
+        }
+        Db::table('movie_offer')->insertAll($rows);
+    }
+
+    /**
+     * Builds a UTF-8 BOM CSV HTTP download response with OWASP formula-injection neutralization.
+     */
+    protected function csvResponse($filename, array $headers, array $rows)
+    {
+        $cleanName = preg_replace('/[^A-Za-z0-9._-]/', '_', (string) $filename) ?: 'export.csv';
+        $lines     = [$this->formatCsvRow($headers)];
+        foreach ($rows as $row) {
+            $lines[] = $this->formatCsvRow(is_array($row) ? $row : []);
+        }
+        $body = "\xEF\xBB\xBF" . implode("\r\n", $lines);
+        return response($body, 200, [
+            'Content-Type'           => 'text/csv; charset=UTF-8',
+            'Content-Disposition'    => 'attachment; filename="' . $cleanName . '"',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     private static function extractToken()

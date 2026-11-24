@@ -56,17 +56,8 @@ class Movie extends BaseAdmin
                 return $this->fail('Movie not found', 404);
             }
 
-            $tCodes = Db::table('theater_movie')
-                ->where('movie_code', $movieId)
-                ->order('theater_code', 'asc')
-                ->column('theater_code');
-            $oCodes = Db::table('movie_offer')
-                ->where('movie_code', $movieId)
-                ->order('offer_code', 'asc')
-                ->column('offer_code');
-
-            $movie['theater_codes'] = array_map('intval', $tCodes ?: []);
-            $movie['offer_codes']   = array_map('intval', $oCodes ?: []);
+            $movie['theater_codes'] = $this->queryRelationIds('theater_movie', 'movie_code', $movieId, 'theater_code');
+            $movie['offer_codes']   = $this->queryRelationIds('movie_offer', 'movie_code', $movieId, 'offer_code');
 
             return $this->ok($movie);
         } catch (\Throwable $e) {
@@ -101,7 +92,7 @@ class Movie extends BaseAdmin
                 }
 
                 $this->syncScheduleRows('movie_code', $movieId, $theaterCodes, 'theater_code');
-                $this->syncMovieOffers($movieId, $offerCodes);
+                $this->syncMovieOfferRows('movie_code', $movieId, $offerCodes, 'offer_code');
                 Db::commit();
 
                 return $this->ok([
@@ -127,11 +118,13 @@ class Movie extends BaseAdmin
                 return $this->fail('Valid movie_code is required');
             }
 
-            if (!Db::name('movies')->where('movie_code', $movieId)->find()) {
+            $existing = Db::name('movies')->where('movie_code', $movieId)->find();
+            if (!$existing) {
                 return $this->fail('Movie not found', 404);
             }
 
-            [$data, $error] = $this->prepareMovieData($payload);
+            $merged         = $this->mergeExistingPayload($existing, $payload, self::ALLOWED_FIELDS);
+            [$data, $error] = $this->prepareMovieData($merged);
             if ($error !== null) {
                 return $this->fail($error);
             }
@@ -155,7 +148,7 @@ class Movie extends BaseAdmin
                     $this->syncScheduleRows('movie_code', $movieId, $theaterCodes, 'theater_code');
                 }
                 if ($offerCodes !== null) {
-                    $this->syncMovieOffers($movieId, $offerCodes);
+                    $this->syncMovieOfferRows('movie_code', $movieId, $offerCodes, 'offer_code');
                 }
 
                 Db::commit();
@@ -200,62 +193,49 @@ class Movie extends BaseAdmin
         }
     }
 
-    private function syncMovieOffers($movieId, array $offerCodes)
-    {
-        Db::table('movie_offer')->where('movie_code', $movieId)->delete();
-        if (empty($offerCodes)) {
-            return;
-        }
-
-        $offers = Db::name('offer')->where('offer_code', 'in', $offerCodes)->column('offer_validity', 'offer_code');
-        $now    = date('Y-m-d H:i:s');
-        $rows   = [];
-        foreach ($offerCodes as $oid) {
-            $validTo = isset($offers[$oid]) && $this->isValidIsoDate((string) $offers[$oid])
-                ? $offers[$oid]
-                : '2027-12-31';
-            $rows[] = [
-                'movie_code'       => (int) $movieId,
-                'offer_code'       => (int) $oid,
-                'discount_percent' => 0.00,
-                'valid_from'       => '2026-01-01',
-                'valid_to'         => $validTo,
-                'created_time'     => $now,
-            ];
-        }
-        Db::table('movie_offer')->insertAll($rows);
-    }
-
     private function prepareMovieData(array $payload)
     {
         $data = $this->pickAllowed($payload, self::ALLOWED_FIELDS);
 
-        if (empty($data['movie_name']) || $this->textLen($data['movie_name']) > 200) {
+        $title = isset($data['movie_name']) ? (string) $data['movie_name'] : '';
+        $genre = isset($data['movie_type']) ? (string) $data['movie_type'] : '';
+        $img   = isset($data['img']) ? (string) $data['img'] : '';
+        $times = isset($data['times']) ? (string) $data['times'] : '';
+        $tag   = isset($data['tag']) && $data['tag'] !== null ? (string) $data['tag'] : '';
+
+        if ($title === '' || $this->textLen($title) > 200) {
             return [null, 'Movie title (1-200 characters) is required'];
         }
-        if (empty($data['movie_type']) || $this->textLen($data['movie_type']) > 50) {
+        if ($genre === '' || $this->textLen($genre) > 50) {
             return [null, 'Movie genre (1-50 characters) is required'];
         }
-        if (empty($data['img']) || $this->textLen($data['img']) > 500) {
+        if ($img === '' || $this->textLen($img) > 500) {
             return [null, 'Poster image path or URL (1-500 characters) is required'];
         }
-        if (empty($data['times']) || $this->textLen($data['times']) > 50) {
+        if ($times === '' || $this->textLen($times) > 50) {
             return [null, 'Movie duration (1-50 characters) is required'];
         }
-        if (isset($data['tag']) && $this->textLen($data['tag']) > 50) {
+        if ($tag !== '' && $this->textLen($tag) > 50) {
             return [null, 'Highlight badge must be 50 characters or fewer'];
         }
-        if (!isset($data['star']) || !is_numeric($data['star']) || !is_finite((float) $data['star']) || (float) $data['star'] < 0 || (float) $data['star'] > 5) {
+
+        $star = $this->parseFiniteFloat($data['star'] ?? null, 0.0, 5.0);
+        if ($star === null) {
             return [null, 'Rating must be between 0.0 and 5.0'];
         }
-        if (!isset($data['money']) || !is_numeric($data['money']) || !is_finite((float) $data['money']) || (float) $data['money'] < 0) {
+        $money = $this->parseFiniteFloat($data['money'] ?? null, 0.0);
+        if ($money === null) {
             return [null, 'Ticket price must be a non-negative number'];
         }
 
-        $data['tag']   = isset($data['tag']) && $data['tag'] !== '' ? $data['tag'] : null;
-        $data['star']  = round((float) $data['star'], 1);
-        $data['money'] = round((float) $data['money'], 2);
-
-        return [$data, null];
+        return [[
+            'movie_name' => $title,
+            'tag'        => $tag !== '' ? $tag : null,
+            'star'       => round($star, 1),
+            'movie_type' => $genre,
+            'img'        => $img,
+            'money'      => $this->roundCents($money),
+            'times'      => $times,
+        ], null];
     }
 }

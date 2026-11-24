@@ -41,6 +41,15 @@
     }
   }
 
+  function renderWalletCard(container, opts) {
+    window.CineTicket.renderStateCard(container, Object.assign({
+      className: 'no-tickets card',
+      headingTag: 'h2',
+      iconClass: 'fas fa-ticket-alt',
+      buttonClass: 'empty-action-btn',
+    }, opts));
+  }
+
   async function loadUserTickets() {
     const container = document.getElementById('cons');
     const walletToolbar = document.getElementById('wallet-toolbar');
@@ -51,13 +60,12 @@
     if (!user.isLoggedIn || user.userId <= 0) {
       cachedSeats = [];
       if (walletToolbar) walletToolbar.classList.add('is-hidden');
-      renderTicketEmptyState(
-        container,
-        'Sign in to view your booked tickets',
-        'Log in to access your digital passes, barcodes, and seat cancellation options.',
-        CT.rootUrl('login.html'),
-        'Sign In Now'
-      );
+      renderWalletCard(container, {
+        heading: 'Sign in to view your booked tickets',
+        message: 'Log in to access your digital passes, barcodes, and seat cancellation options.',
+        actionHref: CT.rootUrl('login.html'),
+        actionLabel: 'Sign In Now',
+      });
       return;
     }
 
@@ -68,33 +76,52 @@
         cachedSeats = [];
         CT.AuthStore.clearLocal();
         if (walletToolbar) walletToolbar.classList.add('is-hidden');
-        renderTicketEmptyState(
-          container,
-          'Session expired — please sign in again',
-          'Your login session expired. Sign in again to access and manage your tickets.',
-          CT.rootUrl('login.html'),
-          'Sign In Now'
-        );
+        renderWalletCard(container, {
+          heading: 'Session expired — please sign in again',
+          message: 'Your login session expired. Sign in again to access and manage your tickets.',
+          actionHref: CT.rootUrl('login.html'),
+          actionLabel: 'Sign In Now',
+        });
         return;
       }
 
-      cachedSeats = payload.success && Array.isArray(payload.data) ? payload.data : [];
+      if (!payload.success) {
+        if (walletToolbar) walletToolbar.classList.add('is-hidden');
+        window.showToast(payload.message || 'Unable to load tickets', 'error');
+        renderWalletCard(container, {
+          heading: 'Unable to load ticket wallet',
+          message: payload.message || 'Your booked passes could not be loaded right now.',
+          actionLabel: 'Retry Wallet',
+          onAction: loadUserTickets,
+          isError: true,
+        });
+        return;
+      }
+
+      cachedSeats = Array.isArray(payload.data) ? payload.data : [];
       if (cachedSeats.length === 0) {
         if (walletToolbar) walletToolbar.classList.add('is-hidden');
-        renderTicketEmptyState(
-          container,
-          'No active tickets yet',
-          'Reserve seats for any current movie screening and your digital tickets will appear here.',
-          CT.pageUrl('homepage.html'),
-          'Browse Movies'
-        );
+        renderWalletCard(container, {
+          heading: 'No active tickets yet',
+          message: 'Reserve seats for any current movie screening and your digital tickets will appear here.',
+          actionHref: CT.pageUrl('homepage.html'),
+          actionLabel: 'Browse Movies',
+        });
         return;
       }
 
       if (walletToolbar) walletToolbar.classList.remove('is-hidden');
       renderFilteredTickets();
     } catch (_) {
+      if (walletToolbar) walletToolbar.classList.add('is-hidden');
       window.showToast('Unable to load your tickets right now', 'error');
+      renderWalletCard(container, {
+        heading: 'Unable to load ticket wallet',
+        message: 'Connection to the reservation service failed. Please retry.',
+        actionLabel: 'Retry Wallet',
+        onAction: loadUserTickets,
+        isError: true,
+      });
     }
   }
 
@@ -114,18 +141,16 @@
     }
 
     if (filtered.length === 0) {
-      renderTicketEmptyState(
-        container,
-        'No tickets in this zone filter',
-        'Switch back to All Passes to view your other active reservations.',
-        '',
-        'Show All Passes',
-        function () {
+      renderWalletCard(container, {
+        heading: 'No tickets in this zone filter',
+        message: 'Switch back to All Passes to view your other active reservations.',
+        actionLabel: 'Show All Passes',
+        onAction: function () {
           activeZoneFilter = 'all';
           syncZoneFilterButtons();
           renderFilteredTickets();
-        }
-      );
+        },
+      });
       return;
     }
 
@@ -136,28 +161,10 @@
   }
 
   function syncZoneFilterButtons() {
-    document.querySelectorAll('[data-ticket-zone]').forEach(function (btn) {
-      const isAct = btn.getAttribute('data-ticket-zone') === activeZoneFilter;
-      btn.classList.toggle('active', isAct);
-      btn.setAttribute('aria-pressed', String(isAct));
-    });
-  }
-
-  function renderTicketEmptyState(container, heading, message, actionHref, actionLabel, customAction) {
-    const esc = window.CineTicket.escapeHtml;
-    container.innerHTML =
-      '<div class="no-tickets card">' +
-      '<i class="fas fa-ticket-alt" aria-hidden="true"></i>' +
-      '<h2>' + esc(heading) + '</h2>' +
-      '<p>' + esc(message) + '</p>' +
-      (customAction
-        ? '<button type="button" class="empty-action-btn">' + esc(actionLabel) + '</button>'
-        : '<a href="' + esc(actionHref) + '" class="empty-action-btn">' + esc(actionLabel) + '</a>') +
-      '</div>';
-
-    if (customAction) {
-      container.querySelector('.empty-action-btn')?.addEventListener('click', customAction);
-    }
+    window.CineTicket.activatePill(
+      document.querySelectorAll('[data-ticket-zone]'),
+      function (btn) { return btn.getAttribute('data-ticket-zone') === activeZoneFilter; }
+    );
   }
 
   function createTicketElement(seat) {

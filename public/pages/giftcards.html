@@ -147,6 +147,7 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', function () {
+      const CT = window.CineTicket;
       let selectedAmount = 50;
       const previewCard = document.getElementById('giftcard-live-preview');
       const amountEl = document.getElementById('gc-preview-amount');
@@ -161,6 +162,7 @@
       const emailInput = document.getElementById('gc-email');
       const noteInput = document.getElementById('gc-note');
       const themeSelect = document.getElementById('gc-theme');
+      const amountBtns = document.querySelectorAll('#giftcard-amounts .amount-pill');
 
       function loadLedger() {
         try {
@@ -186,14 +188,9 @@
         themeLabelEl.textContent = theme === 'birthday' ? 'BIRTHDAY' : (theme === 'vip' ? 'VIP GOLD' : 'PREMIERE');
       }
 
-      document.querySelectorAll('#giftcard-amounts .amount-pill').forEach(function (btn) {
+      amountBtns.forEach(function (btn) {
         btn.addEventListener('click', function () {
-          document.querySelectorAll('#giftcard-amounts .amount-pill').forEach(function (b) {
-            b.classList.remove('active');
-            b.setAttribute('aria-pressed', 'false');
-          });
-          btn.classList.add('active');
-          btn.setAttribute('aria-pressed', 'true');
+          CT.activatePill(amountBtns, btn);
           selectedAmount = parseInt(btn.dataset.amount || '50', 10);
           syncPreview();
         });
@@ -207,7 +204,7 @@
         e.preventDefault();
         const rec = recipientInput.value.trim();
         const em = emailInput.value.trim();
-        if (!rec || !window.CineTicket.isValidEmail(em)) {
+        if (!rec || !CT.isValidEmail(em)) {
           window.showToast('Please enter recipient name and a valid email address', 'warning');
           return;
         }

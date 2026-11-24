@@ -1,8 +1,8 @@
 /**
  * Shared Admin Console Runtime
  * Centralizes authenticated API calls (X-Admin-Token), cross-tab session guard, navigation,
- * relation checklists, search/filter/sort/reset/pagination/bulk-action/CSV/print table controller,
- * anti-double-submit CRUD helpers, and Canvas charts.
+ * relation checklists, search/filter/sort/reset/pagination/bulk-action/CSV(formula-safe)/print table controller,
+ * load-error retry handling, anti-double-submit CRUD helpers, and Canvas charts.
  */
 (function () {
   'use strict';
@@ -84,6 +84,15 @@
       window.location.href = 'login.html';
       return false;
     }
+  }
+
+  function getQueryId(paramName, fallbackUrl) {
+    const raw = (new URLSearchParams(window.location.search).get(paramName) || '').trim();
+    if (!/^[1-9]\d*$/.test(raw)) {
+      if (fallbackUrl) window.location.href = fallbackUrl;
+      return '';
+    }
+    return raw;
   }
 
   async function logoutAdmin(event) {
@@ -206,13 +215,15 @@
     selectEl.value = strVal;
   }
 
+  function sanitizeCsvCell(value) {
+    const raw = value === null || value === undefined ? '' : String(value);
+    const safe = (/^[\t\r\n ]*[=+\-@]/.test(raw) || /^[\t\r]/.test(raw)) ? ("'" + raw) : raw;
+    return /[",\r\n]/.test(safe) ? ('"' + safe.replace(/"/g, '""') + '"') : safe;
+  }
+
   function downloadCsv(filename, headers, rows) {
-    const csvCell = function (val) {
-      const s = val === null || val === undefined ? '' : String(val);
-      return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-    };
-    const lines = [headers.map(csvCell).join(',')].concat(
-      rows.map(function (r) { return r.map(csvCell).join(','); })
+    const lines = [(headers || []).map(sanitizeCsvCell).join(',')].concat(
+      (rows || []).map(function (r) { return r.map(sanitizeCsvCell).join(','); })
     );
     const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -242,6 +253,8 @@
             return;
           }
           window.showToast(res.message || 'Operation failed', 'error');
+        } catch (_) {
+          window.showToast('Network error while processing delete request', 'error');
         } finally {
           btn.disabled = false;
         }
@@ -288,7 +301,7 @@
   }
 
   /**
-   * Reusable client-side search, filter, sort, reset, pagination, bulk-action & CSV/Print controller.
+   * Reusable client-side search, filter, sort, reset, pagination, bulk-action, error/retry & CSV/Print controller.
    */
   function createTableController(config) {
     const toolbarEl = document.getElementById(config.toolbarId);
@@ -296,6 +309,8 @@
     const defaultSortKey = (config.sorts && config.sorts[0] && config.sorts[0].key) || 'default';
     let allItems = [];
     let filteredCache = [];
+    let loadError = '';
+    let loadSeq = 0;
     let query = '';
     let filterVal = 'all';
     let sortKey = defaultSortKey;
@@ -303,7 +318,26 @@
     const pageSize = config.pageSize || 25;
     const selectedIds = new Set();
     const bulkCfg = config.bulkAction || null;
+    const deleteCfg = config.deleteAction || null;
     const exportCfg = config.exportCsv || null;
+
+    async function reload() {
+      if (!config.endpoint) return;
+      const seq = ++loadSeq;
+      try {
+        const res = await apiFetch(config.endpoint);
+        if (seq !== loadSeq) return;
+        if (res && res.success && Array.isArray(res.data)) {
+          loadError = '';
+          setItems(res.data);
+          return;
+        }
+        setError((res && res.message) || 'Failed to load records.');
+      } catch (_) {
+        if (seq !== loadSeq) return;
+        setError('Unable to reach server. Check connection and retry.');
+      }
+    }
 
     if (toolbarEl) {
       const filterSelectHtml = Array.isArray(config.filters) && config.filters.length
@@ -409,9 +443,12 @@
           if (okCount > 0) {
             window.showToast((bulkCfg.successPrefix || 'Removed') + ' ' + okCount + ' record(s)', 'success');
             if (typeof bulkCfg.onSuccess === 'function') bulkCfg.onSuccess();
+            else reload();
           } else {
             window.showToast('Bulk operation could not complete', 'error');
           }
+        } catch (_) {
+          window.showToast('Network error during bulk operation', 'error');
         } finally {
           btn.disabled = false;
         }
@@ -448,6 +485,25 @@
 
     function render() {
       if (!tbody) return;
+
+      if (loadError) {
+        filteredCache = [];
+        if (toolbarEl) {
+          const countEl = toolbarEl.querySelector('[data-role="count"]');
+          if (countEl) countEl.textContent = 'Load failed';
+          const pagerEl = toolbarEl.querySelector('[data-role="pager"]');
+          if (pagerEl) pagerEl.innerHTML = '';
+        }
+        tbody.innerHTML =
+          '<tr><td colspan="' + (config.colSpan || 8) + '" class="empty-state table-error-state" role="alert">' +
+          '<strong>Unable to load records:</strong> ' + CT.escapeHtml(loadError) +
+          (config.endpoint ? ' <button type="button" class="toolbar-btn retry-table-btn"><i class="fas fa-undo" aria-hidden="true"></i> Retry</button>' : '') +
+          '</td></tr>';
+        tbody.querySelector('.retry-table-btn')?.addEventListener('click', reload);
+        syncBulkToolbar([]);
+        return;
+      }
+
       let list = allItems.slice();
 
       if (query && typeof config.searchText === 'function') {
@@ -525,23 +581,36 @@
         });
       }
       syncBulkToolbar(slice);
+      if (deleteCfg) {
+        bindDeleteActions(tbody, Object.assign({ onSuccess: reload }, deleteCfg));
+      }
       if (typeof config.afterRender === 'function') {
         config.afterRender(tbody);
       }
     }
 
+    function setItems(items) {
+      loadError = '';
+      allItems = Array.isArray(items) ? items : [];
+      if (bulkCfg) {
+        const validSet = new Set(allItems.map(function (it) { return String(it[bulkCfg.idKey]); }));
+        Array.from(selectedIds).forEach(function (id) {
+          if (!validSet.has(id)) selectedIds.delete(id);
+        });
+      }
+      render();
+    }
+
+    function setError(message) {
+      loadError = message || 'Failed to load records.';
+      render();
+    }
+
     return {
-      setItems: function (items) {
-        allItems = Array.isArray(items) ? items : [];
-        if (bulkCfg) {
-          const validSet = new Set(allItems.map(function (it) { return String(it[bulkCfg.idKey]); }));
-          Array.from(selectedIds).forEach(function (id) {
-            if (!validSet.has(id)) selectedIds.delete(id);
-          });
-        }
-        render();
-      },
+      reload: reload,
       refresh: render,
+      setError: setError,
+      setItems: setItems,
     };
   }
 
@@ -630,10 +699,12 @@
     ensureSelectOption: ensureSelectOption,
     escapeHtml: CT.escapeHtml,
     getCheckedIds: getCheckedIds,
+    getQueryId: getQueryId,
     populateUserSelect: populateUserSelect,
     renderAdminNav: renderAdminNav,
     renderCheckList: renderCheckList,
     resolveAdminAsset: CT.resolveAssetUrl,
+    sanitizeCsvCell: sanitizeCsvCell,
     submitForm: submitForm,
   };
 })();

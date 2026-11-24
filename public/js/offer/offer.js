@@ -6,10 +6,29 @@
 
   let requestSeq = 0;
 
+  function renderOfferError(message, onRetry) {
+    const containers = document.querySelectorAll('.offers-container');
+    const featuredContainer = containers[0];
+    const moreContainer = containers[1];
+    if (!featuredContainer) return;
+    if (moreContainer) {
+      moreContainer.innerHTML = '';
+      moreContainer.closest('section')?.classList.add('is-hidden');
+    }
+    window.CineTicket.renderStateCard(featuredContainer, {
+      heading: 'Unable to load offers',
+      message: message || 'Promotional offers could not be loaded right now. Please try again.',
+      actionLabel: 'Retry Offers',
+      onAction: onRetry,
+      isError: true,
+    });
+  }
+
   async function fetchOffers(offerType, onReset) {
     const seq = ++requestSeq;
     const url = '/index.php/offer/offer/getOfferList' +
       (offerType ? '?offer_type=' + encodeURIComponent(offerType) : '');
+    const retry = function () { fetchOffers(offerType, onReset); };
 
     try {
       const payload = await window.CineTicket.fetchJson(url);
@@ -17,11 +36,14 @@
       if (payload.success) {
         renderOffers(payload.data || [], onReset);
       } else {
-        window.showToast(payload.message || 'Failed to load offers', 'error');
+        const msg = payload.message || 'Failed to load offers';
+        window.showToast(msg, 'error');
+        renderOfferError(msg, retry);
       }
     } catch (_) {
       if (seq !== requestSeq) return;
       window.showToast('Unable to load offers right now', 'error');
+      renderOfferError('Promotional offers service is temporarily unreachable.', retry);
     }
   }
 
@@ -48,15 +70,12 @@
     const moreSection = moreContainer ? moreContainer.closest('section') : null;
 
     if (!Array.isArray(offers) || offers.length === 0) {
-      featuredContainer.innerHTML =
-        '<div class="grid-empty-state">' +
-        '<h3>No active offers in this category</h3>' +
-        '<p>Select All Offers to view active student, weekday, and VIP promotions.</p>' +
-        '<button type="button" class="btn btn-primary empty-reset-btn">Show All Offers</button>' +
-        '</div>';
-      if (typeof onReset === 'function') {
-        featuredContainer.querySelector('.empty-reset-btn')?.addEventListener('click', onReset);
-      }
+      window.CineTicket.renderStateCard(featuredContainer, {
+        heading: 'No active offers in this category',
+        message: 'Select All Offers to view active student, weekday, and VIP promotions.',
+        actionLabel: 'Show All Offers',
+        onAction: onReset,
+      });
       if (moreSection) moreSection.classList.add('is-hidden');
       return;
     }
@@ -148,16 +167,11 @@
 
     function resetAllOffers() {
       activeType = '';
-      tabButtons.forEach(function (btn, idx) {
-        btn.classList.toggle('active', idx === 0);
-        btn.setAttribute('aria-pressed', String(idx === 0));
-      });
+      CT.activatePill(tabButtons, function (_, idx) { return idx === 0; });
       fetchOffers('', resetAllOffers);
     }
 
-    tabButtons.forEach(function (btn, idx) {
-      btn.setAttribute('aria-pressed', String(idx === 0));
-    });
+    CT.activatePill(tabButtons, function (_, idx) { return idx === 0; });
 
     await CT.AuthStore.syncSession();
     fetchOffers('', resetAllOffers);
@@ -168,13 +182,8 @@
 
     tabButtons.forEach(function (button) {
       button.addEventListener('click', function () {
-        tabButtons.forEach(function (btn) {
-          btn.classList.remove('active');
-          btn.setAttribute('aria-pressed', 'false');
-        });
-        this.classList.add('active');
-        this.setAttribute('aria-pressed', 'true');
-        const label = this.textContent.trim();
+        CT.activatePill(tabButtons, button);
+        const label = button.textContent.trim();
         activeType = label === 'All Offers' ? '' : label;
         fetchOffers(activeType, resetAllOffers);
       });

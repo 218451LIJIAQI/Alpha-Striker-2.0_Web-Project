@@ -27,38 +27,11 @@
   }
 
   function initTabs() {
-    const tabBtns = Array.from(document.querySelectorAll('.tab-btn'));
     const tabContents = document.querySelectorAll('.tab-content');
-    if (!tabBtns.length) return;
-
-    function activateTab(btn) {
+    window.CineTicket.bindTabList(document.querySelectorAll('.tab-btn'), function (btn) {
       const target = btn.getAttribute('data-tab');
-      tabBtns.forEach(function (b) {
-        const isActive = b === btn;
-        b.classList.toggle('active', isActive);
-        b.setAttribute('aria-selected', String(isActive));
-        b.setAttribute('tabindex', isActive ? '0' : '-1');
-      });
       tabContents.forEach(function (c) {
         c.classList.toggle('active', c.id === target + '-tab');
-      });
-    }
-
-    tabBtns.forEach(function (btn, idx) {
-      btn.setAttribute('role', 'tab');
-      btn.setAttribute('aria-selected', String(btn.classList.contains('active')));
-      btn.setAttribute('tabindex', btn.classList.contains('active') ? '0' : '-1');
-      btn.addEventListener('click', function () {
-        activateTab(btn);
-      });
-      btn.addEventListener('keydown', function (e) {
-        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-          e.preventDefault();
-          const dir = e.key === 'ArrowRight' ? 1 : -1;
-          const next = tabBtns[(idx + dir + tabBtns.length) % tabBtns.length];
-          activateTab(next);
-          next.focus();
-        }
       });
     });
   }
@@ -74,16 +47,20 @@
     }).join('');
   }
 
-  function renderNotFoundState(message) {
+  function renderNotFoundState(heading, message, onRetry) {
     const root = document.querySelector('.theater-detail-container');
     if (!root) return;
-    const esc = window.CineTicket.escapeHtml;
-    root.innerHTML =
-      '<div class="detail-card empty-context-card">' +
-      '<h2>Theater Not Found</h2>' +
-      '<p>' + esc(message || 'The requested partner cinema could not be located.') + '</p>' +
-      '<a href="theater.html" class="btn-primary">Browse All Theaters</a>' +
-      '</div>';
+    window.CineTicket.renderStateCard(root, {
+      className: 'detail-card empty-context-card',
+      headingTag: 'h2',
+      heading: heading || 'Theater Not Found',
+      message: message || 'The requested partner cinema could not be located.',
+      actionLabel: onRetry ? 'Retry Loading Theater' : 'Browse All Theaters',
+      actionHref: onRetry ? '' : 'theater.html',
+      onAction: onRetry,
+      buttonClass: 'btn btn-primary',
+      isError: Boolean(onRetry),
+    });
   }
 
   function renderTheaterPage(theater) {
@@ -243,8 +220,8 @@
         .map(function (m) { return parseFloat(m.money); })
         .filter(function (v) { return Number.isFinite(v) && v >= 0; });
       const basePrice = validPrices.length ? Math.min.apply(null, validPrices) : 39.0;
-      const studentPrice = Math.max(0, +(basePrice - 5).toFixed(2));
-      const groupSeatPrice = +(basePrice * 0.7).toFixed(2);
+      const studentPrice = Math.max(0, CT.roundCents(basePrice - 5));
+      const groupSeatPrice = CT.roundCents(basePrice * 0.7);
 
       pricingEl.innerHTML = [
         { label: 'Standard Reserved', price: '$' + basePrice.toFixed(2) },
@@ -302,26 +279,33 @@
     }
   }
 
-  document.addEventListener('DOMContentLoaded', async function () {
+  document.addEventListener('DOMContentLoaded', function () {
     initTabs();
     const rawCode = new URLSearchParams(window.location.search).get('theater_code') || '1';
     if (!/^\d+$/.test(rawCode) || parseInt(rawCode, 10) <= 0) {
-      renderNotFoundState('Invalid theater identifier.');
+      renderNotFoundState('Theater Not Found', 'Invalid theater identifier.');
       return;
     }
 
-    try {
-      const payload = await window.CineTicket.fetchJson(
-        '/index.php/theater/theater/getTheaterDetails?theater_code=' + encodeURIComponent(rawCode)
-      );
-      if (payload.success && payload.data) {
-        renderTheaterPage(payload.data);
-      } else {
-        window.showToast(payload.message || 'Theater not found', 'error');
-        renderNotFoundState(payload.message);
+    async function loadDetails() {
+      try {
+        const payload = await window.CineTicket.fetchJson(
+          '/index.php/theater/theater/getTheaterDetails?theater_code=' + encodeURIComponent(rawCode)
+        );
+        if (payload.success && payload.data) {
+          renderTheaterPage(payload.data);
+        } else {
+          window.showToast(payload.message || 'Theater not found', 'error');
+          renderNotFoundState('Theater Not Found', payload.message);
+        }
+      } catch (_) {
+        window.showToast('Failed to load theater details', 'error');
+        renderNotFoundState('Connection Error', 'Unable to load theater schedule right now.', function () {
+          window.location.reload();
+        });
       }
-    } catch (_) {
-      window.showToast('Failed to load theater details', 'error');
     }
+
+    loadDetails();
   });
 })();

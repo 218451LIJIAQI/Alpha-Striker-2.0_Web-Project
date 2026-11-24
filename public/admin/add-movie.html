@@ -114,22 +114,27 @@
       AdminApp.bindCheckControls(theaterGrid, 'select-all-theaters', 'clear-all-theaters');
       AdminApp.bindCheckControls(offerGrid, 'select-all-offers', 'clear-all-offers');
 
-      const [theatersRes, offersRes] = await Promise.all([
-        AdminApp.apiFetch('/index.php/admin/theater/index'),
-        AdminApp.apiFetch('/index.php/admin/offer/index'),
-      ]);
-      const theaters = theatersRes.success && Array.isArray(theatersRes.data) ? theatersRes.data : [];
-      const offers = offersRes.success && Array.isArray(offersRes.data) ? offersRes.data : [];
-      const defaultOfferIds = offers.filter(function (o) { return !o.user_code; }).map(function (o) { return o.offer_code; });
+      try {
+        const [theatersRes, offersRes] = await Promise.all([
+          AdminApp.apiFetch('/index.php/admin/theater/index'),
+          AdminApp.apiFetch('/index.php/admin/offer/index'),
+        ]);
+        const theaters = theatersRes.success && Array.isArray(theatersRes.data) ? theatersRes.data : [];
+        const offers = offersRes.success && Array.isArray(offersRes.data) ? offersRes.data : [];
+        const defaultOfferIds = offers.filter(function (o) { return !o.user_code; }).map(function (o) { return o.offer_code; });
 
-      AdminApp.renderCheckList(theaterGrid, theaters, 'theater_code', function (t) { return t.theater_name; }, null);
-      AdminApp.renderCheckList(
-        offerGrid,
-        offers,
-        'offer_code',
-        function (o) { return o.promo_code + ' — ' + o.offer_title + ' (-$' + (parseFloat(o.money) || 0).toFixed(2) + ')'; },
-        defaultOfferIds
-      );
+        AdminApp.renderCheckList(theaterGrid, theaters, 'theater_code', function (t) { return t.theater_name; }, null);
+        AdminApp.renderCheckList(
+          offerGrid,
+          offers,
+          'offer_code',
+          function (o) { return o.promo_code + ' — ' + o.offer_title + ' (-$' + (parseFloat(o.money) || 0).toFixed(2) + ')'; },
+          defaultOfferIds
+        );
+      } catch (_) {
+        AdminApp.renderCheckList(theaterGrid, [], 'theater_code', function (t) { return t.theater_name; }, null);
+        AdminApp.renderCheckList(offerGrid, [], 'offer_code', function (o) { return o.offer_title; }, []);
+      }
 
       document.getElementById('add-movie-form').addEventListener('submit', function (e) {
         e.preventDefault();

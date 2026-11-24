@@ -39,6 +39,10 @@ class Seat extends ApiController
     public function saveSeats()
     {
         try {
+            if (!$this->verifySameOrigin()) {
+                return $this->fail('Forbidden: cross-origin request rejected', 403);
+            }
+
             $data          = $this->payload();
             $movieCode     = $this->idParam('movie_code');
             $theaterCode   = $this->optionalIdWithDefault('theater_code', 1);
@@ -58,6 +62,7 @@ class Seat extends ApiController
                 !$this->isValidIsoDate($date) ||
                 $time === '' ||
                 $this->textLen($time) > 30 ||
+                preg_match('/[\x00-\x1F\x7F]/', $time) ||
                 empty($rawSeats) ||
                 is_object($rawSeats) ||
                 is_bool($rawSeats)
@@ -82,6 +87,12 @@ class Seat extends ApiController
             }
 
             $seatNums = array_values($normalizedSeats);
+            usort($seatNums, function ($a, $b) {
+                return $a[0] === $b[0]
+                    ? ((int) substr($a, 1)) <=> ((int) substr($b, 1))
+                    : strcmp($a[0], $b[0]);
+            });
+
             if (empty($seatNums)) {
                 return $this->fail('At least one valid seat must be selected');
             }
@@ -127,10 +138,9 @@ class Seat extends ApiController
                     Db::rollback();
                     return $this->fail('Selected movie is not scheduled at this theater');
                 }
-                if (
-                    (!empty($schedule['start_date']) && $date < $schedule['start_date']) ||
-                    (!empty($schedule['end_date']) && $date > $schedule['end_date'])
-                ) {
+                $schedStart = trim((string) ($schedule['start_date'] ?? ''));
+                $schedEnd   = trim((string) ($schedule['end_date'] ?? ''));
+                if (($schedStart !== '' && $date < $schedStart) || ($schedEnd !== '' && $date > $schedEnd)) {
                     Db::rollback();
                     return $this->fail('Selected screening date is outside the theater schedule window');
                 }
@@ -278,6 +288,10 @@ class Seat extends ApiController
     public function delete($seat_code = '')
     {
         try {
+            if (!$this->verifySameOrigin()) {
+                return $this->fail('Forbidden: cross-origin request rejected', 403);
+            }
+
             $sessionUserId = (int) Session::get('user_id', 0);
             if ($sessionUserId <= 0) {
                 return $this->fail('Authentication required to cancel a booking', 401);
@@ -288,22 +302,36 @@ class Seat extends ApiController
                 return $this->fail('Valid seat_code is required');
             }
 
-            $seat = Db::name('seat')->where('seat_code', $seatId)->find();
-            if (!$seat) {
-                return $this->fail('Ticket record not found', 404);
+            Db::startTrans();
+            try {
+                $seat = Db::name('seat')->where('seat_code', $seatId)->lock(true)->find();
+                if (!$seat) {
+                    Db::rollback();
+                    return $this->fail('Ticket record not found', 404);
+                }
+
+                $ownerUserId = isset($seat['user_code']) && $seat['user_code'] !== null ? (int) $seat['user_code'] : 0;
+                if ($ownerUserId <= 0 || $ownerUserId !== $sessionUserId) {
+                    Db::rollback();
+                    return $this->fail('Not authorized to cancel this booking', 403);
+                }
+
+                $deleted = Db::name('seat')
+                    ->where('seat_code', $seatId)
+                    ->where('user_code', $sessionUserId)
+                    ->delete();
+
+                if (!$deleted) {
+                    Db::rollback();
+                    return $this->fail('Ticket record not found', 404);
+                }
+
+                Db::commit();
+                return $this->ok(['seat_code' => $seatId], 'Booking cancelled');
+            } catch (\Throwable $txErr) {
+                Db::rollback();
+                throw $txErr;
             }
-
-            $ownerUserId = isset($seat['user_code']) && $seat['user_code'] !== null ? (int) $seat['user_code'] : 0;
-            if ($ownerUserId <= 0 || $ownerUserId !== $sessionUserId) {
-                return $this->fail('Not authorized to cancel this booking', 403);
-            }
-
-            Db::name('seat')
-                ->where('seat_code', $seatId)
-                ->where('user_code', $sessionUserId)
-                ->delete();
-
-            return $this->ok(['seat_code' => $seatId], 'Booking cancelled');
         } catch (\Throwable $e) {
             return $this->serverError('Failed to cancel booking', $e);
         }

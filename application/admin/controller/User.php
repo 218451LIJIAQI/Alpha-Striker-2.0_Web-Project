@@ -79,17 +79,19 @@ class User extends BaseAdmin
     public function update($user_code = '')
     {
         try {
-            $userId = $this->idParam('user_code', $user_code);
+            $payload = $this->payload();
+            $userId  = $this->idParam('user_code', $user_code);
             if ($userId <= 0) {
                 return $this->fail('Valid user_code is required');
             }
 
-            if (!Db::name('user')->where('user_code', $userId)->find()) {
+            $existing = Db::name('user')->where('user_code', $userId)->find();
+            if (!$existing) {
                 return $this->fail('User not found', 404);
             }
 
-            $name     = $this->strParam('user_name');
-            $email    = strtolower($this->strParam('email'));
+            $name     = array_key_exists('user_name', $payload) ? $this->strParam('user_name') : (string) $existing['user_name'];
+            $email    = array_key_exists('email', $payload) ? strtolower($this->strParam('email')) : strtolower((string) $existing['email']);
             $password = $this->rawStrParam('login_pwd');
 
             $error = $this->validateUserInput($name, $email, $password, false, $userId);
@@ -158,13 +160,13 @@ class User extends BaseAdmin
         if ($name === '' || $this->textLen($name) > 50) {
             return 'Valid username (1-50 characters) is required';
         }
-        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100) {
+        if (!$this->isValidEmail($email)) {
             return 'Valid email address is required';
         }
-        if ($requirePassword && (strlen($password) < 6 || strlen($password) > self::MAX_PASSWORD_BYTES)) {
+        if ($requirePassword && !$this->isValidPasswordLength($password)) {
             return 'Password must be 6-72 characters';
         }
-        if (!$requirePassword && $password !== '' && (strlen($password) < 6 || strlen($password) > self::MAX_PASSWORD_BYTES)) {
+        if (!$requirePassword && $password !== '' && !$this->isValidPasswordLength($password)) {
             return 'New password must be 6-72 characters';
         }
 

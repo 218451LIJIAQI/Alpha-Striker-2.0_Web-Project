@@ -114,7 +114,7 @@
             <h3><i class="fas fa-credit-card" aria-hidden="true"></i> Card Details</h3>
             <div class="form-row">
               <div class="form-group full-width">
-                <label for="card-number">Card Number</label>
+                <label for="card-number">Card Number *</label>
                 <div class="input-with-icon">
                   <input type="text" id="card-number" class="tabular-nums" placeholder="1234 5678 9012 3456" maxlength="19" autocomplete="cc-number" inputmode="numeric">
                   <i class="fas fa-credit-card input-icon" aria-hidden="true"></i>
@@ -123,11 +123,11 @@
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label for="expiry">Expiry Date (MM/YY)</label>
+                <label for="expiry">Expiry Date (MM/YY) *</label>
                 <input type="text" id="expiry" class="tabular-nums" placeholder="MM/YY" maxlength="5" autocomplete="cc-exp" inputmode="numeric">
               </div>
               <div class="form-group">
-                <label for="cvv">CVV</label>
+                <label for="cvv">CVV *</label>
                 <div class="input-with-icon">
                   <input type="text" id="cvv" class="tabular-nums" placeholder="123" maxlength="4" autocomplete="cc-csc" inputmode="numeric">
                   <i class="fas fa-question-circle input-icon" title="3 or 4 digit security code" aria-hidden="true"></i>
@@ -136,8 +136,8 @@
             </div>
             <div class="form-row">
               <div class="form-group full-width">
-                <label for="cardholder-name">Cardholder Name</label>
-                <input type="text" id="cardholder-name" placeholder="Name on card" autocomplete="cc-name">
+                <label for="cardholder-name">Cardholder Name *</label>
+                <input type="text" id="cardholder-name" placeholder="Name on card" maxlength="100" autocomplete="cc-name">
               </div>
             </div>
           </div>
@@ -145,7 +145,7 @@
           <div class="promo-section">
             <h3><i class="fas fa-tag" aria-hidden="true"></i> Promo Code</h3>
             <div class="promo-input-group">
-              <input type="text" id="coupon-code" placeholder="Enter promo code (e.g. STUDENT30)" aria-label="Promo code">
+              <input type="text" id="coupon-code" placeholder="Enter promo code (e.g. STUDENT30)" maxlength="100" aria-label="Promo code">
               <button type="button" id="verify-coupon" class="promo-btn">
                 <i class="fas fa-check" aria-hidden="true"></i> Apply
               </button>
@@ -211,7 +211,7 @@
             </div>
           </div>
 
-          <button type="button" class="pay-now-btn tabular-nums">
+          <button type="button" class="pay-now-btn tabular-nums" disabled>
             <i class="fas fa-lock" aria-hidden="true"></i>
             <span>Secure Payment</span>
             <span id="final-amount">$0.00</span>
