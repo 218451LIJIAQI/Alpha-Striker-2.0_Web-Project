@@ -1,117 +1,100 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #f8f9fa;
-  color: #333333;
-  overflow-x: hidden;
-  width: 100%;
-}
+/* Partner Theaters Directory Styles */
 
 .container {
-  max-width: 1200px;
-  margin: 28px auto;
-  padding: 0 20px;
+  max-width: 1240px;
+  margin: 32px auto;
+  padding: 0 24px;
   width: 100%;
 }
 
-.theaters-header {
-  margin-bottom: 2rem;
-  text-align: center;
-}
+.theaters-header { margin-bottom: 28px; text-align: center; }
 
 .theaters-header h1 {
-  font-size: 2.5rem;
-  color: #333333;
-  margin-bottom: 1rem;
+  font-family: var(--font-display);
+  font-size: 2.3rem;
+  font-weight: 800;
+  color: var(--text-main);
+  margin: 0 0 10px;
 }
 
 .theaters-header p {
-  color: #666666;
-  max-width: 800px;
+  color: var(--text-muted);
+  max-width: 720px;
   margin: 0 auto;
+  font-size: 16px;
 }
 
 .search-location {
   display: flex;
   justify-content: center;
-  margin-bottom: 2.5rem;
+  max-width: 640px;
+  margin: 0 auto 28px;
 }
 
 .search-location input {
-  width: 60%;
-  max-width: 560px;
-  padding: 0.85rem 1.1rem;
-  border: 1px solid #dddddd;
-  border-radius: 30px 0 0 30px;
-  font-size: 1rem;
+  flex: 1;
+  min-width: 0;
+  padding: 13px 18px;
+  border: 1.5px solid var(--border-strong);
+  border-right: none;
+  border-radius: 999px 0 0 999px;
+  font-family: inherit;
+  font-size: 15px;
+  background: var(--surface-bg);
+  color: var(--text-main);
 }
 
 .search-location button {
-  background-color: #e63946;
+  background-color: var(--brand-accent);
   color: #ffffff;
   border: none;
-  padding: 0.85rem 1.6rem;
-  border-radius: 0 30px 30px 0;
+  padding: 13px 26px;
+  border-radius: 0 999px 999px 0;
   cursor: pointer;
+  font-family: inherit;
   font-weight: 700;
+  font-size: 14.5px;
+  transition: background-color 0.18s ease;
 }
+
+.search-location button:hover { background-color: var(--brand-accent-hover); }
 
 .filter-options {
   display: flex;
   justify-content: center;
-  margin-bottom: 2rem;
-  gap: 0.85rem;
+  margin-bottom: 30px;
+  gap: 10px;
   flex-wrap: wrap;
-}
-
-.filter-options button {
-  background-color: #ffffff;
-  border: 1px solid #dddddd;
-  padding: 0.5rem 1.5rem;
-  border-radius: 20px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.filter-options button.active {
-  background-color: #3a4ed5;
-  color: #ffffff;
-  border-color: #3a4ed5;
-}
-
-.filter-options button:hover:not(.active) {
-  background-color: #f0f0f0;
 }
 
 .theater-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr));
+  gap: 26px;
   align-items: stretch;
 }
 
 .theater-card {
-  background-color: #ffffff;
-  border-radius: 12px;
+  background-color: var(--surface-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
-  transition: transform 0.25s ease;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
 .theater-card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-elevated);
+  border-color: var(--brand-primary);
 }
 
 .theater-image {
-  height: 200px;
+  height: 196px;
+  background: #0f172a;
   overflow: hidden;
 }
 
@@ -119,65 +102,72 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
 .theater-details {
-  padding: 1.5rem;
+  padding: 22px;
   display: flex;
   flex-direction: column;
   flex-grow: 1;
 }
 
 .theater-details h3 {
-  font-size: 1.45rem;
-  margin-bottom: 0.5rem;
-  color: #333333;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--text-main);
 }
 
 .theater-location {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  color: #666666;
+  align-items: flex-start;
+  gap: 7px;
+  margin-bottom: 14px;
+  color: var(--text-muted);
+  font-size: 14px;
 }
 
 .amenities {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 6px;
+  margin-bottom: 14px;
 }
 
 .amenity {
-  background-color: #f0f0f0;
-  padding: 0.3rem 0.8rem;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  color: #555555;
+  background-color: var(--surface-muted);
+  border: 1px solid var(--border-color);
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
 .theater-rating {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  color: #f59e0b;
-  margin-bottom: 1rem;
+  gap: 6px;
+  color: var(--brand-star);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 16px;
 }
 
 .view-details {
   display: block;
   text-align: center;
-  background-color: #3a4ed5;
+  background-color: var(--brand-primary);
   color: #ffffff;
-  padding: 0.8rem;
-  border-radius: 8px;
+  padding: 11px 16px;
+  border-radius: 10px;
   text-decoration: none;
   font-weight: 600;
-  transition: background-color 0.2s ease;
+  font-size: 14.5px;
+  transition: background-color 0.18s ease;
   margin-top: auto;
 }
 
-.view-details:hover {
-  background-color: #2a3ec5;
-}
+.view-details:hover { background-color: var(--brand-primary-hover); }

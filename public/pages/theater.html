@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Theaters | Alpha Striker 2.0</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <title>Partner Theaters | CineTix Box Office</title>
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/common/footer.css">
   <link rel="stylesheet" href="../css/theater/theater.css">
@@ -16,22 +15,22 @@
 
   <main class="container">
     <div class="theaters-header">
-      <h1>Find Theaters Near You</h1>
-      <p>Discover cinematic experiences across partner theaters — from IMAX laser screens to 4DX motion auditoriums and dine-in recliners.</p>
+      <h1>Find Partner Theaters</h1>
+      <p>Compare cinematic formats across partner locations — from 4K IMAX laser screens to 4DX motion auditoriums and dine-in recliners.</p>
     </div>
 
-    <div class="search-location">
-      <input type="text" placeholder="Search by theater name, street, or district...">
+    <div class="search-location" role="search">
+      <input type="search" placeholder="Search by theater name, street, or district..." aria-label="Search theaters by name or street">
       <button type="button">Search</button>
     </div>
 
-    <div class="filter-options">
-      <button type="button" class="active">All Theaters</button>
-      <button type="button">IMAX</button>
-      <button type="button">4DX</button>
-      <button type="button">VIP</button>
-      <button type="button">Dolby Atmos</button>
-      <button type="button">RPX</button>
+    <div class="filter-options" role="group" aria-label="Filter theaters by format">
+      <button type="button" class="active" aria-pressed="true">All Theaters</button>
+      <button type="button" aria-pressed="false">IMAX</button>
+      <button type="button" aria-pressed="false">4DX</button>
+      <button type="button" aria-pressed="false">VIP</button>
+      <button type="button" aria-pressed="false">Dolby Atmos</button>
+      <button type="button" aria-pressed="false">RPX</button>
     </div>
 
     <div class="theater-list"></div>

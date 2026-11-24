@@ -1,179 +1,255 @@
 /**
  * Digital Tickets Wallet, Native Print/PDF Export & Ticket Cancellation Controller
  */
-document.addEventListener('DOMContentLoaded', async function () {
-  await window.CineTicket.AuthStore.syncSession();
-  await loadUserTickets();
-});
+(function () {
+  'use strict';
 
-async function loadUserTickets() {
-  const container = document.getElementById('cons');
-  if (!container) return;
+  let cachedSeats = [];
+  let activeZoneFilter = 'all';
 
-  const CT = window.CineTicket;
-  const user = CT.AuthStore.getUser();
-  if (!user.isLoggedIn || user.userId <= 0) {
-    renderTicketEmptyState(
-      container,
-      'Sign in to view your booked tickets',
-      'Log in to access your digital passes, barcodes, and seat cancellation options.',
-      CT.rootUrl('login.html'),
-      'Sign In Now'
-    );
-    return;
-  }
+  async function loadUserTickets() {
+    const container = document.getElementById('cons');
+    const walletToolbar = document.getElementById('wallet-toolbar');
+    if (!container) return;
 
-  try {
-    const payload = await CT.fetchJson('/index.php/movie/seat/getSeatListByUserCode');
-
-    if (payload.httpStatus === 401) {
-      CT.AuthStore.clearLocal();
+    const CT = window.CineTicket;
+    const user = CT.AuthStore.getUser();
+    if (!user.isLoggedIn || user.userId <= 0) {
+      if (walletToolbar) walletToolbar.classList.add('is-hidden');
       renderTicketEmptyState(
         container,
-        'Session expired — please sign in again',
-        'Your login session expired. Sign in again to access and manage your tickets.',
+        'Sign in to view your booked tickets',
+        'Log in to access your digital passes, barcodes, and seat cancellation options.',
         CT.rootUrl('login.html'),
         'Sign In Now'
       );
       return;
     }
 
-    if (!payload.success || !Array.isArray(payload.data) || payload.data.length === 0) {
+    try {
+      const payload = await CT.fetchJson('/index.php/movie/seat/getSeatListByUserCode');
+
+      if (payload.httpStatus === 401) {
+        CT.AuthStore.clearLocal();
+        if (walletToolbar) walletToolbar.classList.add('is-hidden');
+        renderTicketEmptyState(
+          container,
+          'Session expired — please sign in again',
+          'Your login session expired. Sign in again to access and manage your tickets.',
+          CT.rootUrl('login.html'),
+          'Sign In Now'
+        );
+        return;
+      }
+
+      cachedSeats = payload.success && Array.isArray(payload.data) ? payload.data : [];
+      if (cachedSeats.length === 0) {
+        if (walletToolbar) walletToolbar.classList.add('is-hidden');
+        renderTicketEmptyState(
+          container,
+          'No active tickets yet',
+          'Reserve seats for any current movie screening and your digital tickets will appear here.',
+          CT.pageUrl('homepage.html'),
+          'Browse Movies'
+        );
+        return;
+      }
+
+      if (walletToolbar) walletToolbar.classList.remove('is-hidden');
+      renderFilteredTickets();
+    } catch (_) {
+      window.showToast('Unable to load your tickets right now', 'error');
+    }
+  }
+
+  function renderFilteredTickets() {
+    const container = document.getElementById('cons');
+    if (!container) return;
+
+    const countEl = document.getElementById('wallet-count-badge');
+    const filtered = cachedSeats.filter(function (s) {
+      if (activeZoneFilter === 'vip') return Number(s.seat_zone) === 2;
+      if (activeZoneFilter === 'std') return Number(s.seat_zone) !== 2;
+      return true;
+    });
+
+    if (countEl) {
+      countEl.textContent = filtered.length + ' of ' + cachedSeats.length + ' Pass' + (cachedSeats.length === 1 ? '' : 'es');
+    }
+
+    if (filtered.length === 0) {
       renderTicketEmptyState(
         container,
-        'No active tickets yet',
-        'Reserve seats for any current movie screening and your digital tickets will appear here.',
-        CT.pageUrl('homepage.html'),
-        'Browse Movies'
+        'No tickets in this zone filter',
+        'Switch back to All Passes to view your other active reservations.',
+        '#',
+        'Show All Passes',
+        function () {
+          activeZoneFilter = 'all';
+          syncZoneFilterButtons();
+          renderFilteredTickets();
+        }
       );
       return;
     }
 
     container.innerHTML = '';
-    payload.data.forEach(function (seat) {
+    filtered.forEach(function (seat) {
       container.appendChild(createTicketElement(seat));
     });
-  } catch (_) {
-    window.showToast('Unable to load your tickets right now', 'error');
-  }
-}
-
-function renderTicketEmptyState(container, heading, message, actionHref, actionLabel) {
-  const esc = window.CineTicket.escapeHtml;
-  container.innerHTML =
-    '<div class="no-tickets card">' +
-    '<i class="fas fa-ticket-alt"></i>' +
-    '<h2>' + esc(heading) + '</h2>' +
-    '<p>' + esc(message) + '</p>' +
-    '<a href="' + esc(actionHref) + '" class="empty-action-btn">' + esc(actionLabel) + '</a>' +
-    '</div>';
-}
-
-function createTicketElement(seat) {
-  const CT = window.CineTicket;
-  const esc = CT.escapeHtml;
-  const movie = seat.movie_info || {};
-  const theater = seat.theater_info || {};
-
-  const title = movie.movie_name || 'Movie Screening';
-  const runtime = movie.times || 'Standard Feature';
-  const genres = (movie.movie_type || 'Cinema')
-    .split(',')
-    .map(function (g) { return g.trim(); })
-    .filter(Boolean);
-  const stars = CT.formatStars(movie.star || 5);
-  const seatStr = String(seat.seat_num || 'A1');
-  const theaterLabel = theater.theater_name || ('Theater #' + (seat.theater_code || 1));
-
-  const wrapper = document.createElement('div');
-  wrapper.className = 'ticket';
-  wrapper.id = 'ticket' + seat.seat_code;
-
-  wrapper.innerHTML =
-    '<div class="movie-banner">' +
-    '<h2 class="movie-title">' + esc(title) + '</h2>' +
-    '<div class="movie-duration"><span>' + esc(runtime) + ' • ' + esc(theaterLabel) + '</span></div>' +
-    '<div class="movie-genre">' +
-    '<div class="genre-tags">' +
-    genres.map(function (g) { return '<div class="genre-tag">' + esc(g) + '</div>'; }).join('') +
-    '</div>' +
-    '<span class="rating">' + esc(stars) + '</span>' +
-    '</div>' +
-    '</div>' +
-    '<div class="ticket-details">' +
-    '<div class="seat-info">' +
-    '<div class="detail-column"><div class="detail-label">ROW</div><div class="detail-value">' + esc(seatStr.charAt(0)) + '</div></div>' +
-    '<div class="detail-column"><div class="detail-label">SEAT</div><div class="detail-value">' + esc(seatStr.slice(1)) + '</div></div>' +
-    '<div class="detail-column"><div class="detail-label">ZONE</div><div class="detail-value">' + (Number(seat.seat_zone) === 2 ? 'VIP' : 'STD') + '</div></div>' +
-    '</div>' +
-    '<div class="datetime-info">' +
-    '<div class="date-time"><div class="icon"><i class="fas fa-calendar-alt"></i></div><div class="text-info"><div class="detail-label">DATE</div><div>' + esc(seat.date) + '</div></div></div>' +
-    '<div class="date-time"><div class="icon"><i class="fas fa-clock"></i></div><div class="text-info"><div class="detail-label">TIME</div><div>' + esc(seat.time) + '</div></div></div>' +
-    '</div>' +
-    '<div class="barcode-container">' +
-    '<div class="barcode-inner">' +
-    '<svg class="barcode" viewBox="0 0 250 60" aria-hidden="true">' +
-    '<rect x="5" y="5" width="3" height="50" fill="black"/><rect x="12" y="5" width="1" height="50" fill="black"/>' +
-    '<rect x="16" y="5" width="2" height="50" fill="black"/><rect x="22" y="5" width="3" height="50" fill="black"/>' +
-    '<rect x="32" y="5" width="3" height="50" fill="black"/><rect x="38" y="5" width="2" height="50" fill="black"/>' +
-    '<rect x="46" y="5" width="4" height="50" fill="black"/><rect x="56" y="5" width="2" height="50" fill="black"/>' +
-    '<rect x="61" y="5" width="3" height="50" fill="black"/><rect x="70" y="5" width="2" height="50" fill="black"/>' +
-    '<rect x="75" y="5" width="4" height="50" fill="black"/><rect x="85" y="5" width="3" height="50" fill="black"/>' +
-    '<rect x="91" y="5" width="2" height="50" fill="black"/><rect x="99" y="5" width="3" height="50" fill="black"/>' +
-    '<rect x="110" y="5" width="2" height="50" fill="black"/><rect x="115" y="5" width="3" height="50" fill="black"/>' +
-    '<rect x="125" y="5" width="2" height="50" fill="black"/><rect x="135" y="5" width="3" height="50" fill="black"/>' +
-    '<rect x="145" y="5" width="2" height="50" fill="black"/><rect x="150" y="5" width="3" height="50" fill="black"/>' +
-    '<rect x="155" y="5" width="4" height="50" fill="black"/><rect x="165" y="5" width="2" height="50" fill="black"/>' +
-    '<rect x="170" y="5" width="3" height="50" fill="black"/><rect x="180" y="5" width="2" height="50" fill="black"/>' +
-    '<rect x="185" y="5" width="4" height="50" fill="black"/><rect x="195" y="5" width="2" height="50" fill="black"/>' +
-    '<rect x="200" y="5" width="3" height="50" fill="black"/><rect x="210" y="5" width="2" height="50" fill="black"/>' +
-    '<rect x="215" y="5" width="3" height="50" fill="black"/><rect x="225" y="5" width="4" height="50" fill="black"/>' +
-    '<rect x="235" y="5" width="3" height="50" fill="black"/><rect x="242" y="5" width="2" height="50" fill="black"/>' +
-    '</svg>' +
-    '</div>' +
-    '<div class="ticket-id">TKT-' + esc(String(seat.seat_code).padStart(6, '0')) + '</div>' +
-    '</div>' +
-    '<button type="button" class="view-details export-ticket-btn">Print / Save PDF</button>' +
-    '<button type="button" class="view-details2 cancel-button" data-seat-code="' + esc(seat.seat_code) + '">Cancel Booking</button>' +
-    '</div>';
-
-  wrapper.querySelector('.export-ticket-btn').addEventListener('click', function () {
-    exportTicket(wrapper);
-  });
-  wrapper.querySelector('.cancel-button').addEventListener('click', function () {
-    cancelTicket(seat.seat_code);
-  });
-
-  return wrapper;
-}
-
-function exportTicket(ticketEl) {
-  document.body.classList.add('printing-single-ticket');
-  ticketEl.classList.add('print-target');
-  window.print();
-  ticketEl.classList.remove('print-target');
-  document.body.classList.remove('printing-single-ticket');
-}
-
-async function cancelTicket(seatCode) {
-  if (!window.confirm('Are you sure you want to cancel this seat reservation?')) {
-    return;
   }
 
-  const CT = window.CineTicket;
-  try {
-    const payload = await CT.fetchJson('/index.php/movie/seat/delete', {
-      method: 'POST',
-      body: { seat_code: seatCode },
+  function syncZoneFilterButtons() {
+    document.querySelectorAll('[data-ticket-zone]').forEach(function (btn) {
+      const isAct = btn.getAttribute('data-ticket-zone') === activeZoneFilter;
+      btn.classList.toggle('active', isAct);
+      btn.setAttribute('aria-pressed', String(isAct));
+    });
+  }
+
+  function renderTicketEmptyState(container, heading, message, actionHref, actionLabel, customAction) {
+    const esc = window.CineTicket.escapeHtml;
+    container.innerHTML =
+      '<div class="no-tickets card">' +
+      '<i class="fas fa-ticket-alt" aria-hidden="true"></i>' +
+      '<h2>' + esc(heading) + '</h2>' +
+      '<p>' + esc(message) + '</p>' +
+      (customAction
+        ? '<button type="button" class="empty-action-btn">' + esc(actionLabel) + '</button>'
+        : '<a href="' + esc(actionHref) + '" class="empty-action-btn">' + esc(actionLabel) + '</a>') +
+      '</div>';
+
+    if (customAction) {
+      container.querySelector('.empty-action-btn')?.addEventListener('click', customAction);
+    }
+  }
+
+  function createTicketElement(seat) {
+    const CT = window.CineTicket;
+    const esc = CT.escapeHtml;
+    const movie = seat.movie_info || {};
+    const theater = seat.theater_info || {};
+
+    const title = movie.movie_name || 'Movie Screening';
+    const runtime = movie.times || 'Standard Feature';
+    const genres = (movie.movie_type || 'Cinema')
+      .split(',')
+      .map(function (g) { return g.trim(); })
+      .filter(Boolean);
+    const stars = CT.formatStars(movie.star || 5);
+    const seatStr = String(seat.seat_num || 'A1');
+    const theaterLabel = theater.theater_name || ('Theater #' + (seat.theater_code || 1));
+    const isVip = Number(seat.seat_zone) === 2;
+
+    const wrapper = document.createElement('article');
+    wrapper.className = 'ticket' + (isVip ? ' ticket-vip' : '');
+    wrapper.id = 'ticket' + seat.seat_code;
+
+    wrapper.innerHTML =
+      '<div class="movie-banner">' +
+      '<h2 class="movie-title">' + esc(title) + '</h2>' +
+      '<div class="movie-duration"><span>' + esc(runtime) + ' • ' + esc(theaterLabel) + '</span></div>' +
+      '<div class="movie-genre">' +
+      '<div class="genre-tags">' +
+      genres.map(function (g) { return '<div class="genre-tag">' + esc(g) + '</div>'; }).join('') +
+      '</div>' +
+      '<span class="rating">' + esc(stars) + '</span>' +
+      '</div>' +
+      '</div>' +
+      '<div class="ticket-details">' +
+      '<div class="seat-info tabular-nums">' +
+      '<div class="detail-column"><div class="detail-label">ROW</div><div class="detail-value">' + esc(seatStr.charAt(0)) + '</div></div>' +
+      '<div class="detail-column"><div class="detail-label">SEAT</div><div class="detail-value">' + esc(seatStr.slice(1)) + '</div></div>' +
+      '<div class="detail-column"><div class="detail-label">ZONE</div><div class="detail-value' + (isVip ? ' zone-vip' : '') + '">' + (isVip ? 'VIP' : 'STD') + '</div></div>' +
+      '</div>' +
+      '<div class="datetime-info tabular-nums">' +
+      '<div class="date-time"><div class="icon"><i class="fas fa-calendar-alt" aria-hidden="true"></i></div><div class="text-info"><div class="detail-label">DATE</div><div>' + esc(seat.date) + '</div></div></div>' +
+      '<div class="date-time"><div class="icon"><i class="fas fa-clock" aria-hidden="true"></i></div><div class="text-info"><div class="detail-label">TIME</div><div>' + esc(seat.time) + '</div></div></div>' +
+      '</div>' +
+      '<div class="barcode-container">' +
+      '<div class="barcode-inner">' +
+      '<svg class="barcode" viewBox="0 0 250 60" aria-hidden="true">' +
+      '<rect x="5" y="5" width="3" height="50" fill="black"/><rect x="12" y="5" width="1" height="50" fill="black"/>' +
+      '<rect x="16" y="5" width="2" height="50" fill="black"/><rect x="22" y="5" width="3" height="50" fill="black"/>' +
+      '<rect x="32" y="5" width="3" height="50" fill="black"/><rect x="38" y="5" width="2" height="50" fill="black"/>' +
+      '<rect x="46" y="5" width="4" height="50" fill="black"/><rect x="56" y="5" width="2" height="50" fill="black"/>' +
+      '<rect x="61" y="5" width="3" height="50" fill="black"/><rect x="70" y="5" width="2" height="50" fill="black"/>' +
+      '<rect x="75" y="5" width="4" height="50" fill="black"/><rect x="85" y="5" width="3" height="50" fill="black"/>' +
+      '<rect x="91" y="5" width="2" height="50" fill="black"/><rect x="99" y="5" width="3" height="50" fill="black"/>' +
+      '<rect x="110" y="5" width="2" height="50" fill="black"/><rect x="115" y="5" width="3" height="50" fill="black"/>' +
+      '<rect x="125" y="5" width="2" height="50" fill="black"/><rect x="135" y="5" width="3" height="50" fill="black"/>' +
+      '<rect x="145" y="5" width="2" height="50" fill="black"/><rect x="150" y="5" width="3" height="50" fill="black"/>' +
+      '<rect x="155" y="5" width="4" height="50" fill="black"/><rect x="165" y="5" width="2" height="50" fill="black"/>' +
+      '<rect x="170" y="5" width="3" height="50" fill="black"/><rect x="180" y="5" width="2" height="50" fill="black"/>' +
+      '<rect x="185" y="5" width="4" height="50" fill="black"/><rect x="195" y="5" width="2" height="50" fill="black"/>' +
+      '<rect x="200" y="5" width="3" height="50" fill="black"/><rect x="210" y="5" width="2" height="50" fill="black"/>' +
+      '<rect x="215" y="5" width="3" height="50" fill="black"/><rect x="225" y="5" width="4" height="50" fill="black"/>' +
+      '<rect x="235" y="5" width="3" height="50" fill="black"/><rect x="242" y="5" width="2" height="50" fill="black"/>' +
+      '</svg>' +
+      '</div>' +
+      '<div class="ticket-id tabular-nums">TKT-' + esc(String(seat.seat_code).padStart(6, '0')) + '</div>' +
+      '</div>' +
+      '<div class="ticket-actions">' +
+      '<button type="button" class="view-details export-ticket-btn"><i class="fas fa-qrcode" aria-hidden="true"></i> Print / Save PDF</button>' +
+      '<button type="button" class="view-details2 cancel-button" data-seat-code="' + esc(seat.seat_code) + '"><i class="fas fa-undo" aria-hidden="true"></i> Cancel Booking</button>' +
+      '</div>' +
+      '</div>';
+
+    wrapper.querySelector('.export-ticket-btn').addEventListener('click', function () {
+      exportTicket(wrapper);
+    });
+    const cancelBtn = wrapper.querySelector('.cancel-button');
+    cancelBtn.addEventListener('click', function () {
+      cancelTicket(seat.seat_code, cancelBtn);
     });
 
-    if (payload.success) {
-      window.showToast('Seat booking cancelled', 'success');
-      await loadUserTickets();
-    } else {
-      window.showToast(payload.message || 'Could not cancel booking', 'error');
-    }
-  } catch (_) {
-    window.showToast('Network error while cancelling ticket', 'error');
+    return wrapper;
   }
-}
+
+  function exportTicket(ticketEl) {
+    document.body.classList.add('printing-single-ticket');
+    ticketEl.classList.add('print-target');
+    window.print();
+    ticketEl.classList.remove('print-target');
+    document.body.classList.remove('printing-single-ticket');
+  }
+
+  async function cancelTicket(seatCode, btnEl) {
+    if (!window.confirm('Are you sure you want to cancel this seat reservation?')) {
+      return;
+    }
+
+    if (btnEl) btnEl.disabled = true;
+    const CT = window.CineTicket;
+    try {
+      const payload = await CT.fetchJson('/index.php/movie/seat/delete', {
+        method: 'POST',
+        body: { seat_code: seatCode },
+      });
+
+      if (payload.success) {
+        window.showToast('Seat booking cancelled and seat released', 'success');
+        await loadUserTickets();
+        return;
+      }
+      window.showToast(payload.message || 'Could not cancel booking', 'error');
+    } catch (_) {
+      window.showToast('Network error while cancelling ticket', 'error');
+    } finally {
+      if (btnEl) btnEl.disabled = false;
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', async function () {
+    document.querySelectorAll('[data-ticket-zone]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        activeZoneFilter = btn.getAttribute('data-ticket-zone') || 'all';
+        syncZoneFilterButtons();
+        renderFilteredTickets();
+      });
+    });
+
+    await window.CineTicket.AuthStore.syncSession();
+    await loadUserTickets();
+  });
+})();

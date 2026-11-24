@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Manage Movies | CineTix Admin</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/admin/admin.css">
   <script src="../js/common.js"></script>
@@ -16,13 +15,14 @@
   <main class="admin-content">
     <div class="page-header">
       <div>
-        <h1><i class="fas fa-film"></i> Movie Catalog</h1>
+        <h1><i class="fas fa-film" aria-hidden="true"></i> Movie Catalog</h1>
         <p>Add, edit, or remove feature films and manage theater screening assignments.</p>
       </div>
-      <a href="add-movie.html" class="add-btn"><i class="fas fa-plus"></i> Add Movie</a>
+      <a href="add-movie.html" class="add-btn"><i class="fas fa-plus" aria-hidden="true"></i> Add Movie</a>
     </div>
 
     <div class="table-container">
+      <div class="admin-table-toolbar" id="movies-toolbar"></div>
       <table>
         <thead>
           <tr>
@@ -46,51 +46,79 @@
   </main>
 
   <script>
-    async function loadMovies() {
-      const tbody = document.getElementById('movies-tbody');
-      const res = await AdminApp.apiFetch('/index.php/admin/movie/index');
-      if (!res.success || !Array.isArray(res.data) || res.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No movies found.</td></tr>';
-        return;
-      }
-
-      const esc = AdminApp.escapeHtml;
-      tbody.innerHTML = res.data.map(function (m) {
-        const poster = AdminApp.resolveAdminAsset(m.img);
-        const price = '$' + (parseFloat(m.money) || 0).toFixed(2);
-        const tCount = Array.isArray(m.theater_codes) ? m.theater_codes.length : (m.theater_count || 0);
-        const tagHtml = m.tag ? '<span class="tag-badge">' + esc(m.tag) + '</span>' : '<span class="muted-dash">—</span>';
-        return (
-          '<tr>' +
-          '<td>#' + esc(m.movie_code) + '</td>' +
-          '<td><img src="' + esc(poster) + '" alt="' + esc(m.movie_name) + '" class="movie-poster"></td>' +
-          '<td><strong>' + esc(m.movie_name) + '</strong></td>' +
-          '<td><span class="type-badge">' + esc(m.movie_type) + '</span></td>' +
-          '<td>' + esc(m.times) + '</td>' +
-          '<td><i class="fas fa-star star-amber"></i> ' + esc(m.star) + '</td>' +
-          '<td><strong>' + esc(price) + '</strong></td>' +
-          '<td><span class="scope-badge">' + esc(tCount + ' cinema' + (tCount === 1 ? '' : 's')) + '</span></td>' +
-          '<td>' + tagHtml + '</td>' +
-          '<td><div class="action-buttons">' +
-          '<a href="edit-movie.html?movie_code=' + encodeURIComponent(m.movie_code) + '" class="edit-btn"><i class="fas fa-edit"></i> Edit</a>' +
-          '<button type="button" class="delete-btn" data-id="' + esc(m.movie_code) + '"><i class="fas fa-trash"></i> Delete</button>' +
-          '</div></td>' +
-          '</tr>'
-        );
-      }).join('');
-
-      AdminApp.bindDeleteActions(tbody, {
-        endpoint: '/index.php/admin/movie/delete',
-        idKey: 'movie_code',
-        confirmText: function (id) { return 'Delete movie #' + id + '? Related schedules, offer links, and seat bookings will also be removed.'; },
-        successText: 'Movie deleted',
-        onSuccess: loadMovies,
-      });
-    }
-
     document.addEventListener('DOMContentLoaded', async function () {
       AdminApp.renderAdminNav('movies');
       if (!(await AdminApp.ensureAuthenticated())) return;
+
+      const esc = AdminApp.escapeHtml;
+      const tableCtrl = AdminApp.createTableController({
+        toolbarId: 'movies-toolbar',
+        tbodyId: 'movies-tbody',
+        colSpan: 10,
+        emptyText: 'No movies found.',
+        searchPlaceholder: 'Search by title, genre, badge, or ID...',
+        filters: [
+          { value: 'all', label: 'All Genres' },
+          { value: 'Action', label: 'Action' },
+          { value: 'Adventure', label: 'Adventure' },
+          { value: 'Animation', label: 'Animation' },
+          { value: 'Drama', label: 'Drama' },
+          { value: 'Sci-Fi', label: 'Sci-Fi' },
+          { value: 'Mystery', label: 'Mystery' },
+          { value: 'Comedy', label: 'Comedy' },
+          { value: 'Horror', label: 'Horror' },
+        ],
+        sorts: [
+          { key: 'id_asc', label: 'Sort: ID (Low–High)', compare: function (a, b) { return Number(a.movie_code) - Number(b.movie_code); } },
+          { key: 'title_asc', label: 'Sort: Title (A–Z)', compare: function (a, b) { return String(a.movie_name || '').localeCompare(String(b.movie_name || '')); } },
+          { key: 'rating_desc', label: 'Sort: Rating (High–Low)', compare: function (a, b) { return (parseFloat(b.star) || 0) - (parseFloat(a.star) || 0); } },
+          { key: 'price_desc', label: 'Sort: Price (High–Low)', compare: function (a, b) { return (parseFloat(b.money) || 0) - (parseFloat(a.money) || 0); } },
+        ],
+        searchText: function (m) {
+          return '#' + m.movie_code + ' ' + (m.movie_name || '') + ' ' + (m.movie_type || '') + ' ' + (m.tag || '');
+        },
+        matchFilter: function (m, val) {
+          return String(m.movie_type || '').toLowerCase().includes(val.toLowerCase());
+        },
+        renderRow: function (m) {
+          const poster = AdminApp.resolveAdminAsset(m.img);
+          const price = '$' + (parseFloat(m.money) || 0).toFixed(2);
+          const tCount = Array.isArray(m.theater_codes) ? m.theater_codes.length : (m.theater_count || 0);
+          const tagHtml = m.tag ? '<span class="tag-badge">' + esc(m.tag) + '</span>' : '<span class="muted-dash">—</span>';
+          return (
+            '<tr>' +
+            '<td class="tabular-nums">#' + esc(m.movie_code) + '</td>' +
+            '<td><img src="' + esc(poster) + '" alt="' + esc(m.movie_name) + '" class="movie-poster"></td>' +
+            '<td><strong>' + esc(m.movie_name) + '</strong></td>' +
+            '<td><span class="type-badge">' + esc(m.movie_type) + '</span></td>' +
+            '<td class="tabular-nums">' + esc(m.times) + '</td>' +
+            '<td class="tabular-nums"><i class="fas fa-star star-amber" aria-hidden="true"></i> ' + esc(m.star) + '</td>' +
+            '<td class="tabular-nums"><strong>' + esc(price) + '</strong></td>' +
+            '<td><span class="scope-badge tabular-nums">' + esc(tCount + ' cinema' + (tCount === 1 ? '' : 's')) + '</span></td>' +
+            '<td>' + tagHtml + '</td>' +
+            '<td><div class="action-buttons">' +
+            '<a href="edit-movie.html?movie_code=' + encodeURIComponent(m.movie_code) + '" class="edit-btn"><i class="fas fa-edit" aria-hidden="true"></i> Edit</a>' +
+            '<button type="button" class="delete-btn" data-id="' + esc(m.movie_code) + '"><i class="fas fa-trash" aria-hidden="true"></i> Delete</button>' +
+            '</div></td>' +
+            '</tr>'
+          );
+        },
+        afterRender: function (tbody) {
+          AdminApp.bindDeleteActions(tbody, {
+            endpoint: '/index.php/admin/movie/delete',
+            idKey: 'movie_code',
+            confirmText: function (id) { return 'Delete movie #' + id + '? Related schedules, offer links, and seat bookings will also be removed.'; },
+            successText: 'Movie deleted',
+            onSuccess: loadMovies,
+          });
+        },
+      });
+
+      async function loadMovies() {
+        const res = await AdminApp.apiFetch('/index.php/admin/movie/index');
+        tableCtrl.setItems(res.success && Array.isArray(res.data) ? res.data : []);
+      }
+
       loadMovies();
     });
   </script>

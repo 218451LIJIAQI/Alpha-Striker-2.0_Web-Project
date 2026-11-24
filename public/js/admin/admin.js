@@ -1,7 +1,7 @@
 /**
  * Shared Admin Console Runtime
- * Reuses CineTicket core utilities (escaping, asset paths, dark mode) and centralizes
- * authenticated API calls (X-Admin-Token), navigation, relation checklists, CRUD helpers, and Canvas charts.
+ * Centralizes authenticated API calls (X-Admin-Token), navigation, relation checklists,
+ * reusable search/filter/sort/pagination table tools, anti-double-submit CRUD helpers, and Canvas charts.
  */
 (function () {
   'use strict';
@@ -97,28 +97,31 @@
       { key: 'seats', href: 'seat.html', icon: 'fas fa-chair', label: 'Seat Bookings' },
       { key: 'users', href: 'user.html', icon: 'fas fa-users', label: 'Users' },
     ];
+    const isDark = document.documentElement.classList.contains('dark-mode');
 
     mount.innerHTML =
-      '<nav class="admin-nav">' +
+      '<nav class="admin-nav" aria-label="Admin Console Navigation">' +
       '<div class="nav-left">' +
-      '<a href="dashboard.html" class="admin-logo"><i class="fas fa-shield-alt"></i><span>CineTix Admin</span></a>' +
+      '<a href="dashboard.html" class="admin-logo"><i class="fas fa-shield-alt" aria-hidden="true"></i><span>CineTix Admin</span></a>' +
       '<div class="nav-links">' +
       items.map(function (item) {
-        const cls = item.key === activeKey ? 'active' : '';
-        return '<a href="' + item.href + '" class="' + cls + '"><i class="' + item.icon + '"></i> ' + item.label + '</a>';
+        const isCurrent = item.key === activeKey;
+        const cls = isCurrent ? 'active' : '';
+        const aria = isCurrent ? ' aria-current="page"' : '';
+        return '<a href="' + item.href + '" class="' + cls + '"' + aria + '><i class="' + item.icon + '" aria-hidden="true"></i> ' + item.label + '</a>';
       }).join('') +
       '</div>' +
       '</div>' +
       '<div class="admin-nav-right">' +
-      '<button type="button" class="dark-mode-toggle" id="admin-theme-toggle" title="Toggle Dark Mode" aria-label="Toggle Dark Mode">' +
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="moon-icon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>' +
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sun-icon"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line></svg>' +
+      '<a href="../pages/homepage.html" class="storefront-link" title="Open Public Box Office"><i class="fas fa-external-link-alt" aria-hidden="true"></i><span>Box Office</span></a>' +
+      '<button type="button" class="dark-mode-toggle" id="admin-theme-toggle" title="Toggle Dark Mode" aria-label="Toggle Dark Mode" aria-pressed="' + String(isDark) + '">' +
+      CT.themeToggleSvgMarkup() +
       '</button>' +
       '<div class="admin-user-profile">' +
-      '<div class="admin-avatar"><i class="fas fa-user-shield"></i></div>' +
+      '<div class="admin-avatar"><i class="fas fa-user-shield" aria-hidden="true"></i></div>' +
       '<span class="admin-user-name">' + CT.escapeHtml(getAdminName()) + '</span>' +
       '</div>' +
-      '<a href="login.html" class="logout-btn" id="admin-logout-btn"><i class="fas fa-sign-out-alt"></i><span>Logout</span></a>' +
+      '<a href="login.html" class="logout-btn" id="admin-logout-btn"><i class="fas fa-sign-out-alt" aria-hidden="true"></i><span>Logout</span></a>' +
       '</div>' +
       '</nav>';
 
@@ -149,6 +152,15 @@
     }).join('');
   }
 
+  function bindCheckControls(container, selectAllId, clearAllId) {
+    document.getElementById(selectAllId)?.addEventListener('click', function () {
+      container?.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = true; });
+    });
+    document.getElementById(clearAllId)?.addEventListener('click', function () {
+      container?.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
+    });
+  }
+
   function getCheckedIds(container) {
     if (!container) return [];
     return Array.from(container.querySelectorAll('input[type="checkbox"]:checked'))
@@ -159,22 +171,32 @@
   function bindDeleteActions(container, opts) {
     container.querySelectorAll(opts.selector || '.delete-btn').forEach(function (btn) {
       btn.addEventListener('click', async function () {
+        if (btn.disabled) return;
         const id = btn.getAttribute('data-id');
         if (!window.confirm(opts.confirmText(id))) return;
+        btn.disabled = true;
         const body = {};
         body[opts.idKey] = id;
-        const res = await apiFetch(opts.endpoint, { method: 'POST', body: body });
-        if (res.success) {
-          window.showToast(typeof opts.successText === 'function' ? opts.successText(id) : opts.successText, 'success');
-          opts.onSuccess();
-        } else {
+        try {
+          const res = await apiFetch(opts.endpoint, { method: 'POST', body: body });
+          if (res.success) {
+            window.showToast(typeof opts.successText === 'function' ? opts.successText(id) : opts.successText, 'success');
+            opts.onSuccess();
+            return;
+          }
           window.showToast(res.message || 'Operation failed', 'error');
+        } finally {
+          btn.disabled = false;
         }
       });
     });
   }
 
   function bindImagePreview(inputEl, previewEl) {
+    if (!inputEl || !previewEl) return function () {};
+    previewEl.addEventListener('error', function () {
+      previewEl.style.display = 'none';
+    });
     function sync() {
       const val = inputEl.value.trim();
       if (/\.(jpe?g|png|webp|gif|svg)(\?.*)?$/i.test(val) || val.startsWith('data:')) {
@@ -189,14 +211,156 @@
     return sync;
   }
 
-  async function submitForm(endpoint, payload, redirectUrl, successMsg, fallbackErr) {
-    const res = await apiFetch(endpoint, { method: 'POST', body: payload });
-    if (res.success) {
-      window.showToast(successMsg, 'success');
-      setTimeout(function () { window.location.href = redirectUrl; }, 500);
-    } else {
+  async function submitForm(endpoint, payload, redirectUrl, successMsg, fallbackErr, submitBtn) {
+    const btn = submitBtn || document.querySelector('.submit-btn');
+    if (btn && btn.disabled) return;
+    if (btn) btn.disabled = true;
+    try {
+      const res = await apiFetch(endpoint, { method: 'POST', body: payload });
+      if (res.success) {
+        window.showToast(successMsg, 'success');
+        setTimeout(function () { window.location.href = redirectUrl; }, 420);
+        return;
+      }
       window.showToast(res.message || fallbackErr, 'error');
+      if (btn) btn.disabled = false;
+    } catch (_) {
+      window.showToast(fallbackErr || 'Request failed', 'error');
+      if (btn) btn.disabled = false;
     }
+  }
+
+  /**
+   * Reusable client-side search, filter, sort & pagination controller for Admin tables.
+   */
+  function createTableController(config) {
+    const toolbarEl = document.getElementById(config.toolbarId);
+    const tbody = document.getElementById(config.tbodyId);
+    let allItems = [];
+    let query = '';
+    let filterVal = 'all';
+    let sortKey = (config.sorts && config.sorts[0] && config.sorts[0].key) || 'default';
+    let page = 1;
+    let pageSize = config.pageSize || 25;
+
+    if (toolbarEl) {
+      const filterSelectHtml = Array.isArray(config.filters) && config.filters.length
+        ? '<select class="toolbar-select" data-role="filter" aria-label="Filter records">' +
+          config.filters.map(function (f) {
+            return '<option value="' + CT.escapeHtml(f.value) + '">' + CT.escapeHtml(f.label) + '</option>';
+          }).join('') +
+          '</select>'
+        : '';
+
+      const sortSelectHtml = Array.isArray(config.sorts) && config.sorts.length
+        ? '<select class="toolbar-select" data-role="sort" aria-label="Sort records">' +
+          config.sorts.map(function (s) {
+            return '<option value="' + CT.escapeHtml(s.key) + '">' + CT.escapeHtml(s.label) + '</option>';
+          }).join('') +
+          '</select>'
+        : '';
+
+      toolbarEl.innerHTML =
+        '<div class="admin-toolbar-left">' +
+        '<input type="search" class="toolbar-search" placeholder="' + CT.escapeHtml(config.searchPlaceholder || 'Search records...') + '" aria-label="Search table">' +
+        filterSelectHtml +
+        sortSelectHtml +
+        '</div>' +
+        '<div class="admin-toolbar-right">' +
+        '<span class="toolbar-count tabular-nums" data-role="count">0 records</span>' +
+        '<div class="toolbar-pager" data-role="pager"></div>' +
+        '</div>';
+
+      toolbarEl.querySelector('.toolbar-search')?.addEventListener('input', function (e) {
+        query = e.target.value.trim().toLowerCase();
+        page = 1;
+        render();
+      });
+      toolbarEl.querySelector('[data-role="filter"]')?.addEventListener('change', function (e) {
+        filterVal = e.target.value;
+        page = 1;
+        render();
+      });
+      toolbarEl.querySelector('[data-role="sort"]')?.addEventListener('change', function (e) {
+        sortKey = e.target.value;
+        page = 1;
+        render();
+      });
+    }
+
+    function render() {
+      if (!tbody) return;
+      let list = allItems.slice();
+
+      if (query && typeof config.searchText === 'function') {
+        list = list.filter(function (item) {
+          return String(config.searchText(item) || '').toLowerCase().includes(query);
+        });
+      }
+      if (filterVal !== 'all' && typeof config.matchFilter === 'function') {
+        list = list.filter(function (item) {
+          return config.matchFilter(item, filterVal);
+        });
+      }
+      const sortDef = (config.sorts || []).find(function (s) { return s.key === sortKey; });
+      if (sortDef && typeof sortDef.compare === 'function') {
+        list.sort(sortDef.compare);
+      }
+
+      const total = list.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      if (page > totalPages) page = totalPages;
+
+      const slice = list.slice((page - 1) * pageSize, page * pageSize);
+
+      if (toolbarEl) {
+        const countEl = toolbarEl.querySelector('[data-role="count"]');
+        if (countEl) {
+          countEl.textContent =
+            total === allItems.length
+              ? (total + ' record' + (total === 1 ? '' : 's'))
+              : ('Showing ' + slice.length + ' of ' + total + ' (filtered from ' + allItems.length + ')');
+        }
+        const pagerEl = toolbarEl.querySelector('[data-role="pager"]');
+        if (pagerEl) {
+          if (totalPages <= 1) {
+            pagerEl.innerHTML = '';
+          } else {
+            pagerEl.innerHTML =
+              '<button type="button" class="pager-btn" data-dir="-1"' + (page <= 1 ? ' disabled' : '') + ' aria-label="Previous page">&lsaquo;</button>' +
+              '<span class="pager-label tabular-nums">' + page + ' / ' + totalPages + '</span>' +
+              '<button type="button" class="pager-btn" data-dir="1"' + (page >= totalPages ? ' disabled' : '') + ' aria-label="Next page">&rsaquo;</button>';
+            pagerEl.querySelectorAll('.pager-btn').forEach(function (btn) {
+              btn.addEventListener('click', function () {
+                page += Number(btn.getAttribute('data-dir') || 0);
+                render();
+              });
+            });
+          }
+        }
+      }
+
+      if (slice.length === 0) {
+        tbody.innerHTML =
+          '<tr><td colspan="' + (config.colSpan || 8) + '" class="empty-state">' +
+          CT.escapeHtml(allItems.length === 0 ? (config.emptyText || 'No records found.') : 'No matching records for current filter.') +
+          '</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = slice.map(config.renderRow).join('');
+      if (typeof config.afterRender === 'function') {
+        config.afterRender(tbody);
+      }
+    }
+
+    return {
+      setItems: function (items) {
+        allItems = Array.isArray(items) ? items : [];
+        render();
+      },
+      refresh: render,
+    };
   }
 
   function drawBarChart(canvas, labels, values, colors) {
@@ -212,12 +376,12 @@
     ctx.clearRect(0, 0, width, height);
 
     const isDark = document.documentElement.classList.contains('dark-mode');
-    const textColor = isDark ? '#cbd5e1' : '#475569';
-    const gridColor = isDark ? '#334155' : '#e2e8f0';
+    const textColor = isDark ? '#cbd5e1' : '#334155';
+    const gridColor = isDark ? '#2d3648' : '#e2e8f0';
 
     if (!labels.length) {
       ctx.fillStyle = textColor;
-      ctx.font = '14px sans-serif';
+      ctx.font = '14px Inter, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('No data available', width / 2, height / 2);
       return;
@@ -230,20 +394,21 @@
     const plotW = width - padLeft - padRight;
     const plotH = height - padTop - padBottom;
     const maxVal = Math.max(1, Math.max.apply(null, values));
+    const steps = Math.max(1, Math.min(4, Math.ceil(maxVal)));
 
     ctx.strokeStyle = gridColor;
     ctx.lineWidth = 1;
-    for (let step = 0; step <= 4; step++) {
-      const y = padTop + plotH - (step / 4) * plotH;
+    for (let step = 0; step <= steps; step++) {
+      const y = padTop + plotH - (step / steps) * plotH;
       ctx.beginPath();
       ctx.moveTo(padLeft, y);
       ctx.lineTo(width - padRight, y);
       ctx.stroke();
 
       ctx.fillStyle = textColor;
-      ctx.font = '11px sans-serif';
+      ctx.font = '11px Inter, sans-serif';
       ctx.textAlign = 'right';
-      ctx.fillText(String(Math.round((step / 4) * maxVal)), padLeft - 6, y + 4);
+      ctx.fillText(String(Math.round((step / steps) * maxVal)), padLeft - 6, y + 4);
     }
 
     const slotW = plotW / labels.length;
@@ -261,20 +426,22 @@
       ctx.fill();
 
       ctx.fillStyle = textColor;
-      ctx.font = 'bold 12px sans-serif';
+      ctx.font = '600 12px Inter, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(String(val), x + barW / 2, y - 6);
 
-      const shortLabel = label.length > 10 ? label.slice(0, 9) + '…' : label;
-      ctx.font = '11px sans-serif';
+      const shortLabel = label.length > 11 ? label.slice(0, 10) + '…' : label;
+      ctx.font = '11px Inter, sans-serif';
       ctx.fillText(shortLabel, x + barW / 2, height - 16);
     });
   }
 
   window.AdminApp = {
     apiFetch: apiFetch,
+    bindCheckControls: bindCheckControls,
     bindDeleteActions: bindDeleteActions,
     bindImagePreview: bindImagePreview,
+    createTableController: createTableController,
     drawBarChart: drawBarChart,
     ensureAuthenticated: ensureAuthenticated,
     escapeHtml: CT.escapeHtml,

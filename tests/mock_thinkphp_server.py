@@ -7,7 +7,7 @@ Mirrors every PHP controller in `application/` line-for-line:
 - Authoritative Session::get('user_id') enforcement in Seat (401 guest view/cancel, 403 IDOR/guest ticket cancel, NULL guest user_code)
 - Thread-safe transactional seat locking (`BEGIN IMMEDIATE` + `uk_seat_booking` IntegrityError -> rollback -> 409 with conflict_seats)
 - Unified promo validation (`offer_validity`, `user_code` ownership, `movie_offer` applicability & date range) and authoritative checkout pricing
-- Full Admin CRUD across Movie, Theater, Offer, Seat, and User with `theater_movie` and `movie_offer` cascading transactions
+- Full Admin CRUD across Movie, Theater, Offer, Seat, and User with exact UTF-8 field length, calendar date, numeric range, and 409 conflict parity
 """
 
 from __future__ import annotations
@@ -16,17 +16,17 @@ import crypt
 import datetime as dt
 import hmac
 import json
+import math
 import mimetypes
 import os
 import re
 import secrets
 import sqlite3
-import time
 import threading
+import time
 import urllib.parse
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 
 from static_audit import ROOT, translate_mysql_to_sqlite
 
@@ -37,6 +37,7 @@ GROUP_DISCOUNT_RATE = 0.30
 MAX_SEATS_PER_ORDER = 10
 MAX_RESET_ATTEMPTS = 5
 ALLOWED_PAYMENT_METHODS = {"card", "paypal", "applepay", "googlepay"}
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def hash_password_bcrypt(password: str) -> str:
@@ -57,6 +58,30 @@ def escape_like(keyword: str) -> str:
     return keyword.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+def is_valid_iso_date(val: str) -> bool:
+    s = str(val or "").strip()
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", s):
+        return False
+    try:
+        dt.date.fromisoformat(s)
+        return True
+    except ValueError:
+        return False
+
+
+def parse_finite_float(raw) -> float | None:
+    if raw is None or isinstance(raw, (bool, list, dict)):
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    try:
+        v = float(s)
+        return v if math.isfinite(v) else None
+    except (TypeError, ValueError):
+        return None
+
+
 def normalize_id_array(raw) -> list[int]:
     if isinstance(raw, str):
         raw = [] if not raw.strip() else raw.split(",")
@@ -64,13 +89,24 @@ def normalize_id_array(raw) -> list[int]:
         return []
     seen: dict[int, int] = {}
     for item in raw:
+        if isinstance(item, bool):
+            continue
         try:
-            val = int(item)
+            val = int(str(item).strip())
             if val > 0:
                 seen[val] = val
         except (TypeError, ValueError):
             continue
     return list(seen.values())
+
+
+def resolve_valid_ids(db: sqlite3.Connection, table: str, pk: str, raw) -> list[int]:
+    cand = normalize_id_array(raw)
+    if not cand:
+        return []
+    ph = ",".join("?" for _ in cand)
+    rows = db.execute(f"SELECT {pk} FROM {table} WHERE {pk} IN ({ph}) ORDER BY {pk} ASC", cand).fetchall()
+    return [int(r[pk]) for r in rows]
 
 
 def calculate_pricing(unit_price: float, seat_count: int, promo_money: float = 0.0) -> dict:
@@ -134,7 +170,7 @@ def validate_promo_for_context(
     offer = dict(offer_row)
     today = dt.date.today().isoformat()
     validity = str(offer.get("offer_validity") or "").strip()
-    if re.match(r"^\d{4}-\d{2}-\d{2}$", validity) and validity < today:
+    if is_valid_iso_date(validity) and validity < today:
         return {"valid": False, "status": 200, "message": "This promo code has expired", "offer": None}
 
     owner_uid = int(offer["user_code"]) if offer.get("user_code") is not None else 0
@@ -168,7 +204,7 @@ def validate_promo_for_context(
                 "message": "This promo code is not applicable to the selected movie",
                 "offer": None,
             }
-        check_date = screening_date if re.match(r"^\d{4}-\d{2}-\d{2}$", screening_date or "") else today
+        check_date = screening_date if is_valid_iso_date(screening_date or "") else today
         if link["valid_from"] and check_date < link["valid_from"]:
             return {
                 "valid": False,
@@ -195,6 +231,185 @@ def validate_promo_for_context(
         "user_code": owner_uid if owner_uid > 0 else None,
     }
     return {"valid": True, "status": 200, "message": "Promo code applied", "offer": safe_offer}
+
+
+def prepare_movie_data(p: dict) -> tuple[dict | None, str | None]:
+    def s(k: str) -> str:
+        v = p.get(k)
+        return "" if v is None or isinstance(v, (list, dict)) else str(v).strip()
+
+    mname = s("movie_name")
+    mtype = s("movie_type")
+    mimg = s("img")
+    mtimes = s("times")
+    mtag = s("tag")
+
+    if not mname or len(mname) > 200:
+        return None, "Movie title (1-200 characters) is required"
+    if not mtype or len(mtype) > 50:
+        return None, "Movie genre (1-50 characters) is required"
+    if not mimg or len(mimg) > 500:
+        return None, "Poster image path or URL (1-500 characters) is required"
+    if not mtimes or len(mtimes) > 50:
+        return None, "Movie duration (1-50 characters) is required"
+    if len(mtag) > 50:
+        return None, "Highlight badge must be 50 characters or fewer"
+
+    star_val = parse_finite_float(p.get("star"))
+    if star_val is None or star_val < 0 or star_val > 5:
+        return None, "Rating must be between 0.0 and 5.0"
+
+    money_val = parse_finite_float(p.get("money"))
+    if money_val is None or money_val < 0:
+        return None, "Ticket price must be a non-negative number"
+
+    return {
+        "movie_name": mname,
+        "tag": mtag if mtag != "" else None,
+        "star": round(star_val, 1),
+        "movie_type": mtype,
+        "img": mimg,
+        "money": round(money_val, 2),
+        "times": mtimes,
+    }, None
+
+
+def prepare_theater_data(p: dict) -> tuple[dict | None, str | None]:
+    def s(k: str) -> str:
+        v = p.get(k)
+        return "" if v is None or isinstance(v, (list, dict)) else str(v).strip()
+
+    tname = s("theater_name")
+    taddr = s("address")
+    timg = s("img")
+    tam = s("amenity")
+    trev = s("reviews")
+    tdist = s("distance")
+    tid_str = s("theater_id")
+
+    if not tname or len(tname) > 200:
+        return None, "Theater name (1-200 characters) is required"
+    if not taddr or len(taddr) > 500:
+        return None, "Theater address (1-500 characters) is required"
+    if not timg or len(timg) > 500:
+        return None, "Theater image path or URL (1-500 characters) is required"
+    if len(tam) > 500:
+        return None, "Amenities list must be 500 characters or fewer"
+    if len(trev) > 50:
+        return None, "Reviews label must be 50 characters or fewer"
+    if len(tdist) > 50:
+        return None, "Distance label must be 50 characters or fewer"
+    if len(tid_str) > 100:
+        return None, "Theater code label must be 100 characters or fewer"
+
+    raw_star = p.get("star")
+    star_val = 4.8 if (raw_star is None or str(raw_star).strip() == "") else parse_finite_float(raw_star)
+    if star_val is None or star_val < 0 or star_val > 5:
+        return None, "Rating must be between 0.0 and 5.0"
+
+    return {
+        "theater_name": tname,
+        "address": taddr,
+        "amenity": tam or None,
+        "star": round(star_val, 1),
+        "img": timg,
+        "reviews": trev or None,
+        "distance": tdist or None,
+        "theater_id": tid_str or None,
+    }, None
+
+
+def prepare_offer_data(db: sqlite3.Connection, p: dict, exclude_offer_id: int) -> tuple[dict | None, str | None]:
+    def s(k: str) -> str:
+        v = p.get(k)
+        return "" if v is None or isinstance(v, (list, dict)) else str(v).strip()
+
+    otitle = s("offer_title")
+    otype = s("offer_type")
+    odesc = s("offer_description")
+    ocode = s("promo_code")
+    oval = s("offer_validity")
+    oimg = s("img")
+    obadge = s("badge")
+
+    if not otitle or len(otitle) > 200:
+        return None, "Offer title (1-200 characters) is required"
+    if not otype or len(otype) > 100:
+        return None, "Offer category (1-100 characters) is required"
+    if not odesc or len(odesc) > 500:
+        return None, "Offer description (1-500 characters) is required"
+    if not ocode or len(ocode) > 100:
+        return None, "Promo code (1-100 characters) is required"
+    if not oval or not is_valid_iso_date(oval):
+        return None, "Validity date must use YYYY-MM-DD format"
+    if not oimg or len(oimg) > 500:
+        return None, "Offer image path or URL (1-500 characters) is required"
+    if len(obadge) > 50:
+        return None, "Highlight badge must be 50 characters or fewer"
+
+    money_val = parse_finite_float(p.get("money"))
+    if money_val is None or money_val < 0:
+        return None, "Discount amount must be a non-negative number"
+
+    owner_uid = None
+    raw_uc = s("user_code")
+    if raw_uc:
+        try:
+            cand_uid = int(raw_uc)
+        except ValueError:
+            cand_uid = 0
+        if cand_uid > 0:
+            if not db.execute("SELECT 1 FROM t_user WHERE user_code = ?", (cand_uid,)).fetchone():
+                return None, "Selected exclusive member account does not exist"
+            owner_uid = cand_uid
+
+    upper_code = ocode.upper()
+    dup = (
+        db.execute("SELECT 1 FROM t_offer WHERE promo_code = ? AND offer_code <> ?", (upper_code, exclude_offer_id)).fetchone()
+        if exclude_offer_id > 0
+        else db.execute("SELECT 1 FROM t_offer WHERE promo_code = ?", (upper_code,)).fetchone()
+    )
+    if dup:
+        return None, "Promo code is already in use by another offer"
+
+    return {
+        "offer_title": otitle,
+        "offer_type": otype,
+        "offer_description": odesc,
+        "promo_code": upper_code,
+        "offer_validity": oval,
+        "img": oimg,
+        "badge": obadge or None,
+        "money": round(money_val, 2),
+        "user_code": owner_uid,
+    }, None
+
+
+def validate_admin_user_input(
+    db: sqlite3.Connection,
+    name: str,
+    email: str,
+    password: str,
+    require_password: bool,
+    exclude_user_id: int,
+) -> str | None:
+    if not name or len(name) > 50:
+        return "Valid username (1-50 characters) is required"
+    if not email or not EMAIL_RE.match(email) or len(email) > 100:
+        return "Valid email address is required"
+    if require_password and len(password) < 6:
+        return "Password must be at least 6 characters"
+    if not require_password and password != "" and len(password) < 6:
+        return "New password must be at least 6 characters"
+
+    dup = (
+        db.execute("SELECT 1 FROM t_user WHERE email = ? AND user_code <> ?", (email, exclude_user_id)).fetchone()
+        if exclude_user_id > 0
+        else db.execute("SELECT 1 FROM t_user WHERE email = ?", (email,)).fetchone()
+    )
+    if dup:
+        return "Email is already registered to another user" if exclude_user_id > 0 else "Email is already registered"
+    return None
 
 
 def make_handler(state: ContractState):
@@ -235,8 +450,9 @@ def make_handler(state: ContractState):
             self.end_headers()
             self.wfile.write(raw)
 
-        def _parse_payload(self, query_str: str) -> dict:
-            params = {k: v[-1] for k, v in urllib.parse.parse_qs(query_str, keep_blank_values=True).items()}
+        def _parse_payload(self, query_str: str, path_params: dict | None = None) -> dict:
+            params: dict = dict(path_params or {})
+            params.update({k: v[-1] for k, v in urllib.parse.parse_qs(query_str, keep_blank_values=True).items()})
             length = int(self.headers.get("Content-Length", "0") or "0")
             if length > 0:
                 raw_body = self.rfile.read(length).decode("utf-8", errors="replace")
@@ -286,8 +502,19 @@ def make_handler(state: ContractState):
 
             if path == "/index.php" or path.startswith("/index.php/"):
                 sid, session = self._get_session()
-                payload = self._parse_payload(parsed.query)
-                self._handle_api(path, payload, sid, session)
+                raw_tail = path[len("/index.php"):]
+                if raw_tail.lower().endswith(".html"):
+                    raw_tail = raw_tail[:-5]
+                parts = [seg for seg in raw_tail.split("/") if seg]
+                path_params: dict[str, str] = {}
+                if len(parts) > 3:
+                    extra = parts[3:]
+                    for idx in range(0, len(extra) - 1, 2):
+                        path_params[extra[idx]] = extra[idx + 1]
+                    if len(extra) == 1:
+                        path_params["__direct_arg__"] = extra[0]
+                payload = self._parse_payload(parsed.query, path_params)
+                self._handle_api(parts, payload, sid, session)
                 return
 
             if path == "/router.php":
@@ -308,14 +535,25 @@ def make_handler(state: ContractState):
             self.end_headers()
             self.wfile.write(data)
 
-        def _id_param(self, p: dict, key: str, default: int = 0) -> int:
-            raw = p.get(key)
-            if raw is None or raw == "":
+        def _id_param(self, p: dict, key: str, default: int = 0, allow_direct: bool = False) -> int:
+            raw = p.get("__direct_arg__") if (allow_direct and "__direct_arg__" in p) else p.get(key)
+            if raw is None or raw == "" or isinstance(raw, bool):
                 return default
             try:
-                return int(raw)
+                return int(str(raw).strip())
             except (TypeError, ValueError):
-                return default
+                return 0
+
+        def _optional_id_with_default(self, p: dict, key: str, default_id: int = 1) -> int:
+            if key not in p or p[key] is None or p[key] == "":
+                return default_id
+            raw = p[key]
+            if isinstance(raw, (bool, list, dict)):
+                return 0
+            try:
+                return int(str(raw).strip())
+            except (TypeError, ValueError):
+                return 0
 
         def _str_param(self, p: dict, key: str, default: str = "") -> str:
             val = p.get(key)
@@ -323,8 +561,7 @@ def make_handler(state: ContractState):
                 return default
             return str(val).strip()
 
-        def _handle_api(self, path: str, p: dict, sid: str, session: dict) -> None:
-            parts = [seg for seg in path[len("/index.php"):].split("/") if seg]
+        def _handle_api(self, parts: list[str], p: dict, sid: str, session: dict) -> None:
             if not parts:
                 raw = b"CineTicket API is running."
                 self.send_response(200)
@@ -415,7 +652,7 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "OK", "data": rows_to_dicts(rows)}, 200, sid)
 
             if route == "movie/movies/getmoviebycode":
-                mid = self._id_param(p, "movie_code")
+                mid = self._id_param(p, "movie_code", allow_direct=True)
                 if mid <= 0:
                     return self._send_json({"success": False, "message": "Valid movie_code parameter is required"}, 200, sid)
                 with state.db_lock:
@@ -541,10 +778,10 @@ def make_handler(state: ContractState):
             # 5. Public Seats (Concurrency-Safe Transaction + Strict Session Identity)
             if route == "movie/seat/getseatlist":
                 mc = self._id_param(p, "movie_code")
-                tc = self._id_param(p, "theater_code", 1) or 1
+                tc = self._optional_id_with_default(p, "theater_code", 1)
                 d = self._str_param(p, "date")
                 t = self._str_param(p, "time")
-                if mc <= 0 or tc <= 0 or not re.match(r"^\d{4}-\d{2}-\d{2}$", d) or not t:
+                if mc <= 0 or tc <= 0 or not is_valid_iso_date(d) or not t:
                     return self._send_json({"success": False, "message": "Valid movie_code, theater_code, date (YYYY-MM-DD), and time are required"}, 200, sid)
                 with state.db_lock:
                     rows = db.execute(
@@ -555,7 +792,7 @@ def make_handler(state: ContractState):
 
             if route == "movie/seat/saveseats":
                 mc = self._id_param(p, "movie_code")
-                tc = self._id_param(p, "theater_code", 1) or 1
+                tc = self._optional_id_with_default(p, "theater_code", 1)
                 d = self._str_param(p, "date")
                 t = self._str_param(p, "time")
                 promo_code = self._str_param(p, "promo_code").upper()
@@ -564,7 +801,7 @@ def make_handler(state: ContractState):
                     pay_method = "card"
 
                 raw_seats = p.get("seat_nums", [])
-                if mc <= 0 or tc <= 0 or not re.match(r"^\d{4}-\d{2}-\d{2}$", d) or not t or len(t) > 30 or not raw_seats:
+                if mc <= 0 or tc <= 0 or not is_valid_iso_date(d) or not t or len(t) > 30 or not raw_seats:
                     return self._send_json({"success": False, "message": "Complete screening and seat parameters are required"}, 200, sid)
 
                 seat_list = raw_seats if isinstance(raw_seats, list) else str(raw_seats).split(",")
@@ -716,7 +953,7 @@ def make_handler(state: ContractState):
                 sess_uid = int(session.get("user_id") or 0)
                 if sess_uid <= 0:
                     return self._send_json({"success": False, "message": "Authentication required to cancel a booking"}, 401, sid)
-                seat_id = self._id_param(p, "seat_code")
+                seat_id = self._id_param(p, "seat_code", allow_direct=True)
                 if seat_id <= 0:
                     return self._send_json({"success": False, "message": "Valid seat_code is required"}, 200, sid)
                 with state.db_lock:
@@ -736,7 +973,7 @@ def make_handler(state: ContractState):
                 pw = str(p.get("password") or "")
                 if not name or len(name) > 50:
                     return self._send_json({"success": False, "message": "Please enter a valid name (1-50 characters)"}, 200, sid)
-                if not email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email) or len(email) > 100:
+                if not email or not EMAIL_RE.match(email) or len(email) > 100:
                     return self._send_json({"success": False, "message": "Please enter a valid email address"}, 200, sid)
                 if len(pw) < 6:
                     return self._send_json({"success": False, "message": "Password must be at least 6 characters"}, 200, sid)
@@ -801,7 +1038,7 @@ def make_handler(state: ContractState):
 
             if route == "user/user/sendresetcode":
                 email = self._str_param(p, "email").lower()
-                if not email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email) or len(email) > 100:
+                if not email or not EMAIL_RE.match(email) or len(email) > 100:
                     return self._send_json({"success": False, "message": "Please enter a valid email address"}, 200, sid)
                 cooldown = int(os.environ.get("AUTH_RESET_COOLDOWN", "2"))
                 now_ts = int(time.time())
@@ -857,7 +1094,7 @@ def make_handler(state: ContractState):
 
                 # Path B: Dynamic 6-digit verification code reset
                 email = self._str_param(p, "email").lower()
-                if not email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+                if not email or not EMAIL_RE.match(email) or len(email) > 100:
                     return self._send_json({"success": False, "message": "Please enter a valid email address"}, 200, sid)
                 if not re.match(r"^\d{6}$", vcode):
                     return self._send_json({"success": False, "message": "Please enter the 6-digit verification code"}, 200, sid)
@@ -914,7 +1151,7 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "OK", "data": movies}, 200, sid)
 
             if route == "admin/movie/getmoviebycode":
-                mid = self._id_param(p, "movie_code")
+                mid = self._id_param(p, "movie_code", allow_direct=True)
                 if mid <= 0:
                     return self._send_json({"success": False, "message": "Valid movie_code is required"}, 200, sid)
                 with state.db_lock:
@@ -926,40 +1163,34 @@ def make_handler(state: ContractState):
                         int(r["theater_code"])
                         for r in db.execute("SELECT theater_code FROM theater_movie WHERE movie_code = ? ORDER BY theater_code ASC", (mid,)).fetchall()
                     ]
+                    mdata["offer_codes"] = [
+                        int(r["offer_code"])
+                        for r in db.execute("SELECT offer_code FROM movie_offer WHERE movie_code = ? ORDER BY offer_code ASC", (mid,)).fetchall()
+                    ]
                 return self._send_json({"success": True, "message": "OK", "data": mdata}, 200, sid)
 
             if route == "admin/movie/create":
-                mname = self._str_param(p, "movie_name")
-                mtype = self._str_param(p, "movie_type")
-                mimg = self._str_param(p, "img")
-                mtimes = self._str_param(p, "times")
-                mtag = self._str_param(p, "tag") or None
-                try:
-                    mstar = round(float(p.get("star")), 1)
-                    mmoney = round(float(p.get("money")), 2)
-                except (TypeError, ValueError):
-                    return self._send_json({"success": False, "message": "Invalid rating or ticket price"}, 200, sid)
-                if not mname or not mtype or not mimg or not mtimes or not (0 <= mstar <= 5) or mmoney < 0:
-                    return self._send_json({"success": False, "message": "Invalid movie fields"}, 200, sid)
+                data, err = prepare_movie_data(p)
+                if err is not None or data is None:
+                    return self._send_json({"success": False, "message": err or "Invalid movie fields"}, 200, sid)
 
                 with state.db_lock:
-                    if "theater_codes" in p:
-                        cand_t = normalize_id_array(p["theater_codes"])
-                        valid_t = [int(r["theater_code"]) for r in db.execute("SELECT theater_code FROM t_theater").fetchall() if int(r["theater_code"]) in cand_t]
-                    else:
-                        valid_t = [int(r["theater_code"]) for r in db.execute("SELECT theater_code FROM t_theater ORDER BY theater_code ASC").fetchall()]
-
-                    if "offer_codes" in p:
-                        cand_o = normalize_id_array(p["offer_codes"])
-                        valid_o = [int(r["offer_code"]) for r in db.execute("SELECT offer_code FROM t_offer").fetchall() if int(r["offer_code"]) in cand_o]
-                    else:
-                        valid_o = [int(r["offer_code"]) for r in db.execute("SELECT offer_code FROM t_offer WHERE user_code IS NULL ORDER BY offer_code ASC").fetchall()]
+                    valid_t = (
+                        resolve_valid_ids(db, "t_theater", "theater_code", p["theater_codes"])
+                        if "theater_codes" in p
+                        else [int(r["theater_code"]) for r in db.execute("SELECT theater_code FROM t_theater ORDER BY theater_code ASC").fetchall()]
+                    )
+                    valid_o = (
+                        resolve_valid_ids(db, "t_offer", "offer_code", p["offer_codes"])
+                        if "offer_codes" in p
+                        else [int(r["offer_code"]) for r in db.execute("SELECT offer_code FROM t_offer WHERE user_code IS NULL ORDER BY offer_code ASC").fetchall()]
+                    )
 
                     db.execute("BEGIN IMMEDIATE")
                     try:
                         cur = db.execute(
                             "INSERT INTO t_movies (movie_name, tag, star, movie_type, img, money, times, create_time) VALUES (?,?,?,?,?,?,?,?)",
-                            (mname, mtag, mstar, mtype, mimg, mmoney, mtimes, now_str),
+                            (data["movie_name"], data["tag"], data["star"], data["movie_type"], data["img"], data["money"], data["times"], now_str),
                         )
                         mid = int(cur.lastrowid)
                         for tid in valid_t:
@@ -969,7 +1200,7 @@ def make_handler(state: ContractState):
                             )
                         for oid in valid_o:
                             orow = db.execute("SELECT offer_validity FROM t_offer WHERE offer_code = ?", (oid,)).fetchone()
-                            vto = orow["offer_validity"] if orow and re.match(r"^\d{4}-\d{2}-\d{2}$", orow["offer_validity"] or "") else "2027-12-31"
+                            vto = orow["offer_validity"] if orow and is_valid_iso_date(orow["offer_validity"] or "") else "2027-12-31"
                             db.execute(
                                 "INSERT INTO movie_offer (movie_code, offer_code, discount_percent, valid_from, valid_to, created_time) VALUES (?,?,?,?,?,?)",
                                 (mid, oid, 0.0, "2026-01-01", vto, now_str),
@@ -981,34 +1212,40 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "Movie created successfully", "data": {"movie_code": mid, "theater_codes": valid_t}}, 200, sid)
 
             if route == "admin/movie/update":
-                mid = self._id_param(p, "movie_code")
+                mid = self._id_param(p, "movie_code", allow_direct=True)
                 if mid <= 0:
                     return self._send_json({"success": False, "message": "Valid movie_code is required"}, 200, sid)
-                mname = self._str_param(p, "movie_name")
-                mtype = self._str_param(p, "movie_type")
-                mimg = self._str_param(p, "img")
-                mtimes = self._str_param(p, "times")
-                mtag = self._str_param(p, "tag") or None
-                mstar = round(float(p.get("star", 5.0)), 1)
-                mmoney = round(float(p.get("money", 39.0)), 2)
-
                 with state.db_lock:
                     if not db.execute("SELECT 1 FROM t_movies WHERE movie_code = ?", (mid,)).fetchone():
                         return self._send_json({"success": False, "message": "Movie not found"}, 404, sid)
+                    data, err = prepare_movie_data(p)
+                    if err is not None or data is None:
+                        return self._send_json({"success": False, "message": err or "Invalid movie fields"}, 200, sid)
+
+                    valid_t = resolve_valid_ids(db, "t_theater", "theater_code", p["theater_codes"]) if "theater_codes" in p else None
+                    valid_o = resolve_valid_ids(db, "t_offer", "offer_code", p["offer_codes"]) if "offer_codes" in p else None
+
                     db.execute("BEGIN IMMEDIATE")
                     try:
                         db.execute(
                             "UPDATE t_movies SET movie_name=?, tag=?, star=?, movie_type=?, img=?, money=?, times=?, update_time=? WHERE movie_code=?",
-                            (mname, mtag, mstar, mtype, mimg, mmoney, mtimes, now_str, mid),
+                            (data["movie_name"], data["tag"], data["star"], data["movie_type"], data["img"], data["money"], data["times"], now_str, mid),
                         )
-                        if "theater_codes" in p:
-                            cand_t = normalize_id_array(p["theater_codes"])
-                            valid_t = [int(r["theater_code"]) for r in db.execute("SELECT theater_code FROM t_theater").fetchall() if int(r["theater_code"]) in cand_t]
+                        if valid_t is not None:
                             db.execute("DELETE FROM theater_movie WHERE movie_code = ?", (mid,))
                             for tid in valid_t:
                                 db.execute(
                                     "INSERT INTO theater_movie (theater_code, movie_code, start_date, end_date, daily_showtimes, created_time) VALUES (?,?,?,?,?,?)",
                                     (tid, mid, "2026-01-01", "2027-12-31", 4, now_str),
+                                )
+                        if valid_o is not None:
+                            db.execute("DELETE FROM movie_offer WHERE movie_code = ?", (mid,))
+                            for oid in valid_o:
+                                orow = db.execute("SELECT offer_validity FROM t_offer WHERE offer_code = ?", (oid,)).fetchone()
+                                vto = orow["offer_validity"] if orow and is_valid_iso_date(orow["offer_validity"] or "") else "2027-12-31"
+                                db.execute(
+                                    "INSERT INTO movie_offer (movie_code, offer_code, discount_percent, valid_from, valid_to, created_time) VALUES (?,?,?,?,?,?)",
+                                    (mid, oid, 0.0, "2026-01-01", vto, now_str),
                                 )
                         db.execute("COMMIT")
                     except Exception:
@@ -1017,7 +1254,7 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "Movie updated successfully", "data": {"movie_code": mid}}, 200, sid)
 
             if route == "admin/movie/delete":
-                mid = self._id_param(p, "movie_code")
+                mid = self._id_param(p, "movie_code", allow_direct=True)
                 if mid <= 0:
                     return self._send_json({"success": False, "message": "Valid movie_code is required"}, 200, sid)
                 with state.db_lock:
@@ -1050,7 +1287,7 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "OK", "data": theaters}, 200, sid)
 
             if route == "admin/theater/gettheaterbycode":
-                tid = self._id_param(p, "theater_code")
+                tid = self._id_param(p, "theater_code", allow_direct=True)
                 if tid <= 0:
                     return self._send_json({"success": False, "message": "Valid theater_code is required"}, 200, sid)
                 with state.db_lock:
@@ -1065,30 +1302,33 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "OK", "data": tdata}, 200, sid)
 
             if route == "admin/theater/create":
-                tname = self._str_param(p, "theater_name")
-                taddr = self._str_param(p, "address")
-                timg = self._str_param(p, "img")
-                tam = self._str_param(p, "amenity") or None
-                trev = self._str_param(p, "reviews") or None
-                tdist = self._str_param(p, "distance") or None
-                tid_str = self._str_param(p, "theater_id") or None
-                tstar = round(float(p.get("star") or 4.8), 1)
-                if not tname or not taddr or not timg or not (0 <= tstar <= 5):
-                    return self._send_json({"success": False, "message": "Invalid theater fields"}, 200, sid)
+                data, err = prepare_theater_data(p)
+                if err is not None or data is None:
+                    return self._send_json({"success": False, "message": err or "Invalid theater fields"}, 200, sid)
                 with state.db_lock:
-                    if "movie_codes" in p:
-                        cand_m = normalize_id_array(p["movie_codes"])
-                        valid_m = [int(r["movie_code"]) for r in db.execute("SELECT movie_code FROM t_movies").fetchall() if int(r["movie_code"]) in cand_m]
-                    else:
-                        valid_m = [int(r["movie_code"]) for r in db.execute("SELECT movie_code FROM t_movies ORDER BY movie_code ASC").fetchall()]
+                    valid_m = (
+                        resolve_valid_ids(db, "t_movies", "movie_code", p["movie_codes"])
+                        if "movie_codes" in p
+                        else [int(r["movie_code"]) for r in db.execute("SELECT movie_code FROM t_movies ORDER BY movie_code ASC").fetchall()]
+                    )
                     db.execute("BEGIN IMMEDIATE")
                     try:
                         cur = db.execute(
                             "INSERT INTO t_theater (theater_name, address, amenity, star, img, reviews, distance, theater_id, create_time) VALUES (?,?,?,?,?,?,?,?,?)",
-                            (tname, taddr, tam, tstar, timg, trev, tdist, tid_str, now_str),
+                            (
+                                data["theater_name"],
+                                data["address"],
+                                data["amenity"],
+                                data["star"],
+                                data["img"],
+                                data["reviews"],
+                                data["distance"],
+                                data["theater_id"],
+                                now_str,
+                            ),
                         )
                         new_tid = int(cur.lastrowid)
-                        if not tid_str:
+                        if not data["theater_id"]:
                             db.execute("UPDATE t_theater SET theater_id = ? WHERE theater_code = ?", (f"TH-{new_tid:03d}", new_tid))
                         for mid in valid_m:
                             db.execute(
@@ -1102,29 +1342,34 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "Theater created successfully", "data": {"theater_code": new_tid, "movie_codes": valid_m}}, 200, sid)
 
             if route == "admin/theater/update":
-                tid = self._id_param(p, "theater_code")
+                tid = self._id_param(p, "theater_code", allow_direct=True)
                 if tid <= 0:
                     return self._send_json({"success": False, "message": "Valid theater_code is required"}, 200, sid)
-                tname = self._str_param(p, "theater_name")
-                taddr = self._str_param(p, "address")
-                timg = self._str_param(p, "img")
-                tam = self._str_param(p, "amenity") or None
-                trev = self._str_param(p, "reviews") or None
-                tdist = self._str_param(p, "distance") or None
-                tid_str = self._str_param(p, "theater_id") or None
-                tstar = round(float(p.get("star") or 4.8), 1)
                 with state.db_lock:
                     if not db.execute("SELECT 1 FROM t_theater WHERE theater_code = ?", (tid,)).fetchone():
                         return self._send_json({"success": False, "message": "Theater not found"}, 404, sid)
+                    data, err = prepare_theater_data(p)
+                    if err is not None or data is None:
+                        return self._send_json({"success": False, "message": err or "Invalid theater fields"}, 200, sid)
+                    valid_m = resolve_valid_ids(db, "t_movies", "movie_code", p["movie_codes"]) if "movie_codes" in p else None
                     db.execute("BEGIN IMMEDIATE")
                     try:
                         db.execute(
                             "UPDATE t_theater SET theater_name=?, address=?, amenity=?, star=?, img=?, reviews=?, distance=?, theater_id=?, update_time=? WHERE theater_code=?",
-                            (tname, taddr, tam, tstar, timg, trev, tdist, tid_str, now_str, tid),
+                            (
+                                data["theater_name"],
+                                data["address"],
+                                data["amenity"],
+                                data["star"],
+                                data["img"],
+                                data["reviews"],
+                                data["distance"],
+                                data["theater_id"],
+                                now_str,
+                                tid,
+                            ),
                         )
-                        if "movie_codes" in p:
-                            cand_m = normalize_id_array(p["movie_codes"])
-                            valid_m = [int(r["movie_code"]) for r in db.execute("SELECT movie_code FROM t_movies").fetchall() if int(r["movie_code"]) in cand_m]
+                        if valid_m is not None:
                             db.execute("DELETE FROM theater_movie WHERE theater_code = ?", (tid,))
                             for mid in valid_m:
                                 db.execute(
@@ -1138,7 +1383,7 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "Theater updated successfully", "data": {"theater_code": tid}}, 200, sid)
 
             if route == "admin/theater/delete":
-                tid = self._id_param(p, "theater_code")
+                tid = self._id_param(p, "theater_code", allow_direct=True)
                 if tid <= 0:
                     return self._send_json({"success": False, "message": "Valid theater_code is required"}, 200, sid)
                 with state.db_lock:
@@ -1176,7 +1421,7 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "OK", "data": offers}, 200, sid)
 
             if route == "admin/offer/getofferbycode":
-                oid = self._id_param(p, "offer_code")
+                oid = self._id_param(p, "offer_code", allow_direct=True)
                 if oid <= 0:
                     return self._send_json({"success": False, "message": "Valid offer_code is required"}, 200, sid)
                 with state.db_lock:
@@ -1191,90 +1436,96 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "OK", "data": odata}, 200, sid)
 
             if route == "admin/offer/create":
-                otitle = self._str_param(p, "offer_title")
-                otype = self._str_param(p, "offer_type")
-                odesc = self._str_param(p, "offer_description")
-                ocode = self._str_param(p, "promo_code").upper()
-                oval = self._str_param(p, "offer_validity")
-                oimg = self._str_param(p, "img")
-                obadge = self._str_param(p, "badge") or None
-                omoney = round(float(p.get("money") or 0), 2)
-                owner_uid = self._id_param(p, "user_code") or None
-                if not otitle or not otype or not odesc or not ocode or not re.match(r"^\d{4}-\d{2}-\d{2}$", oval) or not oimg or omoney < 0:
-                    return self._send_json({"success": False, "message": "Invalid offer fields"}, 200, sid)
                 with state.db_lock:
-                    if owner_uid and not db.execute("SELECT 1 FROM t_user WHERE user_code = ?", (owner_uid,)).fetchone():
-                        return self._send_json({"success": False, "message": "Selected exclusive member account does not exist"}, 200, sid)
-                    if db.execute("SELECT 1 FROM t_offer WHERE promo_code = ?", (ocode,)).fetchone():
-                        return self._send_json({"success": False, "message": "Promo code is already in use by another offer"}, 200, sid)
-                    if "movie_codes" in p:
-                        cand_m = normalize_id_array(p["movie_codes"])
-                        valid_m = [int(r["movie_code"]) for r in db.execute("SELECT movie_code FROM t_movies").fetchall() if int(r["movie_code"]) in cand_m]
-                    else:
-                        valid_m = [int(r["movie_code"]) for r in db.execute("SELECT movie_code FROM t_movies ORDER BY movie_code ASC").fetchall()]
+                    data, err = prepare_offer_data(db, p, 0)
+                    if err is not None or data is None:
+                        return self._send_json({"success": False, "message": err or "Invalid offer fields"}, 200, sid)
+                    valid_m = (
+                        resolve_valid_ids(db, "t_movies", "movie_code", p["movie_codes"])
+                        if "movie_codes" in p
+                        else [int(r["movie_code"]) for r in db.execute("SELECT movie_code FROM t_movies ORDER BY movie_code ASC").fetchall()]
+                    )
                     db.execute("BEGIN IMMEDIATE")
                     try:
                         cur = db.execute(
                             "INSERT INTO t_offer (offer_title, offer_type, offer_description, promo_code, offer_validity, img, badge, money, user_code, create_time) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                            (otitle, otype, odesc, ocode, oval, oimg, obadge, omoney, owner_uid, now_str),
+                            (
+                                data["offer_title"],
+                                data["offer_type"],
+                                data["offer_description"],
+                                data["promo_code"],
+                                data["offer_validity"],
+                                data["img"],
+                                data["badge"],
+                                data["money"],
+                                data["user_code"],
+                                now_str,
+                            ),
                         )
                         oid = int(cur.lastrowid)
                         for mid in valid_m:
                             db.execute(
                                 "INSERT INTO movie_offer (movie_code, offer_code, discount_percent, valid_from, valid_to, created_time) VALUES (?,?,?,?,?,?)",
-                                (mid, oid, 0.0, "2026-01-01", oval, now_str),
+                                (mid, oid, 0.0, "2026-01-01", data["offer_validity"], now_str),
                             )
                         db.execute("COMMIT")
+                    except sqlite3.IntegrityError:
+                        db.execute("ROLLBACK")
+                        return self._send_json({"success": False, "message": "Promo code is already in use by another offer"}, 409, sid)
                     except Exception:
                         db.execute("ROLLBACK")
                         raise
                 return self._send_json({"success": True, "message": "Offer created successfully", "data": {"offer_code": oid, "movie_codes": valid_m}}, 200, sid)
 
             if route == "admin/offer/update":
-                oid = self._id_param(p, "offer_code")
+                oid = self._id_param(p, "offer_code", allow_direct=True)
                 if oid <= 0:
                     return self._send_json({"success": False, "message": "Valid offer_code is required"}, 200, sid)
-                otitle = self._str_param(p, "offer_title")
-                otype = self._str_param(p, "offer_type")
-                odesc = self._str_param(p, "offer_description")
-                ocode = self._str_param(p, "promo_code").upper()
-                oval = self._str_param(p, "offer_validity")
-                oimg = self._str_param(p, "img")
-                obadge = self._str_param(p, "badge") or None
-                omoney = round(float(p.get("money") or 0), 2)
-                owner_uid = self._id_param(p, "user_code") or None
                 with state.db_lock:
                     if not db.execute("SELECT 1 FROM t_offer WHERE offer_code = ?", (oid,)).fetchone():
                         return self._send_json({"success": False, "message": "Offer not found"}, 404, sid)
-                    if owner_uid and not db.execute("SELECT 1 FROM t_user WHERE user_code = ?", (owner_uid,)).fetchone():
-                        return self._send_json({"success": False, "message": "Selected exclusive member account does not exist"}, 200, sid)
-                    if db.execute("SELECT 1 FROM t_offer WHERE promo_code = ? AND offer_code <> ?", (ocode, oid)).fetchone():
-                        return self._send_json({"success": False, "message": "Promo code is already in use by another offer"}, 200, sid)
+                    data, err = prepare_offer_data(db, p, oid)
+                    if err is not None or data is None:
+                        return self._send_json({"success": False, "message": err or "Invalid offer fields"}, 200, sid)
+                    valid_m = resolve_valid_ids(db, "t_movies", "movie_code", p["movie_codes"]) if "movie_codes" in p else None
                     db.execute("BEGIN IMMEDIATE")
                     try:
                         db.execute(
                             "UPDATE t_offer SET offer_title=?, offer_type=?, offer_description=?, promo_code=?, offer_validity=?, img=?, badge=?, money=?, user_code=?, update_time=? WHERE offer_code=?",
-                            (otitle, otype, odesc, ocode, oval, oimg, obadge, omoney, owner_uid, now_str, oid),
+                            (
+                                data["offer_title"],
+                                data["offer_type"],
+                                data["offer_description"],
+                                data["promo_code"],
+                                data["offer_validity"],
+                                data["img"],
+                                data["badge"],
+                                data["money"],
+                                data["user_code"],
+                                now_str,
+                                oid,
+                            ),
                         )
-                        if "movie_codes" in p:
-                            cand_m = normalize_id_array(p["movie_codes"])
-                            valid_m = [int(r["movie_code"]) for r in db.execute("SELECT movie_code FROM t_movies").fetchall() if int(r["movie_code"]) in cand_m]
+                        if valid_m is not None:
                             db.execute("DELETE FROM movie_offer WHERE offer_code = ?", (oid,))
                             for mid in valid_m:
                                 db.execute(
                                     "INSERT INTO movie_offer (movie_code, offer_code, discount_percent, valid_from, valid_to, created_time) VALUES (?,?,?,?,?,?)",
-                                    (mid, oid, 0.0, "2026-01-01", oval, now_str),
+                                    (mid, oid, 0.0, "2026-01-01", data["offer_validity"], now_str),
                                 )
                         else:
-                            db.execute("UPDATE movie_offer SET valid_to = ? WHERE offer_code = ?", (oval, oid))
+                            db.execute("UPDATE movie_offer SET valid_to = ? WHERE offer_code = ?", (data["offer_validity"], oid))
                         db.execute("COMMIT")
+                    except sqlite3.IntegrityError:
+                        db.execute("ROLLBACK")
+                        return self._send_json({"success": False, "message": "Promo code is already in use by another offer"}, 409, sid)
                     except Exception:
                         db.execute("ROLLBACK")
                         raise
                 return self._send_json({"success": True, "message": "Offer updated successfully", "data": {"offer_code": oid}}, 200, sid)
 
             if route == "admin/offer/delete":
-                oid = self._id_param(p, "offer_code")
+                oid = self._id_param(p, "offer_code", allow_direct=True)
                 if oid <= 0:
                     return self._send_json({"success": False, "message": "Valid offer_code is required"}, 200, sid)
                 with state.db_lock:
@@ -1304,7 +1555,7 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "OK", "data": srows}, 200, sid)
 
             if route == "admin/seat/delete":
-                seat_id = self._id_param(p, "seat_code")
+                seat_id = self._id_param(p, "seat_code", allow_direct=True)
                 if seat_id <= 0:
                     return self._send_json({"success": False, "message": "Valid seat_code is required"}, 200, sid)
                 with state.db_lock:
@@ -1320,7 +1571,7 @@ def make_handler(state: ContractState):
                 return self._send_json({"success": True, "message": "OK", "data": rows_to_dicts(rows)}, 200, sid)
 
             if route == "admin/user/getuserbycode":
-                uid = self._id_param(p, "user_code")
+                uid = self._id_param(p, "user_code", allow_direct=True)
                 if uid <= 0:
                     return self._send_json({"success": False, "message": "Valid user_code is required"}, 200, sid)
                 with state.db_lock:
@@ -1333,40 +1584,44 @@ def make_handler(state: ContractState):
                 uname = self._str_param(p, "user_name")
                 uemail = self._str_param(p, "email").lower()
                 upw = str(p.get("login_pwd") or "")
-                if not uname or len(uname) > 50 or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", uemail) or len(upw) < 6:
-                    return self._send_json({"success": False, "message": "Invalid user input"}, 200, sid)
                 with state.db_lock:
-                    if db.execute("SELECT 1 FROM t_user WHERE email = ?", (uemail,)).fetchone():
-                        return self._send_json({"success": False, "message": "Email is already registered"}, 200, sid)
-                    cur = db.execute(
-                        "INSERT INTO t_user (user_name, email, login_pwd, create_time) VALUES (?,?,?,?)",
-                        (uname, uemail, hash_password_bcrypt(upw), now_str),
-                    )
-                    uid = int(cur.lastrowid)
+                    err = validate_admin_user_input(db, uname, uemail, upw, True, 0)
+                    if err is not None:
+                        return self._send_json({"success": False, "message": err}, 200, sid)
+                    try:
+                        cur = db.execute(
+                            "INSERT INTO t_user (user_name, email, login_pwd, create_time) VALUES (?,?,?,?)",
+                            (uname, uemail, hash_password_bcrypt(upw), now_str),
+                        )
+                        uid = int(cur.lastrowid)
+                    except sqlite3.IntegrityError:
+                        return self._send_json({"success": False, "message": "Email is already registered"}, 409, sid)
                 return self._send_json({"success": True, "message": "User created successfully", "data": {"user_code": uid}}, 200, sid)
 
             if route == "admin/user/update":
-                uid = self._id_param(p, "user_code")
+                uid = self._id_param(p, "user_code", allow_direct=True)
                 if uid <= 0:
                     return self._send_json({"success": False, "message": "Valid user_code is required"}, 200, sid)
                 uname = self._str_param(p, "user_name")
                 uemail = self._str_param(p, "email").lower()
                 upw = str(p.get("login_pwd") or "")
-                if not uname or len(uname) > 50 or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", uemail) or (upw and len(upw) < 6):
-                    return self._send_json({"success": False, "message": "Invalid user input"}, 200, sid)
                 with state.db_lock:
                     if not db.execute("SELECT 1 FROM t_user WHERE user_code = ?", (uid,)).fetchone():
                         return self._send_json({"success": False, "message": "User not found"}, 404, sid)
-                    if db.execute("SELECT 1 FROM t_user WHERE email = ? AND user_code <> ?", (uemail, uid)).fetchone():
-                        return self._send_json({"success": False, "message": "Email is already registered to another user"}, 200, sid)
-                    if upw:
-                        db.execute("UPDATE t_user SET user_name=?, email=?, login_pwd=?, update_time=? WHERE user_code=?", (uname, uemail, hash_password_bcrypt(upw), now_str, uid))
-                    else:
-                        db.execute("UPDATE t_user SET user_name=?, email=?, update_time=? WHERE user_code=?", (uname, uemail, now_str, uid))
+                    err = validate_admin_user_input(db, uname, uemail, upw, False, uid)
+                    if err is not None:
+                        return self._send_json({"success": False, "message": err}, 200, sid)
+                    try:
+                        if upw:
+                            db.execute("UPDATE t_user SET user_name=?, email=?, login_pwd=?, update_time=? WHERE user_code=?", (uname, uemail, hash_password_bcrypt(upw), now_str, uid))
+                        else:
+                            db.execute("UPDATE t_user SET user_name=?, email=?, update_time=? WHERE user_code=?", (uname, uemail, now_str, uid))
+                    except sqlite3.IntegrityError:
+                        return self._send_json({"success": False, "message": "Email is already registered to another user"}, 409, sid)
                 return self._send_json({"success": True, "message": "User updated successfully", "data": {"user_code": uid}}, 200, sid)
 
             if route == "admin/user/delete":
-                uid = self._id_param(p, "user_code")
+                uid = self._id_param(p, "user_code", allow_direct=True)
                 if uid <= 0:
                     return self._send_json({"success": False, "message": "Valid user_code is required"}, 200, sid)
                 with state.db_lock:

@@ -1,127 +1,177 @@
-:root {
-  --primary: #3a36e0;
-  --secondary: #6c63ff;
-  --accent: #00d9ff;
-  --gray: #f0f0f0;
-  --text-dark: #333333;
-  --text-muted: #6e6e6e;
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
+/* Digital Ticket Wallet, Perforated Cinema Stubs & Single-Pass Print Styles */
 
 body {
-  background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
-.tickets-grid {
-  max-width: 1200px;
+/* Wallet Summary & Zone Filter Toolbar */
+.wallet-header-wrap {
+  max-width: 1240px;
   width: 100%;
-  margin: 40px auto;
+  margin: 28px auto 0;
+  padding: 0 24px;
+}
+
+.wallet-header-bar {
+  background: var(--surface-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 20px 26px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.wallet-header-bar h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.wallet-header-bar p {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: var(--text-muted-local);
+}
+
+.wallet-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.wallet-count-badge {
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--brand-primary-soft);
+  color: var(--primary);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.wallet-zone-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Ticket Passes Grid */
+.tickets-grid {
+  max-width: 1240px;
+  width: 100%;
+  margin: 28px auto 40px;
   padding: 0 24px;
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 380px));
-  justify-content: center;
-  gap: 28px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr));
+  gap: 26px;
   align-items: start;
 }
 
 .no-tickets {
   grid-column: 1 / -1;
   max-width: 520px;
-  margin: 32px auto;
-  padding: 48px 36px;
-  background-color: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 12px 30px rgba(50, 50, 93, 0.08);
+  margin: 28px auto;
+  padding: 44px 32px;
+  background-color: var(--surface-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   text-align: center;
 }
 
 .no-tickets i {
-  font-size: 48px;
+  font-size: 42px;
   color: var(--primary);
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .no-tickets h2 {
+  font-family: var(--font-display);
   font-size: 22px;
   color: var(--text-dark);
-  margin-bottom: 10px;
+  margin: 0 0 8px;
 }
 
 .no-tickets p {
-  color: var(--text-muted);
-  margin-bottom: 24px;
+  color: var(--text-muted-local);
+  margin: 0 0 22px;
   line-height: 1.6;
 }
 
 .empty-action-btn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background-color: var(--primary);
   color: #ffffff;
-  padding: 12px 28px;
+  border: none;
+  padding: 11px 26px;
   border-radius: 999px;
+  font-family: inherit;
+  font-size: 14.5px;
   text-decoration: none;
-  font-weight: 600;
-  transition: background-color 0.2s ease, transform 0.2s ease;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.18s ease, transform 0.18s ease;
 }
 
-.empty-action-btn:hover {
-  background-color: #2a27b8;
-  transform: translateY(-2px);
-}
+.empty-action-btn:hover { background-color: var(--brand-primary-hover); transform: translateY(-1px); }
 
+/* Perforated Cinema Pass Card */
 .ticket {
-  background-color: #ffffff;
-  border-radius: 16px;
+  background-color: var(--surface-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: 0 15px 35px rgba(50, 50, 93, 0.1), 0 5px 15px rgba(0, 0, 0, 0.07);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
 }
 
-.ticket:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 20px 40px rgba(50, 50, 93, 0.15), 0 10px 20px rgba(0, 0, 0, 0.1);
-}
+.ticket:hover { transform: translateY(-4px); box-shadow: var(--shadow-elevated); }
+
+.ticket-vip { border-color: #f59e0b; }
 
 .movie-banner {
-  background: linear-gradient(rgba(30, 30, 30, 0.85), rgba(20, 20, 20, 0.94));
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #3b0a2a 100%);
   color: #ffffff;
-  padding: 30px 24px;
+  padding: 24px 22px;
   position: relative;
 }
 
 .movie-banner::after {
-  content: '';
+  content: "";
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, var(--accent), var(--secondary));
+  height: 3px;
+  background: linear-gradient(90deg, #60a5fa, #f43f5e);
 }
 
+.ticket-vip .movie-banner::after { background: linear-gradient(90deg, #fbbf24, #d97706); }
+
 .movie-title {
-  font-size: 24px;
-  font-weight: 700;
-  margin-bottom: 8px;
-  letter-spacing: 0.5px;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 800;
+  margin: 0 0 6px;
 }
 
 .movie-duration {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 14px;
-  font-size: 14px;
-  opacity: 0.9;
+  font-size: 13px;
+  color: rgba(248, 250, 252, 0.88);
+  margin-bottom: 12px;
 }
 
 .movie-genre {
@@ -130,8 +180,7 @@ body {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 12px;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .genre-tags {
@@ -142,66 +191,64 @@ body {
 
 .genre-tag {
   background-color: rgba(255, 255, 255, 0.16);
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
 }
 
-.rating {
-  color: #ffd700;
-  letter-spacing: 2px;
-}
+.rating { color: #fbbf24; letter-spacing: 1.5px; }
 
-.ticket-details {
-  padding: 24px;
-  position: relative;
-}
+.ticket-details { padding: 22px; }
 
 .seat-info {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 30px;
+  margin-bottom: 22px;
   padding-bottom: 16px;
-  border-bottom: 1px dashed rgba(0, 0, 0, 0.12);
+  border-bottom: 1.5px dashed var(--border-strong);
 }
 
 .detail-column {
   flex: 1;
   text-align: center;
   position: relative;
-  padding: 4px 10px;
+  padding: 2px 8px;
 }
 
 .detail-column:not(:last-child)::after {
-  content: '';
+  content: "";
   position: absolute;
-  top: 12%;
+  top: 10%;
   right: 0;
-  height: 76%;
+  height: 80%;
   width: 1px;
-  background: rgba(0, 0, 0, 0.1);
+  background: var(--border-color);
 }
 
 .detail-label {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-bottom: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted-local);
+  margin-bottom: 4px;
   letter-spacing: 1px;
   text-transform: uppercase;
 }
 
 .detail-value {
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 800;
   color: var(--text-dark);
 }
+
+.detail-value.zone-vip { color: #b45309; }
 
 .datetime-info {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin: 20px 0;
+  margin: 18px 0;
 }
 
 .date-time {
@@ -211,89 +258,85 @@ body {
 }
 
 .icon {
-  width: 36px;
-  height: 36px;
-  background-color: var(--gray);
+  width: 34px;
+  height: 34px;
+  background-color: var(--surface-muted);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--primary);
-  font-size: 15px;
+  font-size: 14px;
   flex-shrink: 0;
 }
 
-.text-info {
-  display: flex;
-  flex-direction: column;
-}
+.text-info { display: flex; flex-direction: column; }
 
 .text-info div:last-child {
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: 700;
+  font-size: 13.5px;
   color: var(--text-dark);
 }
 
-.barcode-container {
-  margin: 20px 0;
-  padding: 6px 0;
-}
+.barcode-container { margin: 18px 0; }
 
 .barcode-inner {
-  background-color: var(--gray);
-  padding: 14px;
+  background-color: var(--surface-muted);
+  padding: 12px;
   border-radius: 8px;
   display: flex;
   justify-content: center;
 }
 
 .barcode {
-  height: 58px;
+  height: 54px;
   max-width: 100%;
   background-color: #ffffff;
-  padding: 5px 10px;
+  padding: 4px 10px;
   border-radius: 4px;
 }
 
 .ticket-id {
   text-align: center;
   font-size: 12px;
-  color: var(--text-muted);
+  font-weight: 700;
+  color: var(--text-muted-local);
   margin-top: 6px;
   letter-spacing: 2px;
 }
 
-.view-details,
-.view-details2 {
+.ticket-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.view-details, .view-details2 {
   width: 100%;
-  display: block;
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   color: #ffffff;
-  padding: 12px;
+  padding: 11px 14px;
   border: none;
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: background-color 0.18s ease, opacity 0.18s ease;
 }
 
-.view-details {
-  background-color: #3a4ed5;
-}
+.view-details { background-color: var(--primary); }
 
-.view-details:hover {
-  background-color: #2a3ec5;
-}
+.view-details:hover { background-color: var(--brand-primary-hover); }
 
-.view-details2 {
-  margin-top: 10px;
-  background-color: #dc2626;
-}
+.view-details2 { background-color: var(--brand-danger); }
 
-.view-details2:hover {
-  background-color: #b91c1c;
-}
+.view-details2:hover:not(:disabled) { background-color: #b91c1c; }
+
+.view-details2:disabled { opacity: 0.55; cursor: not-allowed; }
 
 @media print {
   body {
@@ -302,8 +345,8 @@ body {
 
   #header-container,
   #bottom-container,
-  .export-ticket-btn,
-  .cancel-button,
+  #wallet-toolbar,
+  .ticket-actions,
   body.printing-single-ticket .ticket:not(.print-target) {
     display: none !important;
   }

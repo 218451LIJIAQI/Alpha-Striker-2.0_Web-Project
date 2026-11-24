@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-Static, Security & Relational Contract Audit Suite for CineTix (Alpha Striker 2.0).
+Static, Security, Accessibility & Relational Contract Audit Suite for CineTix (Alpha Striker 2.0).
 Verifies:
 1. movies.sql relational schema, foreign keys, unique constraints, and seed asset paths (case-sensitive) in SQLite (PRAGMA foreign_keys=ON).
 2. PHP syntax structure, balanced delimiters, zero bare mb_* calls, zero hardcoded '888888', strict non-empty CSRF check in BaseAdmin,
-   and 3-way route parity across Frontend <-> PHP Controllers <-> mock_thinkphp_server.py.
+   shared BaseAdmin::resolveValidIds deduplication, ApiController::isValidIsoDate parity, and 3-way route parity across
+   Frontend <-> PHP Controllers <-> mock_thinkphp_server.py.
 3. JavaScript syntax across all external .js modules and inline HTML <script> blocks via `node --check`.
-4. HTML/JS zero `href="#"` dead links, case-sensitive local asset integrity, and all 39 binary images/icons readability.
-5. CSS brace balance, single centralized dark-mode variable block, and absence of destructive global overrides.
+4. HTML/JS zero `href="#"` dead links, zero external CDN <link>/<script> dependencies, case-sensitive local asset integrity,
+   100% offline CSS coverage for every `fa-*` icon class, and all 39 binary images/icons readability.
+5. CSS brace balance, single centralized dark-mode variable block, `:focus-visible` & `prefers-reduced-motion` accessibility rules,
+   and absence of destructive global overrides.
 """
 
 from __future__ import annotations
@@ -210,11 +213,29 @@ def verify_php_and_security_contracts() -> None:
                     f"Admin controller {path} must extend BaseAdmin",
                 )
 
+    api_ctrl_src = (ROOT / "application/common/controller/ApiController.php").read_text(encoding="utf-8")
+    assert_true(
+        "function isValidIsoDate(" in api_ctrl_src and "function optionalIdWithDefault(" in api_ctrl_src,
+        "ApiController.php missing strict date/ID validation helpers",
+    )
+    assert_true("function textSub(" not in api_ctrl_src, "Dead ApiController::textSub helper should remain removed")
+
     base_admin_src = (ROOT / "application/admin/controller/BaseAdmin.php").read_text(encoding="utf-8")
     assert_true(
         "$clientToken === '' ||" not in base_admin_src and "hash_equals($sessionToken, $clientToken)" in base_admin_src,
         "BaseAdmin.php CSRF short-circuit vulnerability not remediated!",
     )
+    assert_true(
+        "function resolveValidIds(" in base_admin_src,
+        "BaseAdmin.php missing shared resolveValidIds helper",
+    )
+
+    for admin_ctrl_name in ("Movie.php", "Theater.php", "Offer.php"):
+        ctrl_src = (ROOT / "application/admin/controller" / admin_ctrl_name).read_text(encoding="utf-8")
+        assert_true(
+            "$this->resolveValidIds(" in ctrl_src,
+            f"{admin_ctrl_name} must delegate relation ID resolution to BaseAdmin::resolveValidIds",
+        )
 
     admin_user_src = (ROOT / "application/admin/controller/User.php").read_text(encoding="utf-8")
     safe_match = re.search(r"SAFE_FIELDS\s*=\s*'([^']+)'", admin_user_src)
@@ -228,6 +249,7 @@ def verify_php_and_security_contracts() -> None:
 
     # Verify 3-way route parity: Frontend <-> PHP Controllers <-> mock_thinkphp_server.py
     mock_src = (ROOT / "tests/mock_thinkphp_server.py").read_text(encoding="utf-8")
+    assert_true("def is_valid_iso_date(" in mock_src, "mock_thinkphp_server.py missing 1:1 is_valid_iso_date parity")
     mock_routes = set(re.findall(r'route\s*==\s*"([a-z0-9_]+/[a-z0-9_]+/[a-z0-9_]+)"', mock_src))
 
     all_php_routes = {
@@ -267,19 +289,34 @@ def verify_php_and_security_contracts() -> None:
 
 def verify_js_html_css_and_binaries() -> None:
     js_files = sorted((ROOT / "public" / "js").rglob("*.js"))
+    used_fa_icons: set[str] = set()
+    fa_token_re = re.compile(r"\bfa-([a-z0-9-]+)\b")
+
     for jf in js_files:
         proc = subprocess.run(["node", "--check", str(jf)], capture_output=True, text=True)
         assert_true(proc.returncode == 0, f"JS syntax error in {jf}: {proc.stderr}")
         js_txt = jf.read_text(encoding="utf-8")
         assert_true(re.search(r'href=["\']#["\']', js_txt) is None, f"Dead href='#' link found in {jf}")
+        for tok in fa_token_re.findall(js_txt):
+            if tok != "spin":
+                used_fa_icons.add(f"fa-{tok}")
 
     html_files = sorted((ROOT / "public").rglob("*.html"))
+    assert_true(len(html_files) == 32, f"Expected 32 HTML pages, found {len(html_files)}")
     inline_script_count = 0
     local_ref_count = 0
+    ext_asset_re = re.compile(r"<(?:link|script)\b[^>]*(?:href|src)=[\"']https?://", re.I)
 
     for hf in html_files:
         txt = hf.read_text(encoding="utf-8")
         assert_true(re.search(r'href=["\']#["\']', txt) is None, f"Dead href='#' link found in {hf}")
+        assert_true(
+            ext_asset_re.search(txt) is None,
+            f"External CDN stylesheet/script tag found in offline build: {hf}",
+        )
+        for tok in fa_token_re.findall(txt):
+            if tok != "spin":
+                used_fa_icons.add(f"fa-{tok}")
 
         for script_match in re.finditer(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", txt, re.S | re.I):
             code = script_match.group(1).strip()
@@ -316,7 +353,18 @@ def verify_js_html_css_and_binaries() -> None:
             local_ref_count += 1
             assert_case_exact_path(resolved, f"'{val}' in {hf.relative_to(ROOT)}")
 
+    header_css_txt = (ROOT / "public/css/common/header.css").read_text(encoding="utf-8")
+    defined_fa_icons = {f"fa-{m}" for m in re.findall(r"\.fa-([a-z0-9-]+)::before", header_css_txt)}
+    missing_icons = sorted(used_fa_icons - defined_fa_icons)
+    assert_true(
+        len(missing_icons) == 0,
+        f"Icon classes used in HTML/JS but missing offline CSS glyph rules in header.css: {missing_icons}",
+    )
+    assert_true(":focus-visible" in header_css_txt, "Missing :focus-visible rules in header.css")
+    assert_true("prefers-reduced-motion" in header_css_txt, "Missing prefers-reduced-motion media query in header.css")
+
     css_files = sorted((ROOT / "public" / "css").rglob("*.css"))
+    assert_true(len(css_files) == 14, f"Expected 14 CSS files, found {len(css_files)}")
     for cf in css_files:
         raw = cf.read_text(encoding="utf-8")
         no_comments = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
@@ -343,10 +391,14 @@ def verify_js_html_css_and_binaries() -> None:
         with Image.open(bf) as img:
             img.verify()
 
+    # Verify zero __pycache__ or .pyc artifacts inside repository
+    pycache_dirs = list(ROOT.rglob("__pycache__")) + list(ROOT.rglob("*.pyc"))
+    assert_true(len(pycache_dirs) == 0, f"Bytecode artifacts found inside repo: {pycache_dirs}")
+
     print(
         f"[PASS] {len(js_files)} JS modules, {inline_script_count} inline scripts, "
-        f"{len(html_files)} HTML pages ({local_ref_count} case-exact refs, 0 href='#'), "
-        f"{len(css_files)} CSS stylesheets, and {len(binary_files)} binary images verified"
+        f"{len(html_files)} HTML pages ({local_ref_count} case-exact refs, 0 CDN links, 0 href='#'), "
+        f"{len(css_files)} CSS stylesheets ({len(defined_fa_icons)} offline icon glyphs), and {len(binary_files)} binary images verified"
     )
 
 

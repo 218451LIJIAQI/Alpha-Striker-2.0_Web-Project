@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Upcoming Releases | Alpha Striker 2.0</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <title>Upcoming Releases | CineTix Box Office</title>
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/common/footer.css">
   <link rel="stylesheet" href="../css/homepage/homepage.css">
@@ -14,16 +13,16 @@
   <div id="header-container"></div>
 
   <main class="info-page card">
-    <h1 class="info-page-title">Upcoming Releases 🎬✨</h1>
+    <h1 class="info-page-title">Upcoming Releases</h1>
     <p>Preview upcoming blockbusters and special-format premieres scheduled across partner theaters. Filter by auditorium format or set a premiere reminder below.</p>
 
-    <h2 class="info-section-heading">📆 Premiere Spotlight &amp; Format Filter</h2>
-    <div class="filters" id="upcoming-format-filters">
-      <button type="button" class="btn-filter active" data-format="all">All Formats</button>
-      <button type="button" class="btn-filter" data-format="IMAX®">IMAX®</button>
-      <button type="button" class="btn-filter" data-format="4DX®">4DX®</button>
-      <button type="button" class="btn-filter" data-format="Dolby Atmos">Dolby Atmos</button>
-      <button type="button" class="btn-filter" data-format="VIP">VIP Lounge</button>
+    <h2 class="info-section-heading">Premiere Spotlight &amp; Format Filter</h2>
+    <div class="filters" id="upcoming-format-filters" role="group" aria-label="Filter upcoming releases by format">
+      <button type="button" class="btn-filter active" data-format="all" aria-pressed="true">All Formats</button>
+      <button type="button" class="btn-filter" data-format="IMAX®" aria-pressed="false">IMAX®</button>
+      <button type="button" class="btn-filter" data-format="4DX®" aria-pressed="false">4DX®</button>
+      <button type="button" class="btn-filter" data-format="Dolby Atmos" aria-pressed="false">Dolby Atmos</button>
+      <button type="button" class="btn-filter" data-format="VIP" aria-pressed="false">VIP Lounge</button>
     </div>
 
     <div class="upcoming-grid" id="upcoming-grid">
@@ -34,7 +33,7 @@
           <h3>Galactic Odyssey</h3>
           <p><strong>Premiere:</strong> December 18, 2026 &bull; Sci-Fi &bull; 2h 34m</p>
           <p>Deep-space expedition filmed for floor-to-ceiling 4K Laser projection.</p>
-          <button type="button" class="remind-btn" data-id="galactic-odyssey" data-title="Galactic Odyssey">🔔 Remind Me</button>
+          <button type="button" class="remind-btn" data-id="galactic-odyssey" data-title="Galactic Odyssey" aria-pressed="false">Remind Me</button>
         </div>
       </article>
 
@@ -45,7 +44,7 @@
           <h3>Velocity Zero</h3>
           <p><strong>Premiere:</strong> January 9, 2027 &bull; Action &bull; 2h 12m</p>
           <p>High-octane pursuit engineered with synchronized 4DX motion effects.</p>
-          <button type="button" class="remind-btn" data-id="velocity-zero" data-title="Velocity Zero">🔔 Remind Me</button>
+          <button type="button" class="remind-btn" data-id="velocity-zero" data-title="Velocity Zero" aria-pressed="false">Remind Me</button>
         </div>
       </article>
 
@@ -56,7 +55,7 @@
           <h3>Winter Aria</h3>
           <p><strong>Premiere:</strong> January 23, 2027 &bull; Animation &bull; 1h 52m</p>
           <p>Orchestral animated musical mixed in 64-channel spatial audio.</p>
-          <button type="button" class="remind-btn" data-id="winter-aria" data-title="Winter Aria">🔔 Remind Me</button>
+          <button type="button" class="remind-btn" data-id="winter-aria" data-title="Winter Aria" aria-pressed="false">Remind Me</button>
         </div>
       </article>
 
@@ -67,12 +66,12 @@
           <h3>The Velvet Alibi</h3>
           <p><strong>Premiere:</strong> February 14, 2027 &bull; Mystery &bull; 2h 08m</p>
           <p>Whodunit thriller debuting with dine-in VIP recliner service.</p>
-          <button type="button" class="remind-btn" data-id="velvet-alibi" data-title="The Velvet Alibi">🔔 Remind Me</button>
+          <button type="button" class="remind-btn" data-id="velvet-alibi" data-title="The Velvet Alibi" aria-pressed="false">Remind Me</button>
         </div>
       </article>
     </div>
 
-    <h2 class="info-section-heading">🎟️ Pre-Booking Perks</h2>
+    <h2 class="info-section-heading">Pre-Booking Perks</h2>
     <table class="info-table">
       <tbody>
         <tr>
@@ -86,7 +85,7 @@
       </tbody>
     </table>
 
-    <h2 class="info-section-heading">🤔 FAQs About Upcoming Releases</h2>
+    <h2 class="info-section-heading">FAQs About Upcoming Releases</h2>
     <div class="faq-accordion">
       <div class="faq-question active">Q: Can I pre-book for any upcoming movie?</div>
       <div class="faq-answer">A: Advance seat selection opens two weeks prior to the premiere date for participating titles.</div>
@@ -118,7 +117,8 @@
         document.querySelectorAll('.remind-btn').forEach(function (btn) {
           const active = saved.has(btn.dataset.id);
           btn.classList.toggle('reminded', active);
-          btn.textContent = active ? '✓ Reminder Active' : '🔔 Remind Me';
+          btn.setAttribute('aria-pressed', String(active));
+          btn.textContent = active ? '✓ Reminder Active' : 'Remind Me';
         });
       }
 
@@ -143,8 +143,12 @@
 
       filterBtns.forEach(function (btn) {
         btn.addEventListener('click', function () {
-          filterBtns.forEach(function (b) { b.classList.remove('active'); });
+          filterBtns.forEach(function (b) {
+            b.classList.remove('active');
+            b.setAttribute('aria-pressed', 'false');
+          });
           btn.classList.add('active');
+          btn.setAttribute('aria-pressed', 'true');
           const fmt = btn.dataset.format || 'all';
           cards.forEach(function (card) {
             card.classList.toggle('is-hidden', fmt !== 'all' && card.dataset.format !== fmt);

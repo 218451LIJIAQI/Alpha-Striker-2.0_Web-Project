@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Manage Theaters | CineTix Admin</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/admin/admin.css">
   <script src="../js/common.js"></script>
@@ -16,14 +15,14 @@
   <main class="admin-content">
     <div class="page-header">
       <div>
-        <h1><i class="fas fa-building"></i> Partner Theaters</h1>
+        <h1><i class="fas fa-building" aria-hidden="true"></i> Partner Theaters</h1>
         <p>Add, edit, or remove partner cinema locations and manage their scheduled movies.</p>
       </div>
-      <button type="button" class="add-btn" id="open-add-theater-btn"><i class="fas fa-plus"></i> Add Theater</button>
+      <button type="button" class="add-btn" id="open-add-theater-btn"><i class="fas fa-plus" aria-hidden="true"></i> Add Theater</button>
     </div>
 
-    <form id="theater-form" class="form-container is-hidden">
-      <h2 id="theater-form-heading"><i class="fas fa-plus-circle"></i> Add Partner Theater</h2>
+    <form id="theater-form" class="form-container is-hidden" aria-label="Theater Editor">
+      <h2 id="theater-form-heading"><i class="fas fa-plus-circle" aria-hidden="true"></i> Add Partner Theater</h2>
       <input type="hidden" id="theater_code" value="">
 
       <div class="form-grid">
@@ -49,7 +48,7 @@
 
         <div class="form-group">
           <label for="star" class="form-label">Rating (0.0 – 5.0) *</label>
-          <input type="number" id="star" class="form-input" step="0.1" min="0" max="5" value="4.8" required>
+          <input type="number" id="star" class="form-input tabular-nums" step="0.1" min="0" max="5" value="4.8" required>
         </div>
 
         <div class="form-group">
@@ -84,11 +83,12 @@
 
       <div class="form-actions">
         <button type="button" class="cancel-btn" id="cancel-theater-form">Cancel</button>
-        <button type="submit" class="submit-btn" id="save-theater-btn"><i class="fas fa-save"></i> Save Theater</button>
+        <button type="submit" class="submit-btn" id="save-theater-btn"><i class="fas fa-save" aria-hidden="true"></i> Save Theater</button>
       </div>
     </form>
 
     <div class="table-container">
+      <div class="admin-table-toolbar" id="theaters-toolbar"></div>
       <table>
         <thead>
           <tr>
@@ -118,8 +118,12 @@
       const heading = document.getElementById('theater-form-heading');
       const movieGrid = document.getElementById('theater-movies-grid');
       const imgInput = document.getElementById('img');
+      const saveBtn = document.getElementById('save-theater-btn');
       const syncPreview = AdminApp.bindImagePreview(imgInput, document.getElementById('theater-preview'));
+      const esc = AdminApp.escapeHtml;
       let catalogMovies = [];
+
+      AdminApp.bindCheckControls(movieGrid, 'theater-select-all-movies', 'theater-clear-movies');
 
       async function loadCatalogMovies() {
         const res = await AdminApp.apiFetch('/index.php/admin/movie/index');
@@ -137,10 +141,10 @@
         document.getElementById('reviews').value = '150 reviews';
         imgInput.value = '../img/theater/cinemark.jpeg';
         syncPreview();
-        heading.innerHTML = '<i class="fas fa-plus-circle"></i> Add Partner Theater';
+        heading.innerHTML = '<i class="fas fa-plus-circle" aria-hidden="true"></i> Add Partner Theater';
         AdminApp.renderCheckList(movieGrid, catalogMovies, 'movie_code', function (m) { return m.movie_name; }, null);
         form.classList.remove('is-hidden');
-        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById('theater_name').focus();
       }
 
       async function openEditForm(theaterCode) {
@@ -160,7 +164,7 @@
         document.getElementById('reviews').value = t.reviews || '';
         imgInput.value = t.img || '';
         syncPreview();
-        heading.innerHTML = '<i class="fas fa-edit"></i> Edit Theater #' + AdminApp.escapeHtml(t.theater_code);
+        heading.innerHTML = '<i class="fas fa-edit" aria-hidden="true"></i> Edit Theater #' + esc(t.theater_code);
         AdminApp.renderCheckList(
           movieGrid,
           catalogMovies,
@@ -169,66 +173,89 @@
           Array.isArray(t.movie_codes) ? t.movie_codes : []
         );
         form.classList.remove('is-hidden');
-        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById('theater_name').focus();
       }
 
-      async function loadTheaters() {
-        const tbody = document.getElementById('theaters-tbody');
-        const res = await AdminApp.apiFetch('/index.php/admin/theater/index');
-        if (!res.success || !Array.isArray(res.data) || res.data.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No theaters found.</td></tr>';
-          return;
-        }
-
-        const esc = AdminApp.escapeHtml;
-        tbody.innerHTML = res.data.map(function (t) {
+      const tableCtrl = AdminApp.createTableController({
+        toolbarId: 'theaters-toolbar',
+        tbodyId: 'theaters-tbody',
+        colSpan: 8,
+        emptyText: 'No theaters found.',
+        searchPlaceholder: 'Search by theater name, code, address, or amenity...',
+        filters: [
+          { value: 'all', label: 'All Formats' },
+          { value: 'IMAX', label: 'IMAX' },
+          { value: '4DX', label: '4DX' },
+          { value: 'VIP', label: 'VIP' },
+          { value: 'Dolby Atmos', label: 'Dolby Atmos' },
+          { value: 'RPX', label: 'RPX' },
+        ],
+        sorts: [
+          { key: 'id_asc', label: 'Sort: ID (Low–High)', compare: function (a, b) { return Number(a.theater_code) - Number(b.theater_code); } },
+          { key: 'name_asc', label: 'Sort: Name (A–Z)', compare: function (a, b) { return String(a.theater_name || '').localeCompare(String(b.theater_name || '')); } },
+          { key: 'rating_desc', label: 'Sort: Rating (High–Low)', compare: function (a, b) { return (parseFloat(b.star) || 0) - (parseFloat(a.star) || 0); } },
+        ],
+        searchText: function (t) {
+          return '#' + t.theater_code + ' ' + (t.theater_name || '') + ' ' + (t.theater_id || '') + ' ' + (t.address || '') + ' ' + (t.amenity || '');
+        },
+        matchFilter: function (t, val) {
+          return String(t.amenity || '').toLowerCase().includes(val.toLowerCase());
+        },
+        renderRow: function (t) {
           const thumb = AdminApp.resolveAdminAsset(t.img);
           const mCount = Array.isArray(t.movie_codes) ? t.movie_codes.length : (t.movie_count || 0);
           return (
             '<tr>' +
-            '<td>#' + esc(t.theater_code) + '</td>' +
+            '<td class="tabular-nums">#' + esc(t.theater_code) + '</td>' +
             '<td><img src="' + esc(thumb) + '" alt="' + esc(t.theater_name) + '" class="theater-thumb"></td>' +
-            '<td><strong>' + esc(t.theater_name) + '</strong><br><small class="sub-meta">' + esc(t.theater_id || '—') + '</small></td>' +
+            '<td><strong>' + esc(t.theater_name) + '</strong><br><small class="sub-meta tabular-nums">' + esc(t.theater_id || '—') + '</small></td>' +
             '<td>' + esc(t.address) + (t.distance ? '<br><small class="sub-meta">' + esc(t.distance) + '</small>' : '') + '</td>' +
             '<td>' + esc(t.amenity || '—') + '</td>' +
-            '<td><i class="fas fa-star star-amber"></i> ' + esc(t.star) + '</td>' +
-            '<td><span class="scope-badge">' + esc(mCount + ' film' + (mCount === 1 ? '' : 's')) + '</span></td>' +
+            '<td class="tabular-nums"><i class="fas fa-star star-amber" aria-hidden="true"></i> ' + esc(t.star) + '</td>' +
+            '<td><span class="scope-badge tabular-nums">' + esc(mCount + ' film' + (mCount === 1 ? '' : 's')) + '</span></td>' +
             '<td><div class="action-buttons">' +
-            '<button type="button" class="edit-btn edit-theater-btn" data-id="' + esc(t.theater_code) + '"><i class="fas fa-edit"></i> Edit</button>' +
-            '<button type="button" class="delete-btn" data-id="' + esc(t.theater_code) + '"><i class="fas fa-trash"></i> Delete</button>' +
+            '<button type="button" class="edit-btn edit-theater-btn" data-id="' + esc(t.theater_code) + '"><i class="fas fa-edit" aria-hidden="true"></i> Edit</button>' +
+            '<button type="button" class="delete-btn" data-id="' + esc(t.theater_code) + '"><i class="fas fa-trash" aria-hidden="true"></i> Delete</button>' +
             '</div></td>' +
             '</tr>'
           );
-        }).join('');
-
-        tbody.querySelectorAll('.edit-theater-btn').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            openEditForm(btn.getAttribute('data-id'));
+        },
+        afterRender: function (tbody) {
+          tbody.querySelectorAll('.edit-theater-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              openEditForm(btn.getAttribute('data-id'));
+            });
           });
-        });
+          AdminApp.bindDeleteActions(tbody, {
+            endpoint: '/index.php/admin/theater/delete',
+            idKey: 'theater_code',
+            confirmText: function (id) { return 'Delete theater #' + id + '? Related schedules and seat bookings will also be removed.'; },
+            successText: 'Theater deleted',
+            onSuccess: loadTheaters,
+          });
+        },
+      });
 
-        AdminApp.bindDeleteActions(tbody, {
-          endpoint: '/index.php/admin/theater/delete',
-          idKey: 'theater_code',
-          confirmText: function (id) { return 'Delete theater #' + id + '? Related schedules and seat bookings will also be removed.'; },
-          successText: 'Theater deleted',
-          onSuccess: loadTheaters,
-        });
+      async function loadTheaters() {
+        const res = await AdminApp.apiFetch('/index.php/admin/theater/index');
+        tableCtrl.setItems(res.success && Array.isArray(res.data) ? res.data : []);
       }
 
       document.getElementById('open-add-theater-btn').addEventListener('click', openCreateForm);
       document.getElementById('cancel-theater-form').addEventListener('click', function () {
         form.classList.add('is-hidden');
       });
-      document.getElementById('theater-select-all-movies').addEventListener('click', function () {
-        movieGrid.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = true; });
-      });
-      document.getElementById('theater-clear-movies').addEventListener('click', function () {
-        movieGrid.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
+      window.addEventListener('cinetix:escape', function () {
+        if (!form.classList.contains('is-hidden')) {
+          form.classList.add('is-hidden');
+        }
       });
 
       form.addEventListener('submit', async function (e) {
         e.preventDefault();
+        if (saveBtn.disabled) return;
+        saveBtn.disabled = true;
+
         const editingCode = document.getElementById('theater_code').value.trim();
         const endpoint = editingCode ? '/index.php/admin/theater/update' : '/index.php/admin/theater/create';
         const payload = {
@@ -244,13 +271,17 @@
         };
         if (editingCode) payload.theater_code = editingCode;
 
-        const res = await AdminApp.apiFetch(endpoint, { method: 'POST', body: payload });
-        if (res.success) {
-          window.showToast(editingCode ? 'Theater updated successfully' : 'Theater created successfully', 'success');
-          form.classList.add('is-hidden');
-          await loadTheaters();
-        } else {
-          window.showToast(res.message || 'Failed to save theater', 'error');
+        try {
+          const res = await AdminApp.apiFetch(endpoint, { method: 'POST', body: payload });
+          if (res.success) {
+            window.showToast(editingCode ? 'Theater updated successfully' : 'Theater created successfully', 'success');
+            form.classList.add('is-hidden');
+            await loadTheaters();
+          } else {
+            window.showToast(res.message || 'Failed to save theater', 'error');
+          }
+        } finally {
+          saveBtn.disabled = false;
         }
       });
 

@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Manage Offers | CineTix Admin</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/admin/admin.css">
   <script src="../js/common.js"></script>
@@ -16,13 +15,14 @@
   <main class="admin-content">
     <div class="page-header">
       <div>
-        <h1><i class="fas fa-tags"></i> Promotional Offers</h1>
+        <h1><i class="fas fa-tags" aria-hidden="true"></i> Promotional Offers</h1>
         <p>Manage promo codes, discount amounts, eligible movies, member ownership, and expiration dates.</p>
       </div>
-      <a href="add-offer.html" class="add-btn"><i class="fas fa-plus"></i> Add Offer</a>
+      <a href="add-offer.html" class="add-btn"><i class="fas fa-plus" aria-hidden="true"></i> Add Offer</a>
     </div>
 
     <div class="table-container">
+      <div class="admin-table-toolbar" id="offers-toolbar"></div>
       <table>
         <thead>
           <tr>
@@ -45,51 +45,87 @@
   </main>
 
   <script>
-    async function loadOffers() {
-      const tbody = document.getElementById('offers-tbody');
-      const res = await AdminApp.apiFetch('/index.php/admin/offer/index');
-      if (!res.success || !Array.isArray(res.data) || res.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No promotional offers found.</td></tr>';
-        return;
-      }
-
-      const esc = AdminApp.escapeHtml;
-      tbody.innerHTML = res.data.map(function (o) {
-        const imgSrc = AdminApp.resolveAdminAsset(o.img);
-        const discount = '$' + (parseFloat(o.money) || 0).toFixed(2);
-        const mCount = Array.isArray(o.movie_codes) ? o.movie_codes.length : (o.movie_count || 0);
-        const ownerTxt = o.owner && o.owner.user_name ? ('User: ' + o.owner.user_name) : 'Public';
-        const badgeHtml = o.badge ? '<span class="badge-tag">' + esc(o.badge) + '</span>' : '<span class="muted-dash">—</span>';
-        return (
-          '<tr>' +
-          '<td>#' + esc(o.offer_code) + '</td>' +
-          '<td><img src="' + esc(imgSrc) + '" alt="' + esc(o.offer_title) + '" class="offer-img"></td>' +
-          '<td><strong>' + esc(o.offer_title) + '</strong><br><small class="sub-meta">' + esc(o.offer_type) + '</small></td>' +
-          '<td><span class="promo-code">' + esc(o.promo_code) + '</span></td>' +
-          '<td><strong>' + esc(discount) + '</strong></td>' +
-          '<td><span class="scope-badge">' + esc(mCount + ' movie' + (mCount === 1 ? '' : 's')) + '</span><br><small class="sub-meta">' + esc(ownerTxt) + '</small></td>' +
-          '<td>' + esc(o.offer_validity) + '</td>' +
-          '<td>' + badgeHtml + '</td>' +
-          '<td><div class="action-buttons">' +
-          '<a href="edit-offer.html?offer_code=' + encodeURIComponent(o.offer_code) + '" class="edit-btn"><i class="fas fa-edit"></i> Edit</a>' +
-          '<button type="button" class="delete-btn" data-id="' + esc(o.offer_code) + '"><i class="fas fa-trash"></i> Delete</button>' +
-          '</div></td>' +
-          '</tr>'
-        );
-      }).join('');
-
-      AdminApp.bindDeleteActions(tbody, {
-        endpoint: '/index.php/admin/offer/delete',
-        idKey: 'offer_code',
-        confirmText: function (id) { return 'Delete offer #' + id + '? Movie applicability links will also be removed.'; },
-        successText: 'Offer deleted',
-        onSuccess: loadOffers,
-      });
-    }
-
     document.addEventListener('DOMContentLoaded', async function () {
       AdminApp.renderAdminNav('offers');
       if (!(await AdminApp.ensureAuthenticated())) return;
+
+      const esc = AdminApp.escapeHtml;
+      const now = new Date();
+      const todayIso =
+        now.getFullYear() + '-' +
+        String(now.getMonth() + 1).padStart(2, '0') + '-' +
+        String(now.getDate()).padStart(2, '0');
+
+      const tableCtrl = AdminApp.createTableController({
+        toolbarId: 'offers-toolbar',
+        tbodyId: 'offers-tbody',
+        colSpan: 9,
+        emptyText: 'No promotional offers found.',
+        searchPlaceholder: 'Search by title, promo code, category, or owner...',
+        filters: [
+          { value: 'all', label: 'All Offers' },
+          { value: 'public', label: 'Public Offers' },
+          { value: 'member', label: 'Member-Exclusive' },
+          { value: 'active', label: 'Active Validity' },
+          { value: 'expired', label: 'Expired' },
+        ],
+        sorts: [
+          { key: 'id_asc', label: 'Sort: ID (Low–High)', compare: function (a, b) { return Number(a.offer_code) - Number(b.offer_code); } },
+          { key: 'discount_desc', label: 'Sort: Discount (High–Low)', compare: function (a, b) { return (parseFloat(b.money) || 0) - (parseFloat(a.money) || 0); } },
+          { key: 'validity_asc', label: 'Sort: Expiry (Soonest)', compare: function (a, b) { return String(a.offer_validity || '').localeCompare(String(b.offer_validity || '')); } },
+        ],
+        searchText: function (o) {
+          const ownerTxt = o.owner && o.owner.user_name ? o.owner.user_name : 'public';
+          return '#' + o.offer_code + ' ' + (o.offer_title || '') + ' ' + (o.promo_code || '') + ' ' + (o.offer_type || '') + ' ' + ownerTxt;
+        },
+        matchFilter: function (o, val) {
+          const isExpired = Boolean(o.offer_validity && String(o.offer_validity) < todayIso);
+          if (val === 'public') return !o.user_code;
+          if (val === 'member') return Boolean(o.user_code);
+          if (val === 'active') return !isExpired;
+          if (val === 'expired') return isExpired;
+          return true;
+        },
+        renderRow: function (o) {
+          const imgSrc = AdminApp.resolveAdminAsset(o.img);
+          const discount = '$' + (parseFloat(o.money) || 0).toFixed(2);
+          const mCount = Array.isArray(o.movie_codes) ? o.movie_codes.length : (o.movie_count || 0);
+          const ownerTxt = o.owner && o.owner.user_name ? ('User: ' + o.owner.user_name) : 'Public';
+          const badgeHtml = o.badge ? '<span class="badge-tag">' + esc(o.badge) + '</span>' : '<span class="muted-dash">—</span>';
+          const isExpired = Boolean(o.offer_validity && String(o.offer_validity) < todayIso);
+          return (
+            '<tr>' +
+            '<td class="tabular-nums">#' + esc(o.offer_code) + '</td>' +
+            '<td><img src="' + esc(imgSrc) + '" alt="' + esc(o.offer_title) + '" class="offer-img"></td>' +
+            '<td><strong>' + esc(o.offer_title) + '</strong><br><small class="sub-meta">' + esc(o.offer_type) + '</small></td>' +
+            '<td><span class="promo-code">' + esc(o.promo_code) + '</span></td>' +
+            '<td class="tabular-nums"><strong>' + esc(discount) + '</strong></td>' +
+            '<td><span class="scope-badge tabular-nums">' + esc(mCount + ' movie' + (mCount === 1 ? '' : 's')) + '</span><br><small class="sub-meta">' + esc(ownerTxt) + '</small></td>' +
+            '<td class="tabular-nums">' + esc(o.offer_validity) + (isExpired ? ' <small class="expired-pill">Expired</small>' : '') + '</td>' +
+            '<td>' + badgeHtml + '</td>' +
+            '<td><div class="action-buttons">' +
+            '<a href="edit-offer.html?offer_code=' + encodeURIComponent(o.offer_code) + '" class="edit-btn"><i class="fas fa-edit" aria-hidden="true"></i> Edit</a>' +
+            '<button type="button" class="delete-btn" data-id="' + esc(o.offer_code) + '"><i class="fas fa-trash" aria-hidden="true"></i> Delete</button>' +
+            '</div></td>' +
+            '</tr>'
+          );
+        },
+        afterRender: function (tbody) {
+          AdminApp.bindDeleteActions(tbody, {
+            endpoint: '/index.php/admin/offer/delete',
+            idKey: 'offer_code',
+            confirmText: function (id) { return 'Delete offer #' + id + '? Movie applicability links will also be removed.'; },
+            successText: 'Offer deleted',
+            onSuccess: loadOffers,
+          });
+        },
+      });
+
+      async function loadOffers() {
+        const res = await AdminApp.apiFetch('/index.php/admin/offer/index');
+        tableCtrl.setItems(res.success && Array.isArray(res.data) ? res.data : []);
+      }
+
       loadOffers();
     });
   </script>

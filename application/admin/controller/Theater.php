@@ -83,9 +83,8 @@ class Theater extends BaseAdmin
                 return $this->fail($error);
             }
 
-            $hasMovieKey = array_key_exists('movie_codes', $payload);
-            $movieCodes  = $hasMovieKey
-                ? $this->resolveValidMovieIds($payload['movie_codes'])
+            $movieCodes = array_key_exists('movie_codes', $payload)
+                ? $this->resolveValidIds('movies', 'movie_code', $payload['movie_codes'])
                 : array_map('intval', Db::name('movies')->order('movie_code', 'asc')->column('movie_code') ?: []);
 
             Db::startTrans();
@@ -136,9 +135,8 @@ class Theater extends BaseAdmin
                 return $this->fail($error);
             }
 
-            $hasMovieKey = array_key_exists('movie_codes', $payload);
-            $movieCodes  = $hasMovieKey
-                ? $this->resolveValidMovieIds($payload['movie_codes'])
+            $movieCodes = array_key_exists('movie_codes', $payload)
+                ? $this->resolveValidIds('movies', 'movie_code', $payload['movie_codes'])
                 : null;
 
             Db::startTrans();
@@ -216,16 +214,6 @@ class Theater extends BaseAdmin
         Db::table('theater_movie')->insertAll($rows);
     }
 
-    private function resolveValidMovieIds($raw)
-    {
-        $ids = $this->normalizeIdArray($raw);
-        if (empty($ids)) {
-            return [];
-        }
-        $valid = Db::name('movies')->where('movie_code', 'in', $ids)->order('movie_code', 'asc')->column('movie_code');
-        return array_map('intval', $valid ?: []);
-    }
-
     private function prepareTheaterData(array $payload)
     {
         $data = $this->pickAllowed($payload, self::ALLOWED_FIELDS);
@@ -253,7 +241,7 @@ class Theater extends BaseAdmin
         }
 
         $star = isset($data['star']) && $data['star'] !== '' ? $data['star'] : 4.8;
-        if (!is_numeric($star) || (float) $star < 0 || (float) $star > 5) {
+        if (!is_numeric($star) || !is_finite((float) $star) || (float) $star < 0 || (float) $star > 5) {
             return [null, 'Rating must be between 0.0 and 5.0'];
         }
 

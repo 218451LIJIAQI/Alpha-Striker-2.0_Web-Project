@@ -62,7 +62,13 @@ class Movie extends BaseAdmin
                 ->where('movie_code', $movieId)
                 ->order('theater_code', 'asc')
                 ->column('theater_code');
+            $oCodes = Db::table('movie_offer')
+                ->where('movie_code', $movieId)
+                ->order('offer_code', 'asc')
+                ->column('offer_code');
+
             $movie['theater_codes'] = array_map('intval', $tCodes ?: []);
+            $movie['offer_codes']   = array_map('intval', $oCodes ?: []);
 
             return $this->ok($movie);
         } catch (\Throwable $e) {
@@ -79,13 +85,11 @@ class Movie extends BaseAdmin
                 return $this->fail($error);
             }
 
-            $hasTheaterKey = array_key_exists('theater_codes', $payload);
-            $theaterCodes  = $hasTheaterKey
+            $theaterCodes = array_key_exists('theater_codes', $payload)
                 ? $this->resolveValidIds('theater', 'theater_code', $payload['theater_codes'])
                 : array_map('intval', Db::name('theater')->order('theater_code', 'asc')->column('theater_code') ?: []);
 
-            $hasOfferKey = array_key_exists('offer_codes', $payload);
-            $offerCodes  = $hasOfferKey
+            $offerCodes = array_key_exists('offer_codes', $payload)
                 ? $this->resolveValidIds('offer', 'offer_code', $payload['offer_codes'])
                 : array_map('intval', Db::name('offer')->whereNull('user_code')->order('offer_code', 'asc')->column('offer_code') ?: []);
 
@@ -133,9 +137,11 @@ class Movie extends BaseAdmin
                 return $this->fail($error);
             }
 
-            $hasTheaterKey = array_key_exists('theater_codes', $payload);
-            $theaterCodes  = $hasTheaterKey
+            $theaterCodes = array_key_exists('theater_codes', $payload)
                 ? $this->resolveValidIds('theater', 'theater_code', $payload['theater_codes'])
+                : null;
+            $offerCodes = array_key_exists('offer_codes', $payload)
+                ? $this->resolveValidIds('offer', 'offer_code', $payload['offer_codes'])
                 : null;
 
             Db::startTrans();
@@ -148,6 +154,9 @@ class Movie extends BaseAdmin
 
                 if ($theaterCodes !== null) {
                     $this->syncMovieTheaters($movieId, $theaterCodes);
+                }
+                if ($offerCodes !== null) {
+                    $this->syncMovieOffers($movieId, $offerCodes);
                 }
 
                 Db::commit();
@@ -225,7 +234,7 @@ class Movie extends BaseAdmin
         $now    = date('Y-m-d H:i:s');
         $rows   = [];
         foreach ($offerCodes as $oid) {
-            $validTo = isset($offers[$oid]) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $offers[$oid])
+            $validTo = isset($offers[$oid]) && $this->isValidIsoDate((string) $offers[$oid])
                 ? $offers[$oid]
                 : '2027-12-31';
             $rows[] = [
@@ -238,16 +247,6 @@ class Movie extends BaseAdmin
             ];
         }
         Db::table('movie_offer')->insertAll($rows);
-    }
-
-    private function resolveValidIds($table, $pk, $raw)
-    {
-        $ids = $this->normalizeIdArray($raw);
-        if (empty($ids)) {
-            return [];
-        }
-        $valid = Db::name($table)->where($pk, 'in', $ids)->order($pk, 'asc')->column($pk);
-        return array_map('intval', $valid ?: []);
     }
 
     private function prepareMovieData(array $payload)
@@ -269,10 +268,10 @@ class Movie extends BaseAdmin
         if (isset($data['tag']) && $this->textLen($data['tag']) > 50) {
             return [null, 'Highlight badge must be 50 characters or fewer'];
         }
-        if (!isset($data['star']) || !is_numeric($data['star']) || (float) $data['star'] < 0 || (float) $data['star'] > 5) {
+        if (!isset($data['star']) || !is_numeric($data['star']) || !is_finite((float) $data['star']) || (float) $data['star'] < 0 || (float) $data['star'] > 5) {
             return [null, 'Rating must be between 0.0 and 5.0'];
         }
-        if (!isset($data['money']) || !is_numeric($data['money']) || (float) $data['money'] < 0) {
+        if (!isset($data['money']) || !is_numeric($data['money']) || !is_finite((float) $data['money']) || (float) $data['money'] < 0) {
             return [null, 'Ticket price must be a non-negative number'];
         }
 

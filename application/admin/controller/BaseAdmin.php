@@ -2,13 +2,15 @@
 namespace app\admin\controller;
 
 use app\common\controller\ApiController;
+use think\Db;
 use think\exception\HttpResponseException;
 use think\facade\Request;
 use think\facade\Session;
 
 /**
  * Base controller for authenticated admin endpoints.
- * Enforces both active admin session AND non-empty constant-time X-Admin-Token / Bearer verification.
+ * Enforces both active admin session AND non-empty constant-time X-Admin-Token / Bearer verification,
+ * and provides shared foreign-key ID list resolution across Movie, Theater, and Offer controllers.
  */
 abstract class BaseAdmin extends ApiController
 {
@@ -46,6 +48,16 @@ abstract class BaseAdmin extends ApiController
         }
 
         return hash_equals($sessionToken, $clientToken);
+    }
+
+    protected function resolveValidIds($table, $pk, $raw)
+    {
+        $ids = $this->normalizeIdArray($raw);
+        if (empty($ids)) {
+            return [];
+        }
+        $valid = Db::name($table)->where($pk, 'in', $ids)->order($pk, 'asc')->column($pk);
+        return array_map('intval', $valid ?: []);
     }
 
     private static function extractToken()

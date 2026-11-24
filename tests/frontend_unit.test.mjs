@@ -14,6 +14,8 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
   const bodyClasses = new Set();
   const appended = [];
   const fetchCalls = [];
+  const windowEvents = [];
+  const domById = new Map();
 
   const makeClassList = (set) => ({
     add: (...names) => names.forEach((n) => set.add(n)),
@@ -27,24 +29,39 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
     },
   });
 
-  const makeElement = (tag) => ({
-    tagName: tag.toUpperCase(),
-    id: '',
-    rel: '',
-    href: '',
-    className: '',
-    innerHTML: '',
-    parentNode: { removeChild: () => {} },
-    remove() {
-      this.removed = true;
-    },
-    querySelector: () => ({ addEventListener: () => {} }),
-    addEventListener: () => {},
-  });
+  const makeElement = (tag) => {
+    const attrs = new Map();
+    const listeners = new Map();
+    return {
+      tagName: tag.toUpperCase(),
+      id: '',
+      rel: '',
+      href: '',
+      className: '',
+      innerHTML: '',
+      textContent: '',
+      parentNode: { removeChild: () => {} },
+      setAttribute: (k, v) => attrs.set(k, String(v)),
+      getAttribute: (k) => (attrs.has(k) ? attrs.get(k) : null),
+      remove() {
+        this.removed = true;
+      },
+      querySelector: () => ({ addEventListener: () => {} }),
+      querySelectorAll: () => [],
+      addEventListener: (ev, fn) => listeners.set(ev, fn),
+      trigger: (ev, arg) => listeners.get(ev)?.(arg),
+    };
+  };
 
   const sandbox = {
     window: null,
     Date: Date,
+    CustomEvent: class CustomEvent {
+      constructor(type, init) {
+        this.type = type;
+        this.detail = init?.detail || null;
+      }
+    },
     FormData: class FormData {},
     localStorage: {
       getItem: (k) => (storage.has(k) ? storage.get(k) : null),
@@ -59,6 +76,7 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
     },
     setTimeout: (fn) => fn,
     clearTimeout: () => {},
+    dispatchEvent: (ev) => windowEvents.push(ev),
     document: {
       documentElement: { classList: makeClassList(classes) },
       body: {
@@ -68,7 +86,7 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
       head: {
         appendChild: (el) => appended.push(el),
       },
-      getElementById: () => null,
+      getElementById: (id) => domById.get(id) || null,
       querySelector: () => null,
       querySelectorAll: () => [],
       createElement: makeElement,
@@ -80,7 +98,7 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
 
   const commonCode = fs.readFileSync(path.join(ROOT, 'public/js/common.js'), 'utf8');
   vm.runInNewContext(commonCode, sandbox);
-  return { sandbox, storage, classes, bodyClasses, appended, fetchCalls };
+  return { sandbox, storage, classes, bodyClasses, appended, fetchCalls, windowEvents, domById, makeElement };
 }
 
 test('escapeHtml neutralizes XSS characters accurately', () => {
@@ -126,12 +144,10 @@ test('AuthStore persists user identity, syncs server session state, and purges s
   assert.equal(storage.has('pwd'), false);
   assert.equal(sandbox.CineTicket.AuthStore.getUser().isLoggedIn, true);
 
-  // Server session expired -> syncSession must clear stale localStorage
   await sandbox.CineTicket.AuthStore.syncSession();
   assert.equal(sandbox.CineTicket.AuthStore.getUser().isLoggedIn, false);
   assert.equal(sandbox.CineTicket.AuthStore.getUser().userName, 'Guest');
 
-  // Server session active -> syncSession hydrates authoritative user profile
   serverAuth = true;
   await sandbox.CineTicket.AuthStore.syncSession();
   assert.equal(sandbox.CineTicket.AuthStore.getUser().isLoggedIn, true);
@@ -144,19 +160,22 @@ test('AuthStore persists user identity, syncs server session state, and purges s
   assert.equal(afterLogout.userId, 0);
 });
 
-test('toggleDarkMode toggles html/body classes reversibly and persists preference', () => {
-  const { sandbox, storage, classes, bodyClasses } = createBrowserSandbox('/pages/homepage.html');
+test('toggleDarkMode toggles html/body classes reversibly, persists preference, and dispatches cinetix:themechange', () => {
+  const { sandbox, storage, classes, bodyClasses, windowEvents } = createBrowserSandbox('/pages/homepage.html');
   assert.equal(classes.has('dark-mode'), false);
 
   sandbox.toggleDarkMode();
   assert.equal(classes.has('dark-mode'), true);
   assert.equal(bodyClasses.has('dark-mode'), true);
   assert.equal(storage.get('darkMode'), 'true');
+  assert.equal(windowEvents[windowEvents.length - 1]?.type, 'cinetix:themechange');
+  assert.equal(windowEvents[windowEvents.length - 1]?.detail?.isDark, true);
 
   sandbox.toggleDarkMode();
   assert.equal(classes.has('dark-mode'), false);
   assert.equal(bodyClasses.has('dark-mode'), false);
   assert.equal(storage.get('darkMode'), 'false');
+  assert.equal(windowEvents[windowEvents.length - 1]?.detail?.isDark, false);
 });
 
 test('showNotification supports both 2-argument and 3-argument call signatures safely', () => {
@@ -176,7 +195,6 @@ test('shared pricing, card expiry validation, star-rating, and fetchJson helpers
   const { sandbox, fetchCalls } = createBrowserSandbox('/pages/pay.html');
   const CT = sandbox.CineTicket;
 
-  // Group discount & full checkout formula
   assert.equal(CT.calcGroupDiscount(156, 4), 0);
   assert.equal(CT.calcGroupDiscount(195, 5), 58.5);
 
@@ -193,18 +211,16 @@ test('shared pricing, card expiry validation, star-rating, and fetchJson helpers
   assert.equal(fiveSeats.totalDiscount, 63.5);
   assert.equal(fiveSeats.totalAmount, 134.0);
 
-  // Non-negative floor when promo exceeds subtotal + fee
   const floored = CT.calculateCheckoutPricing(5, 1, 20);
   assert.equal(floored.totalAmount, 0);
 
-  // Card expiry validation relative to Nov 2026
-  const refDate = new Date(2026, 10, 24); // Nov 24, 2026
-  assert.equal(CT.isCardExpiryValid('12/25', refDate), false); // Past year
-  assert.equal(CT.isCardExpiryValid('10/26', refDate), false); // Past month in current year
-  assert.equal(CT.isCardExpiryValid('11/26', refDate), true);  // Current month valid
-  assert.equal(CT.isCardExpiryValid('01/28', refDate), true);  // Future year valid
-  assert.equal(CT.isCardExpiryValid('13/28', refDate), false); // Invalid month
-  assert.equal(CT.isCardExpiryValid('00/28', refDate), false); // Invalid month
+  const refDate = new Date(2026, 10, 24);
+  assert.equal(CT.isCardExpiryValid('12/25', refDate), false);
+  assert.equal(CT.isCardExpiryValid('10/26', refDate), false);
+  assert.equal(CT.isCardExpiryValid('11/26', refDate), true);
+  assert.equal(CT.isCardExpiryValid('01/28', refDate), true);
+  assert.equal(CT.isCardExpiryValid('13/28', refDate), false);
+  assert.equal(CT.isCardExpiryValid('00/28', refDate), false);
 
   assert.equal(CT.formatStars(4.5), '★★★★½');
   assert.equal(
@@ -221,4 +237,75 @@ test('shared pricing, card expiry validation, star-rating, and fetchJson helpers
   assert.equal(fetchCalls.length, 1);
   assert.equal(fetchCalls[0].opts.headers['Content-Type'], 'application/json');
   assert.equal(fetchCalls[0].opts.body, '{"email":"test@example.com"}');
+});
+
+test('AdminApp.createTableController and bindCheckControls handle search, filter, sort, pagination, and checklists', () => {
+  const { sandbox, domById, makeElement } = createBrowserSandbox('/admin/movies.html');
+  const adminCode = fs.readFileSync(path.join(ROOT, 'public/js/admin/admin.js'), 'utf8');
+  vm.runInNewContext(adminCode, sandbox);
+
+  const searchInput = makeElement('input');
+  const filterSelect = makeElement('select');
+  const sortSelect = makeElement('select');
+  const countSpan = makeElement('span');
+  const pagerDiv = makeElement('div');
+  const toolbar = makeElement('div');
+  toolbar.querySelector = (sel) => {
+    if (sel === '.toolbar-search') return searchInput;
+    if (sel === '[data-role="filter"]') return filterSelect;
+    if (sel === '[data-role="sort"]') return sortSelect;
+    if (sel === '[data-role="count"]') return countSpan;
+    if (sel === '[data-role="pager"]') return pagerDiv;
+    return null;
+  };
+  const tbody = makeElement('tbody');
+  domById.set('test-toolbar', toolbar);
+  domById.set('test-tbody', tbody);
+
+  const ctrl = sandbox.AdminApp.createTableController({
+    toolbarId: 'test-toolbar',
+    tbodyId: 'test-tbody',
+    pageSize: 2,
+    colSpan: 3,
+    filters: [{ value: 'all', label: 'All' }, { value: 'Sci-Fi', label: 'Sci-Fi' }],
+    sorts: [
+      { key: 'id_asc', label: 'ID', compare: (a, b) => a.id - b.id },
+      { key: 'rating_desc', label: 'Rating', compare: (a, b) => b.rating - a.rating },
+    ],
+    searchText: (item) => item.title,
+    matchFilter: (item, f) => item.genre === f,
+    renderRow: (item) => `<tr><td>${item.title}</td></tr>`,
+  });
+
+  ctrl.setItems([
+    { id: 1, title: 'Alpha', genre: 'Action', rating: 4.2 },
+    { id: 2, title: 'Interstellar', genre: 'Sci-Fi', rating: 4.9 },
+    { id: 3, title: 'Arrival', genre: 'Sci-Fi', rating: 4.7 },
+  ]);
+
+  assert.equal(countSpan.textContent, '3 records');
+  assert.ok(tbody.innerHTML.includes('Alpha') && tbody.innerHTML.includes('Interstellar'));
+  assert.ok(!tbody.innerHTML.includes('Arrival'));
+
+  filterSelect.trigger('change', { target: { value: 'Sci-Fi' } });
+  assert.ok(countSpan.textContent.includes('2 of 2'));
+  assert.ok(tbody.innerHTML.includes('Interstellar') && tbody.innerHTML.includes('Arrival'));
+
+  searchInput.trigger('input', { target: { value: 'arr' } });
+  assert.ok(tbody.innerHTML.includes('Arrival') && !tbody.innerHTML.includes('Interstellar'));
+
+  const checkboxes = [{ value: '1', checked: false }, { value: '3', checked: false }];
+  const grid = {
+    querySelectorAll: (sel) => (sel.includes(':checked') ? checkboxes.filter((c) => c.checked) : checkboxes),
+  };
+  const btnAll = makeElement('button');
+  const btnClear = makeElement('button');
+  domById.set('sel-all', btnAll);
+  domById.set('clr-all', btnClear);
+
+  sandbox.AdminApp.bindCheckControls(grid, 'sel-all', 'clr-all');
+  btnAll.trigger('click');
+  assert.deepEqual(Array.from(sandbox.AdminApp.getCheckedIds(grid)), [1, 3]);
+  btnClear.trigger('click');
+  assert.deepEqual(Array.from(sandbox.AdminApp.getCheckedIds(grid)), []);
 });

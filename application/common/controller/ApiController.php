@@ -8,8 +8,9 @@ use think\facade\Session;
 
 /**
  * Shared JSON API base controller.
- * Centralizes payload parsing, mbstring-free UTF-8 string helpers, session rotation/destruction,
- * authoritative promo verification, checkout pricing calculation, and SQL conflict detection.
+ * Centralizes payload parsing, mbstring-free UTF-8 string helpers, ISO date validation,
+ * session rotation/destruction, authoritative promo verification, checkout pricing calculation,
+ * and SQL conflict detection.
  */
 abstract class ApiController
 {
@@ -46,10 +47,22 @@ abstract class ApiController
     protected function idParam($key, $direct = '')
     {
         if ($direct !== '' && $direct !== null) {
-            return (int) $direct;
+            return is_numeric($direct) ? (int) $direct : 0;
         }
         $payload = $this->payload();
         return isset($payload[$key]) && is_numeric($payload[$key]) ? (int) $payload[$key] : 0;
+    }
+
+    protected function optionalIdWithDefault($key, $defaultId = 1)
+    {
+        $payload = $this->payload();
+        if (!isset($payload[$key]) || $payload[$key] === '' || $payload[$key] === null) {
+            return (int) $defaultId;
+        }
+        if (is_array($payload[$key]) || is_object($payload[$key]) || !is_numeric($payload[$key])) {
+            return 0;
+        }
+        return (int) $payload[$key];
     }
 
     protected function strParam($key, $default = '')
@@ -59,6 +72,15 @@ abstract class ApiController
             return $default;
         }
         return trim((string) $payload[$key]);
+    }
+
+    protected function isValidIsoDate($value)
+    {
+        $str = trim((string) $value);
+        if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $str, $m)) {
+            return false;
+        }
+        return checkdate((int) $m[2], (int) $m[3], (int) $m[1]);
     }
 
     /**
@@ -78,27 +100,6 @@ abstract class ApiController
             return (int) $matched;
         }
         return strlen((string) preg_replace('/[\x80-\xBF]/', '', $str));
-    }
-
-    /**
-     * Safe UTF-8 substring helper without requiring ext-mbstring.
-     */
-    protected function textSub($value, $start, $length = null)
-    {
-        $str = (string) $value;
-        if (function_exists('mb_substr')) {
-            return $length === null
-                ? (string) call_user_func('mb_substr', $str, (int) $start, null, 'UTF-8')
-                : (string) call_user_func('mb_substr', $str, (int) $start, (int) $length, 'UTF-8');
-        }
-        $chars = preg_split('//u', $str, -1, PREG_SPLIT_NO_EMPTY);
-        if (!is_array($chars)) {
-            return $length === null ? substr($str, (int) $start) : (string) substr($str, (int) $start, (int) $length);
-        }
-        $slice = $length === null
-            ? array_slice($chars, (int) $start)
-            : array_slice($chars, (int) $start, (int) $length);
-        return implode('', $slice);
     }
 
     protected function rotateSession()
@@ -208,7 +209,7 @@ abstract class ApiController
 
         $today    = date('Y-m-d');
         $validity = trim((string) ($offer['offer_validity'] ?? ''));
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $validity) && $validity < $today) {
+        if ($this->isValidIsoDate($validity) && $validity < $today) {
             return [
                 'valid'   => false,
                 'status'  => 200,
@@ -254,7 +255,7 @@ abstract class ApiController
                 ];
             }
 
-            $checkDate = ($screeningDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $screeningDate))
+            $checkDate = ($screeningDate !== '' && $this->isValidIsoDate($screeningDate))
                 ? $screeningDate
                 : $today;
             if (!empty($link['valid_from']) && $checkDate < $link['valid_from']) {

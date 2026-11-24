@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Theater Details | Alpha Striker 2.0</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <title>Theater Details | CineTix Box Office</title>
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/common/footer.css">
   <link rel="stylesheet" href="../css/theater/theaterdetail.css">
@@ -14,71 +13,71 @@
 <body>
   <div id="header-container"></div>
 
-  <div class="theater-detail-container">
+  <main class="theater-detail-container">
     <div class="theater-hero" id="theater-hero"></div>
 
     <div class="quick-info-grid" id="quick-info-grid"></div>
 
-    <div class="section" id="now-showing-section">
+    <section class="section" id="now-showing-section">
       <h2 class="section-title">
-        <i class="fas fa-film"></i>
-        Now Showing at This Theater
+        <i class="fas fa-film" aria-hidden="true"></i>
+        <span>Now Showing at This Theater</span>
       </h2>
       <div class="movies-list" id="movies-list"></div>
-    </div>
+    </section>
 
-    <div class="section">
+    <section class="section">
       <div class="tabs-container">
-        <div class="tabs-header">
-          <button type="button" class="tab-btn active" data-tab="facilities"><i class="fas fa-star"></i> Facilities &amp; Amenities</button>
-          <button type="button" class="tab-btn" data-tab="technical"><i class="fas fa-cogs"></i> Technical Specs</button>
-          <button type="button" class="tab-btn" data-tab="dining"><i class="fas fa-utensils"></i> Food &amp; Dining</button>
-          <button type="button" class="tab-btn" data-tab="accessibility"><i class="fas fa-universal-access"></i> Accessibility</button>
-          <button type="button" class="tab-btn" data-tab="safety"><i class="fas fa-shield-alt"></i> Safety Measures</button>
+        <div class="tabs-header" role="tablist" aria-label="Cinema Amenities and Specifications">
+          <button type="button" class="tab-btn active" data-tab="facilities"><i class="fas fa-star" aria-hidden="true"></i> Facilities &amp; Amenities</button>
+          <button type="button" class="tab-btn" data-tab="technical"><i class="fas fa-cogs" aria-hidden="true"></i> Technical Specs</button>
+          <button type="button" class="tab-btn" data-tab="dining"><i class="fas fa-utensils" aria-hidden="true"></i> Food &amp; Dining</button>
+          <button type="button" class="tab-btn" data-tab="accessibility"><i class="fas fa-universal-access" aria-hidden="true"></i> Accessibility</button>
+          <button type="button" class="tab-btn" data-tab="safety"><i class="fas fa-shield-alt" aria-hidden="true"></i> Safety Measures</button>
         </div>
 
         <div class="tabs-content">
-          <div class="tab-content active" id="facilities-tab"><div class="amenities-grid" id="amenities-grid"></div></div>
-          <div class="tab-content" id="technical-tab"><div class="amenities-grid" id="tech-specs-grid"></div></div>
-          <div class="tab-content" id="dining-tab"><div id="dining-info"></div></div>
-          <div class="tab-content" id="accessibility-tab"><div id="accessibility-info"></div></div>
-          <div class="tab-content" id="safety-tab"><div id="safety-measures"></div></div>
+          <div class="tab-content active" id="facilities-tab" role="tabpanel"><div class="amenities-grid" id="amenities-grid"></div></div>
+          <div class="tab-content" id="technical-tab" role="tabpanel"><div class="amenities-grid" id="tech-specs-grid"></div></div>
+          <div class="tab-content" id="dining-tab" role="tabpanel"><div id="dining-info"></div></div>
+          <div class="tab-content" id="accessibility-tab" role="tabpanel"><div id="accessibility-info"></div></div>
+          <div class="tab-content" id="safety-tab" role="tabpanel"><div id="safety-measures"></div></div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <div class="section">
+    <section class="section">
       <div class="info-cards-row">
         <div class="info-card detail-card">
-          <h3><i class="fas fa-clock"></i> Operating Hours</h3>
+          <h3><i class="fas fa-clock" aria-hidden="true"></i> Operating Hours</h3>
           <div id="operating-hours"></div>
         </div>
         <div class="info-card detail-card">
-          <h3><i class="fas fa-ticket-alt"></i> Ticket Pricing</h3>
+          <h3><i class="fas fa-ticket-alt" aria-hidden="true"></i> Ticket Pricing</h3>
           <div id="ticket-pricing"></div>
         </div>
         <div class="info-card detail-card">
-          <h3><i class="fas fa-phone"></i> Contact Information</h3>
+          <h3><i class="fas fa-phone" aria-hidden="true"></i> Contact Information</h3>
           <div id="contact-info"></div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <div class="section">
-      <h2 class="section-title"><i class="fas fa-map-marker-alt"></i> Location &amp; Directions</h2>
+    <section class="section">
+      <h2 class="section-title"><i class="fas fa-map-marker-alt" aria-hidden="true"></i> <span>Location &amp; Directions</span></h2>
       <div id="location-section"></div>
-    </div>
+    </section>
 
-    <div class="section">
-      <h2 class="section-title"><i class="fas fa-star"></i> Customer Reviews</h2>
+    <section class="section">
+      <h2 class="section-title"><i class="fas fa-star" aria-hidden="true"></i> <span>Customer Reviews</span></h2>
       <div id="reviews-section"></div>
-    </div>
+    </section>
 
-    <div class="section">
-      <h2 class="section-title"><i class="fas fa-vr-cardboard"></i> Virtual Auditorium Tour</h2>
+    <section class="section">
+      <h2 class="section-title"><i class="fas fa-vr-cardboard" aria-hidden="true"></i> <span>Virtual Auditorium Tour</span></h2>
       <div id="virtual-tour"></div>
-    </div>
-  </div>
+    </section>
+  </main>
 
   <div id="bottom-container"></div>
 </body>

@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Edit Movie | CineTix Admin</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/admin/admin.css">
   <script src="../js/common.js"></script>
@@ -16,7 +15,7 @@
   <main class="admin-content narrow">
     <div class="page-header">
       <div>
-        <h1><i class="fas fa-edit"></i> Edit Movie</h1>
+        <h1><i class="fas fa-edit" aria-hidden="true"></i> Edit Movie</h1>
         <p>Update title, genre, runtime, ticket price, highlight badge, or assigned theaters.</p>
       </div>
     </div>
@@ -49,12 +48,12 @@
 
         <div class="form-group">
           <label for="star" class="form-label">Rating (0.0 – 5.0) *</label>
-          <input type="number" id="star" name="star" class="form-input" step="0.1" min="0" max="5" required>
+          <input type="number" id="star" name="star" class="form-input tabular-nums" step="0.1" min="0" max="5" required>
         </div>
 
         <div class="form-group">
           <label for="money" class="form-label">Ticket Price ($) *</label>
-          <input type="number" id="money" name="money" class="form-input" step="0.01" min="0" required>
+          <input type="number" id="money" name="money" class="form-input tabular-nums" step="0.01" min="0" required>
         </div>
 
         <div class="form-group">
@@ -84,7 +83,7 @@
 
       <div class="form-actions">
         <a href="movies.html" class="cancel-btn">Cancel</a>
-        <button type="submit" class="submit-btn"><i class="fas fa-save"></i> Save Changes</button>
+        <button type="submit" class="submit-btn"><i class="fas fa-save" aria-hidden="true"></i> Save Changes</button>
       </div>
     </form>
   </main>
@@ -103,6 +102,7 @@
       const imgInput = document.getElementById('img');
       const syncPreview = AdminApp.bindImagePreview(imgInput, document.getElementById('poster-preview'));
       const theaterGrid = document.getElementById('theater-check-grid');
+      AdminApp.bindCheckControls(theaterGrid, 'select-all-theaters', 'clear-all-theaters');
 
       const [detailRes, theatersRes] = await Promise.all([
         AdminApp.apiFetch('/index.php/admin/movie/getMovieByCode?movie_code=' + encodeURIComponent(movieCode)),
@@ -133,13 +133,6 @@
         Array.isArray(m.theater_codes) ? m.theater_codes : []
       );
 
-      document.getElementById('select-all-theaters').addEventListener('click', function () {
-        theaterGrid.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = true; });
-      });
-      document.getElementById('clear-all-theaters').addEventListener('click', function () {
-        theaterGrid.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
-      });
-
       document.getElementById('edit-movie-form').addEventListener('submit', function (e) {
         e.preventDefault();
         AdminApp.submitForm('/index.php/admin/movie/update', {
@@ -152,7 +145,7 @@
           tag: document.getElementById('tag').value.trim(),
           img: imgInput.value.trim(),
           theater_codes: AdminApp.getCheckedIds(theaterGrid),
-        }, 'movies.html', 'Movie updated successfully', 'Failed to update movie');
+        }, 'movies.html', 'Movie updated successfully', 'Failed to update movie', e.submitter);
       });
     });
   </script>

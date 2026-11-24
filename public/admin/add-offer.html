@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Add Offer | CineTix Admin</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/admin/admin.css">
   <script src="../js/common.js"></script>
@@ -16,7 +15,7 @@
   <main class="admin-content narrow">
     <div class="page-header">
       <div>
-        <h1><i class="fas fa-plus-circle"></i> Create Promotional Offer</h1>
+        <h1><i class="fas fa-plus-circle" aria-hidden="true"></i> Create Promotional Offer</h1>
         <p>Configure promo code, discount value, category, eligible movies, and optional member ownership.</p>
       </div>
     </div>
@@ -45,12 +44,12 @@
 
         <div class="form-group">
           <label for="money" class="form-label">Discount Amount ($) *</label>
-          <input type="number" id="money" name="money" class="form-input" step="0.01" min="0" value="5.00" required>
+          <input type="number" id="money" name="money" class="form-input tabular-nums" step="0.01" min="0" value="5.00" required>
         </div>
 
         <div class="form-group">
           <label for="offer_validity" class="form-label">Valid Until (YYYY-MM-DD) *</label>
-          <input type="date" id="offer_validity" name="offer_validity" class="form-input" value="2027-12-31" required>
+          <input type="date" id="offer_validity" name="offer_validity" class="form-input tabular-nums" value="2027-12-31" required>
         </div>
 
         <div class="form-group">
@@ -68,6 +67,9 @@
         <div class="form-group full-width">
           <label for="img" class="form-label">Image Path or URL *</label>
           <input type="text" id="img" name="img" class="form-input" placeholder="../img/offer/student_price.png" required maxlength="500">
+          <div class="preview-container">
+            <img id="offer-preview" class="preview-img" alt="Offer Preview">
+          </div>
         </div>
 
         <div class="form-group full-width">
@@ -90,7 +92,7 @@
 
       <div class="form-actions">
         <a href="offers.html" class="cancel-btn">Cancel</a>
-        <button type="submit" class="submit-btn"><i class="fas fa-save"></i> Create Offer</button>
+        <button type="submit" class="submit-btn"><i class="fas fa-save" aria-hidden="true"></i> Create Offer</button>
       </div>
     </form>
   </main>
@@ -100,8 +102,12 @@
       AdminApp.renderAdminNav('offers');
       if (!(await AdminApp.ensureAuthenticated())) return;
 
+      const imgInput = document.getElementById('img');
+      AdminApp.bindImagePreview(imgInput, document.getElementById('offer-preview'));
+
       const movieGrid = document.getElementById('movie-check-grid');
       const userSelect = document.getElementById('user_code');
+      AdminApp.bindCheckControls(movieGrid, 'select-all-movies', 'clear-all-movies');
 
       const [moviesRes, usersRes] = await Promise.all([
         AdminApp.apiFetch('/index.php/admin/movie/index'),
@@ -119,13 +125,6 @@
         userSelect.appendChild(opt);
       });
 
-      document.getElementById('select-all-movies').addEventListener('click', function () {
-        movieGrid.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = true; });
-      });
-      document.getElementById('clear-all-movies').addEventListener('click', function () {
-        movieGrid.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
-      });
-
       document.getElementById('add-offer-form').addEventListener('submit', function (e) {
         e.preventDefault();
         AdminApp.submitForm('/index.php/admin/offer/create', {
@@ -136,10 +135,10 @@
           offer_validity: document.getElementById('offer_validity').value,
           badge: document.getElementById('badge').value.trim(),
           user_code: userSelect.value,
-          img: document.getElementById('img').value.trim(),
+          img: imgInput.value.trim(),
           offer_description: document.getElementById('offer_description').value.trim(),
           movie_codes: AdminApp.getCheckedIds(movieGrid),
-        }, 'offers.html', 'Offer created successfully', 'Failed to create offer');
+        }, 'offers.html', 'Offer created successfully', 'Failed to create offer', e.submitter);
       });
     });
   </script>

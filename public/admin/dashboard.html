@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard | CineTix Admin</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/admin/admin.css">
   <script src="../js/common.js"></script>
@@ -16,93 +15,93 @@
   <main class="admin-content">
     <div class="page-header">
       <div>
-        <h1><i class="fas fa-chart-pie"></i> Operations Dashboard</h1>
-        <p>Live overview of movies, active promotions, theaters, seat bookings, and registered members.</p>
+        <h1><i class="fas fa-chart-pie" aria-hidden="true"></i> Operations Dashboard</h1>
+        <p>Live overview of movies, active promotions, partner cinemas, seat bookings, and registered members.</p>
       </div>
     </div>
 
-    <section class="stats-container">
+    <section class="stats-container" aria-label="Key Box Office Metrics">
       <div class="stat-card">
-        <div class="stat-icon"><i class="fas fa-film"></i></div>
+        <div class="stat-icon"><i class="fas fa-film" aria-hidden="true"></i></div>
         <div>
-          <div class="stat-value" id="stat-movies">-</div>
+          <div class="stat-value tabular-nums" id="stat-movies">-</div>
           <div class="stat-label">Movies in Catalog</div>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon"><i class="fas fa-tags"></i></div>
+        <div class="stat-icon"><i class="fas fa-tags" aria-hidden="true"></i></div>
         <div>
-          <div class="stat-value" id="stat-offers">-</div>
-          <div class="stat-label">Active Offers</div>
+          <div class="stat-value tabular-nums" id="stat-offers">-</div>
+          <div class="stat-label" id="stat-offers-label">Active Offers</div>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon"><i class="fas fa-chair"></i></div>
+        <div class="stat-icon"><i class="fas fa-chair" aria-hidden="true"></i></div>
         <div>
-          <div class="stat-value" id="stat-seats">-</div>
+          <div class="stat-value tabular-nums" id="stat-seats">-</div>
           <div class="stat-label">Reserved Seats</div>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon"><i class="fas fa-users"></i></div>
+        <div class="stat-icon"><i class="fas fa-users" aria-hidden="true"></i></div>
         <div>
-          <div class="stat-value" id="stat-users">-</div>
+          <div class="stat-value tabular-nums" id="stat-users">-</div>
           <div class="stat-label">Registered Users</div>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon"><i class="fas fa-building"></i></div>
+        <div class="stat-icon"><i class="fas fa-building" aria-hidden="true"></i></div>
         <div>
-          <div class="stat-value" id="stat-theaters">-</div>
+          <div class="stat-value tabular-nums" id="stat-theaters">-</div>
           <div class="stat-label">Partner Theaters</div>
         </div>
       </div>
     </section>
 
-    <section class="charts-container">
+    <section class="charts-container" aria-label="Catalog and Booking Analytics">
       <div class="chart-section">
         <div class="chart-header">
-          <h3><i class="fas fa-layer-group"></i> Movies by Genre</h3>
+          <h2><i class="fas fa-layer-group" aria-hidden="true"></i> Movies by Genre</h2>
         </div>
         <div class="chart-wrapper">
-          <canvas id="genre-chart"></canvas>
+          <canvas id="genre-chart" role="img" aria-label="Bar chart of movies grouped by primary genre"></canvas>
         </div>
       </div>
 
       <div class="chart-section">
         <div class="chart-header">
-          <h3><i class="fas fa-ticket-alt"></i> Bookings per Movie</h3>
+          <h2><i class="fas fa-ticket-alt" aria-hidden="true"></i> Bookings per Movie</h2>
         </div>
         <div class="chart-wrapper">
-          <canvas id="booking-chart"></canvas>
+          <canvas id="booking-chart" role="img" aria-label="Bar chart of reserved seats per movie"></canvas>
         </div>
       </div>
     </section>
 
-    <section class="quick-actions">
+    <section class="quick-actions" aria-label="Quick Administrative Actions">
       <div class="actions-grid">
         <a href="add-movie.html" class="action-card">
-          <i class="fas fa-plus-circle"></i>
+          <i class="fas fa-plus-circle" aria-hidden="true"></i>
           <h3>Add New Movie</h3>
           <p>Publish a new feature film and assign screening theaters.</p>
         </a>
         <a href="theaters.html" class="action-card">
-          <i class="fas fa-building"></i>
+          <i class="fas fa-building" aria-hidden="true"></i>
           <h3>Manage Theaters</h3>
           <p>Add, edit, or remove partner cinemas and film schedules.</p>
         </a>
         <a href="add-offer.html" class="action-card">
-          <i class="fas fa-percentage"></i>
+          <i class="fas fa-percentage" aria-hidden="true"></i>
           <h3>Create Promo Offer</h3>
           <p>Configure discount codes, eligible movies, and member scope.</p>
         </a>
         <a href="seat.html" class="action-card">
-          <i class="fas fa-clipboard-list"></i>
+          <i class="fas fa-clipboard-list" aria-hidden="true"></i>
           <h3>Manage Reservations</h3>
           <p>Audit auditorium occupancy and process cancellations.</p>
         </a>
         <a href="add-user.html" class="action-card">
-          <i class="fas fa-user-plus"></i>
+          <i class="fas fa-user-plus" aria-hidden="true"></i>
           <h3>Add Member Account</h3>
           <p>Provision a new registered customer account.</p>
         </a>
@@ -115,7 +114,12 @@
       AdminApp.renderAdminNav('dashboard');
       if (!(await AdminApp.ensureAuthenticated())) return;
 
-      const palette = ['#4361ee', '#3a0ca3', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+      const palette = ['#1d4ed8', '#be123c', '#0284c7', '#15803d', '#d97706', '#7c3aed', '#0f766e'];
+      const now = new Date();
+      const todayIso =
+        now.getFullYear() + '-' +
+        String(now.getMonth() + 1).padStart(2, '0') + '-' +
+        String(now.getDate()).padStart(2, '0');
 
       try {
         const [moviesRes, offersRes, seatsRes, usersRes, theatersRes] = await Promise.all([
@@ -128,10 +132,17 @@
 
         const list = function (res) { return res.success && Array.isArray(res.data) ? res.data : []; };
         const movies = list(moviesRes);
+        const offers = list(offersRes);
+        const activeOffers = offers.filter(function (o) {
+          return !o.offer_validity || String(o.offer_validity) >= todayIso;
+        });
         const seats = list(seatsRes);
 
         document.getElementById('stat-movies').textContent = String(movies.length);
-        document.getElementById('stat-offers').textContent = String(list(offersRes).length);
+        document.getElementById('stat-offers').textContent = String(activeOffers.length);
+        if (activeOffers.length !== offers.length) {
+          document.getElementById('stat-offers-label').textContent = 'Active Offers (' + offers.length + ' total)';
+        }
         document.getElementById('stat-seats').textContent = String(seats.length);
         document.getElementById('stat-users').textContent = String(list(usersRes).length);
         document.getElementById('stat-theaters').textContent = String(list(theatersRes).length);
@@ -155,9 +166,7 @@
 
         renderCharts();
         window.addEventListener('resize', renderCharts);
-        document.getElementById('admin-theme-toggle')?.addEventListener('click', function () {
-          setTimeout(renderCharts, 20);
-        });
+        window.addEventListener('cinetix:themechange', renderCharts);
       } catch (_) {
         window.showToast('Failed to load dashboard metrics', 'error');
       }

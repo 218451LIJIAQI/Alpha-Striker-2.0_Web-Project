@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Manage Users | CineTix Admin</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/admin/admin.css">
   <script src="../js/common.js"></script>
@@ -16,13 +15,14 @@
   <main class="admin-content">
     <div class="page-header">
       <div>
-        <h1><i class="fas fa-users"></i> Registered Users</h1>
+        <h1><i class="fas fa-users" aria-hidden="true"></i> Registered Users</h1>
         <p>Manage customer accounts (passwords are stored as salted bcrypt hashes and never exposed).</p>
       </div>
-      <a href="add-user.html" class="add-btn"><i class="fas fa-user-plus"></i> Add User</a>
+      <a href="add-user.html" class="add-btn"><i class="fas fa-user-plus" aria-hidden="true"></i> Add User</a>
     </div>
 
     <div class="table-container">
+      <div class="admin-table-toolbar" id="users-toolbar"></div>
       <table>
         <thead>
           <tr>
@@ -42,43 +42,56 @@
   </main>
 
   <script>
-    async function loadUsers() {
-      const tbody = document.getElementById('users-tbody');
-      const res = await AdminApp.apiFetch('/index.php/admin/user/index');
-      if (!res.success || !Array.isArray(res.data) || res.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No registered users found.</td></tr>';
-        return;
-      }
-
-      const esc = AdminApp.escapeHtml;
-      tbody.innerHTML = res.data.map(function (u) {
-        return (
-          '<tr>' +
-          '<td>#' + esc(u.user_code) + '</td>' +
-          '<td><strong>' + esc(u.user_name) + '</strong></td>' +
-          '<td>' + esc(u.email) + '</td>' +
-          '<td>' + esc(u.create_time || '—') + '</td>' +
-          '<td>' + esc(u.update_time || '—') + '</td>' +
-          '<td><div class="action-buttons">' +
-          '<a href="edit-user.html?user_code=' + encodeURIComponent(u.user_code) + '" class="edit-btn"><i class="fas fa-edit"></i> Edit</a>' +
-          '<button type="button" class="delete-btn" data-id="' + esc(u.user_code) + '"><i class="fas fa-trash"></i> Delete</button>' +
-          '</div></td>' +
-          '</tr>'
-        );
-      }).join('');
-
-      AdminApp.bindDeleteActions(tbody, {
-        endpoint: '/index.php/admin/user/delete',
-        idKey: 'user_code',
-        confirmText: function (id) { return 'Delete user #' + id + '?'; },
-        successText: 'User deleted',
-        onSuccess: loadUsers,
-      });
-    }
-
     document.addEventListener('DOMContentLoaded', async function () {
       AdminApp.renderAdminNav('users');
       if (!(await AdminApp.ensureAuthenticated())) return;
+
+      const esc = AdminApp.escapeHtml;
+      const tableCtrl = AdminApp.createTableController({
+        toolbarId: 'users-toolbar',
+        tbodyId: 'users-tbody',
+        colSpan: 6,
+        emptyText: 'No registered users found.',
+        searchPlaceholder: 'Search by display name, email address, or user ID...',
+        sorts: [
+          { key: 'id_desc', label: 'Sort: Newest Member', compare: function (a, b) { return Number(b.user_code) - Number(a.user_code); } },
+          { key: 'id_asc', label: 'Sort: User ID (Low–High)', compare: function (a, b) { return Number(a.user_code) - Number(b.user_code); } },
+          { key: 'name_asc', label: 'Sort: Name (A–Z)', compare: function (a, b) { return String(a.user_name || '').localeCompare(String(b.user_name || '')); } },
+        ],
+        searchText: function (u) {
+          return '#' + u.user_code + ' ' + (u.user_name || '') + ' ' + (u.email || '');
+        },
+        renderRow: function (u) {
+          return (
+            '<tr>' +
+            '<td class="tabular-nums">#' + esc(u.user_code) + '</td>' +
+            '<td><strong>' + esc(u.user_name) + '</strong></td>' +
+            '<td>' + esc(u.email) + '</td>' +
+            '<td class="tabular-nums">' + esc(u.create_time || '—') + '</td>' +
+            '<td class="tabular-nums">' + esc(u.update_time || '—') + '</td>' +
+            '<td><div class="action-buttons">' +
+            '<a href="edit-user.html?user_code=' + encodeURIComponent(u.user_code) + '" class="edit-btn"><i class="fas fa-edit" aria-hidden="true"></i> Edit</a>' +
+            '<button type="button" class="delete-btn" data-id="' + esc(u.user_code) + '"><i class="fas fa-trash" aria-hidden="true"></i> Delete</button>' +
+            '</div></td>' +
+            '</tr>'
+          );
+        },
+        afterRender: function (tbody) {
+          AdminApp.bindDeleteActions(tbody, {
+            endpoint: '/index.php/admin/user/delete',
+            idKey: 'user_code',
+            confirmText: function (id) { return 'Delete user #' + id + '?'; },
+            successText: 'User deleted',
+            onSuccess: loadUsers,
+          });
+        },
+      });
+
+      async function loadUsers() {
+        const res = await AdminApp.apiFetch('/index.php/admin/user/index');
+        tableCtrl.setItems(res.success && Array.isArray(res.data) ? res.data : []);
+      }
+
       loadUsers();
     });
   </script>

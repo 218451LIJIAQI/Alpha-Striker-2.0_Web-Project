@@ -88,9 +88,8 @@ class Offer extends BaseAdmin
                 return $this->fail($error);
             }
 
-            $hasMovieKey = array_key_exists('movie_codes', $payload);
-            $movieCodes  = $hasMovieKey
-                ? $this->resolveValidMovieIds($payload['movie_codes'])
+            $movieCodes = array_key_exists('movie_codes', $payload)
+                ? $this->resolveValidIds('movies', 'movie_code', $payload['movie_codes'])
                 : array_map('intval', Db::name('movies')->order('movie_code', 'asc')->column('movie_code') ?: []);
 
             Db::startTrans();
@@ -139,9 +138,8 @@ class Offer extends BaseAdmin
                 return $this->fail($error);
             }
 
-            $hasMovieKey = array_key_exists('movie_codes', $payload);
-            $movieCodes  = $hasMovieKey
-                ? $this->resolveValidMovieIds($payload['movie_codes'])
+            $movieCodes = array_key_exists('movie_codes', $payload)
+                ? $this->resolveValidIds('movies', 'movie_code', $payload['movie_codes'])
                 : null;
 
             Db::startTrans();
@@ -225,16 +223,6 @@ class Offer extends BaseAdmin
         Db::table('movie_offer')->insertAll($rows);
     }
 
-    private function resolveValidMovieIds($raw)
-    {
-        $ids = $this->normalizeIdArray($raw);
-        if (empty($ids)) {
-            return [];
-        }
-        $valid = Db::name('movies')->where('movie_code', 'in', $ids)->order('movie_code', 'asc')->column('movie_code');
-        return array_map('intval', $valid ?: []);
-    }
-
     private function prepareOfferData(array $payload, $excludeOfferId)
     {
         $data = $this->pickAllowed($payload, self::ALLOWED_FIELDS);
@@ -251,7 +239,7 @@ class Offer extends BaseAdmin
         if (empty($data['promo_code']) || $this->textLen($data['promo_code']) > 100) {
             return [null, 'Promo code (1-100 characters) is required'];
         }
-        if (empty($data['offer_validity']) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $data['offer_validity'])) {
+        if (empty($data['offer_validity']) || !$this->isValidIsoDate($data['offer_validity'])) {
             return [null, 'Validity date must use YYYY-MM-DD format'];
         }
         if (empty($data['img']) || $this->textLen($data['img']) > 500) {
@@ -260,7 +248,7 @@ class Offer extends BaseAdmin
         if (isset($data['badge']) && $this->textLen($data['badge']) > 50) {
             return [null, 'Highlight badge must be 50 characters or fewer'];
         }
-        if (!isset($data['money']) || !is_numeric($data['money']) || (float) $data['money'] < 0) {
+        if (!isset($data['money']) || !is_numeric($data['money']) || !is_finite((float) $data['money']) || (float) $data['money'] < 0) {
             return [null, 'Discount amount must be a non-negative number'];
         }
 

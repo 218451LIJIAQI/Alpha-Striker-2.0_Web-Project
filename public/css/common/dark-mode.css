@@ -1,313 +1,284 @@
 /*
- * CineTicket Unified Semantic Dark Mode System
- * Single source of truth across all public and admin pages (including checkout & receipt).
+ * CineTix Unified Semantic Dark Mode System
+ * Single source of truth across all public, auth, checkout, receipt, wallet, and admin pages.
+ * Every text/surface pair meets WCAG AA (>= 4.5:1 normal text, >= 3:1 UI components).
  */
 
-html.dark-mode,
-body.dark-mode {
-  --surface-bg: #222631;
-  --surface-subtle: #191c24;
-  --border-color: #343a4a;
-  --text-main: #e6eaf2;
-  --text-muted: #9aa3b5;
-  --primary: #6ea8fe;
-  --text-dark: #e6eaf2;
-  --text-light: #9aa3b5;
-  --bg-light: #191c24;
-  --card-bg: #222631;
-  --input-bg: #181b23;
-  --success-light: rgba(76, 175, 80, 0.15);
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+html.dark-mode, body.dark-mode {
+  --surface-canvas: #0c101a;
+  --surface-bg: #161d2e;
+  --surface-subtle: #111726;
+  --surface-muted: #1e273d;
+  --border-color: #2b364f;
+  --border-strong: #3b4968;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --focus-ring: #60a5fa;
+  --brand-primary-soft: rgba(59, 130, 246, 0.16);
+  --primary: #60a5fa;
+  --text-dark: #f1f5f9;
+  --text-light: #94a3b8;
+  --bg-light: #111726;
+  --card-bg: #161d2e;
+  --input-bg: #0f1523;
+  --seats-bg: #111726;
+  --admin-bg: #0c101a;
+  --admin-card: #161d2e;
+  --admin-text: #f1f5f9;
+  --admin-muted: #94a3b8;
+  --admin-border: #2b364f;
+  --success-light: rgba(34, 197, 94, 0.16);
+  --shadow-card: 0 10px 28px rgba(0, 0, 0, 0.36);
+  --shadow-elevated: 0 18px 42px rgba(0, 0, 0, 0.48);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.36);
 }
 
-html.dark-mode body,
-body.dark-mode {
-  background-color: #14171f;
+html.dark-mode body, body.dark-mode {
+  background-color: #0c101a;
   background-image: none;
-  color: #e6eaf2;
+  color: #f1f5f9;
 }
 
-/* Header & Navigation */
-body.dark-mode .header,
-body.dark-mode .admin-nav {
-  background: linear-gradient(135deg, #1f2a5c, #171b30);
-  border-bottom: 1px solid #2e3650;
+/* Header, Auth Topbar & Admin Navigation */
+body.dark-mode .header, body.dark-mode .admin-nav {
+  background: linear-gradient(135deg, #090d16 0%, #151934 58%, #2a0a21 100%);
+  border-bottom: 1px solid #2b364f;
+}
+
+body.dark-mode .auth-topbar .auth-back-link {
+  background-color: #161d2e;
+  color: #f1f5f9;
+  border-color: #2b364f;
+}
+
+body.dark-mode .auth-topbar .dark-mode-toggle {
+  background-color: #161d2e;
+  color: #fbbf24;
+  border-color: #3b4968;
 }
 
 /* Shared Cards, Containers & Modals */
-body.dark-mode .card,
-body.dark-mode .auth-container,
-body.dark-mode .admin-container,
-body.dark-mode .movie-card,
-body.dark-mode .theater-card,
-body.dark-mode .offer-card,
-body.dark-mode .ticket,
-body.dark-mode .stat-card,
-body.dark-mode .chart-section,
-body.dark-mode .table-container,
-body.dark-mode .form-container,
-body.dark-mode .page-header,
-body.dark-mode .action-card,
-body.dark-mode .policy-section,
-body.dark-mode .terms-section,
-body.dark-mode .giftcard-option,
-body.dark-mode .info-card-section,
-body.dark-mode .mission-values,
-body.dark-mode .value-card,
-body.dark-mode .team-member,
-body.dark-mode .testimonial-card,
-body.dark-mode .detail-card,
-body.dark-mode .amenity-card,
-body.dark-mode .review-card,
-body.dark-mode .tabs-container,
-body.dark-mode .modal-content,
-body.dark-mode .chat-panel,
-body.dark-mode .payment-header,
-body.dark-mode .payment-main,
-body.dark-mode .order-summary,
-body.dark-mode .loading-content,
-body.dark-mode .success-content,
-body.dark-mode .upcoming-card {
-  background-color: #222631;
-  color: #e6eaf2;
-  border-color: #343a4a;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+body.dark-mode .card, body.dark-mode .empty-context-card, body.dark-mode .grid-empty-state,
+body.dark-mode .auth-container, body.dark-mode .admin-container, body.dark-mode .movie-card,
+body.dark-mode .theater-card, body.dark-mode .schedule-card, body.dark-mode .quick-info-card,
+body.dark-mode .info-card, body.dark-mode .location-card, body.dark-mode .vr-tour-card,
+body.dark-mode .offer-card, body.dark-mode .ticket, body.dark-mode .wallet-header-bar,
+body.dark-mode .stat-card, body.dark-mode .chart-section, body.dark-mode .table-container,
+body.dark-mode .form-container, body.dark-mode .page-header, body.dark-mode .action-card,
+body.dark-mode .info-page, body.dark-mode .info-card-section, body.dark-mode .mission-values,
+body.dark-mode .value-card, body.dark-mode .team-member, body.dark-mode .testimonial-card,
+body.dark-mode .detail-card, body.dark-mode .amenity-card, body.dark-mode .review-card,
+body.dark-mode .tabs-container, body.dark-mode .modal-content, body.dark-mode .chat-panel,
+body.dark-mode .payment-header, body.dark-mode .payment-main, body.dark-mode .order-summary,
+body.dark-mode .loading-content, body.dark-mode .success-content, body.dark-mode .upcoming-card {
+  background-color: #161d2e;
+  color: #f1f5f9;
+  border-color: #2b364f;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.36);
 }
 
-body.dark-mode .testimonials,
-body.dark-mode .tabs-header,
-body.dark-mode .call-option,
-body.dark-mode .email-department,
-body.dark-mode .category-card,
-body.dark-mode .chat-messages,
-body.dark-mode .chat-input-section,
-body.dark-mode .quick-actions,
-body.dark-mode .info-callout,
-body.dark-mode .card-form,
-body.dark-mode .promo-section,
-body.dark-mode .booking-confirmation,
-body.dark-mode .relation-check-grid,
+body.dark-mode .testimonials, body.dark-mode .tabs-header, body.dark-mode .call-option,
+body.dark-mode .email-department, body.dark-mode .category-card, body.dark-mode .chat-messages,
+body.dark-mode .chat-input-section, body.dark-mode .chat-input, body.dark-mode .quick-actions,
+body.dark-mode .info-callout, body.dark-mode .card-form, body.dark-mode .promo-section,
+body.dark-mode .movie-summary .movie-info, body.dark-mode .trust-item, body.dark-mode .step-item,
+body.dark-mode .booking-confirmation, body.dark-mode .relation-check-grid, body.dark-mode .admin-table-toolbar,
 body.dark-mode .auth-tabs {
-  background-color: #191c24;
-  border-color: #343a4a;
-  color: #e6eaf2;
+  background-color: #111726;
+  border-color: #2b364f;
+  color: #f1f5f9;
 }
 
-/* Headings & Copy */
-body.dark-mode h1,
-body.dark-mode h2,
-body.dark-mode h3,
-body.dark-mode h4,
-body.dark-mode .section-title,
-body.dark-mode .movie-title,
-body.dark-mode .theater-name,
-body.dark-mode .offer-title,
-body.dark-mode .form-label,
-body.dark-mode .question {
-  color: #f1f4fa;
-}
+/* Headings, Labels & Copy */
+body.dark-mode h1, body.dark-mode h2, body.dark-mode h3,
+body.dark-mode h4, body.dark-mode .section-title, body.dark-mode .movie-title,
+body.dark-mode .theater-name, body.dark-mode .offer-title, body.dark-mode .team-name,
+body.dark-mode .value-title, body.dark-mode .author-info h4, body.dark-mode .form-label,
+body.dark-mode .form-group label, body.dark-mode .question { color: #f8fafc; }
 
-body.dark-mode p,
-body.dark-mode .movie-info,
-body.dark-mode .theater-location,
-body.dark-mode .offer-description,
-body.dark-mode .offer-validity,
-body.dark-mode .faq-answer,
-body.dark-mode .answer,
-body.dark-mode .terms-link {
-  color: #b2bacb;
-}
+body.dark-mode p, body.dark-mode .movie-info, body.dark-mode .theater-location,
+body.dark-mode .offer-description, body.dark-mode .offer-validity, body.dark-mode .story-content p,
+body.dark-mode .value-description, body.dark-mode .team-bio, body.dark-mode .testimonial-text,
+body.dark-mode .author-info p, body.dark-mode .availability, body.dark-mode .response-time,
+body.dark-mode .call-tips li, body.dark-mode .remember-me label, body.dark-mode .terms-check label,
+body.dark-mode .copyright, body.dark-mode .faq-answer, body.dark-mode .answer,
+body.dark-mode .terms-link { color: #cbd5e1; }
 
-/* Preserve white text on gradient hero banners & profile headers */
-body.dark-mode .hero h1,
-body.dark-mode .hero p,
-body.dark-mode .theater-hero h1,
-body.dark-mode .theater-hero p,
-body.dark-mode .newsletter h2,
-body.dark-mode .newsletter p,
-body.dark-mode .contact-section h2,
-body.dark-mode .contact-section p,
-body.dark-mode .modal-header h3,
-body.dark-mode .modal-header p,
-body.dark-mode .chat-header h3,
-body.dark-mode .user-profile-card .user-display-name,
-body.dark-mode .user-profile-card .user-email,
-body.dark-mode .movie-banner .movie-title,
-body.dark-mode .giftcard-visual-card h3,
-body.dark-mode .giftcard-visual-card p {
-  color: #ffffff;
-}
+body.dark-mode .auth-link, body.dark-mode .forgot-password, body.dark-mode .terms-check a,
+body.dark-mode .guide-link, body.dark-mode .modify-seats-link, body.dark-mode .inline-action-link,
+body.dark-mode .mini-link-btn, body.dark-mode .phone-number, body.dark-mode .email-address,
+body.dark-mode .team-position { color: #93c5fd; }
+
+/* Preserve white text on rich gradient hero banners & profile headers */
+body.dark-mode .hero h1, body.dark-mode .hero p, body.dark-mode .theater-hero h1,
+body.dark-mode .theater-hero p, body.dark-mode .newsletter h2, body.dark-mode .newsletter p,
+body.dark-mode .counter-section .counter-number, body.dark-mode .counter-section .counter-text, body.dark-mode .contact-section h2,
+body.dark-mode .contact-section p, body.dark-mode .modal-header h3, body.dark-mode .modal-header p,
+body.dark-mode .chat-header h3, body.dark-mode .user-profile-card .user-display-name, body.dark-mode .user-profile-card .user-email,
+body.dark-mode .movie-banner .movie-title, body.dark-mode .giftcard-visual-card h3, body.dark-mode .giftcard-visual-card p { color: #ffffff; }
 
 /* Inputs, Selects & Textareas */
-body.dark-mode input,
-body.dark-mode select,
-body.dark-mode textarea,
-body.dark-mode .form-input,
-body.dark-mode .search-input {
-  background-color: #181b23;
-  color: #e6eaf2;
-  border-color: #384054;
+body.dark-mode input, body.dark-mode select, body.dark-mode textarea,
+body.dark-mode .form-input, body.dark-mode .theater-select, body.dark-mode .toolbar-search,
+body.dark-mode .toolbar-select, body.dark-mode .search-input {
+  background-color: #0f1523;
+  color: #f1f5f9;
+  border-color: #3b4968;
 }
 
-body.dark-mode input::placeholder,
-body.dark-mode textarea::placeholder {
-  color: #7c8599;
+body.dark-mode .search-bar { background-color: #0f1523; border: 1px solid #3b4968; }
+
+body.dark-mode input::placeholder, body.dark-mode textarea::placeholder { color: #94a3b8; }
+
+body.dark-mode input:focus, body.dark-mode select:focus, body.dark-mode textarea:focus { border-color: #60a5fa; }
+
+/* Filter Chips, Category Tabs & Pills */
+body.dark-mode .btn-filter, body.dark-mode .btn-outline, body.dark-mode .filter-options button,
+body.dark-mode .filter-tabs button, body.dark-mode .tab-btn, body.dark-mode .amenity,
+body.dark-mode .quick-action-btn, body.dark-mode .topic-chip, body.dark-mode .amount-pill,
+body.dark-mode .pager-btn, body.dark-mode .social-icon, body.dark-mode .social-link,
+body.dark-mode .faq-question:not(.active), body.dark-mode .auth-tab-btn:not(.active), body.dark-mode .relation-check-item {
+  background-color: #1e273d;
+  color: #e2e8f0;
+  border-color: #3b4968;
 }
 
-body.dark-mode input:focus,
-body.dark-mode select:focus,
-body.dark-mode textarea:focus {
-  border-color: #6ea8fe;
-  outline: none;
-}
-
-/* Filter Chips, Category Tabs & Amenity Pills */
-body.dark-mode .btn-filter,
-body.dark-mode .filter-options button,
-body.dark-mode .filter-tabs button,
-body.dark-mode .tab-btn,
-body.dark-mode .amenity,
-body.dark-mode .quick-action-btn,
-body.dark-mode .topic-chip,
-body.dark-mode .amount-pill,
-body.dark-mode .faq-question:not(.active),
-body.dark-mode .auth-tab-btn:not(.active),
-body.dark-mode .relation-check-item {
-  background-color: #262b38;
-  color: #d5dce9;
-  border-color: #384054;
-}
-
-body.dark-mode .btn-filter.active,
-body.dark-mode .filter-options button.active,
-body.dark-mode .filter-tabs button.active,
-body.dark-mode .tab-btn.active,
-body.dark-mode .topic-chip.active,
-body.dark-mode .amount-pill.active,
+body.dark-mode .btn-filter.active, body.dark-mode .filter-options button.active, body.dark-mode .filter-tabs button.active,
+body.dark-mode .tab-btn.active, body.dark-mode .topic-chip.active, body.dark-mode .amount-pill.active,
 body.dark-mode .auth-tab-btn.active {
-  background-color: #4361ee;
+  background-color: #2563eb;
   color: #ffffff;
-  border-color: #4361ee;
+  border-color: #3b82f6;
 }
 
-body.dark-mode .promo-code {
-  background-color: #181b23;
-  border-color: #384054;
-  color: #6ea8fe;
+body.dark-mode .promo-code, body.dark-mode .promo-tag {
+  background-color: #0f1523;
+  border-color: #3b4968;
+  color: #93c5fd;
 }
 
-/* Booking Seat Grid & Controls */
-body.dark-mode .date-item,
-body.dark-mode .time-slot {
-  background-color: #191c24;
-  border-color: #343a4a;
-  color: #e6eaf2;
+body.dark-mode .promo-clear-btn, body.dark-mode .clear-seats-btn, body.dark-mode .cancel-btn {
+  background-color: #27324a;
+  color: #e2e8f0;
+  border-color: #3b4968;
 }
 
-body.dark-mode .date-item.active,
-body.dark-mode .time-slot.active {
-  background-color: #4361ee;
-  border-color: #4361ee;
+body.dark-mode .edit-btn { background-color: rgba(59, 130, 246, 0.18); color: #93c5fd; }
+
+body.dark-mode .delete-btn, body.dark-mode .refund-btn { background-color: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+
+body.dark-mode .tag-badge, body.dark-mode .badge-tag, body.dark-mode .movie-rating { background-color: rgba(245, 158, 11, 0.18); color: #fcd34d; }
+
+body.dark-mode .type-badge, body.dark-mode .scope-badge, body.dark-mode .upcoming-format-pill,
+body.dark-mode .catalog-count-badge, body.dark-mode .wallet-count-badge, body.dark-mode .feature-tag { background-color: rgba(59, 130, 246, 0.2); color: #bfdbfe; }
+
+body.dark-mode .seat-number { background-color: rgba(34, 197, 94, 0.2); color: #86efac; }
+
+body.dark-mode .conflict-alert {
+  background-color: rgba(220, 38, 38, 0.18);
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fecaca;
+}
+
+body.dark-mode .conflict-alert a { color: #fde68a; }
+
+/* Auditorium Seat Matrix & Controls */
+body.dark-mode .date-item, body.dark-mode .time-slot {
+  background-color: #111726;
+  border-color: #2b364f;
+  color: #e2e8f0;
+}
+
+body.dark-mode .date-item.active, body.dark-mode .time-slot.active {
+  background-color: #2563eb;
+  border-color: #3b82f6;
   color: #ffffff;
 }
 
-body.dark-mode .seats-container,
-body.dark-mode .selected-seats {
-  background-color: #191c24;
-  border: 1px solid #343a4a;
-}
+body.dark-mode .seats-container, body.dark-mode .selected-seats { background-color: #111726; border: 1px solid #2b364f; }
 
 body.dark-mode .screen {
-  background: linear-gradient(180deg, #3c4356, #252a37);
+  background: linear-gradient(180deg, #475569, #1e293b);
+  box-shadow: 0 12px 28px rgba(96, 165, 250, 0.18);
 }
 
-body.dark-mode .screen::after {
-  color: #cbd2e1;
+body.dark-mode .screen::after { color: #e2e8f0; }
+
+body.dark-mode .seat, body.dark-mode .seat-demo.available {
+  background-color: #28354f;
+  border-color: #3b4968;
+  color: #cbd5e1;
 }
 
-body.dark-mode .seat,
-body.dark-mode .seat-demo.available {
-  background-color: #475166;
-}
+body.dark-mode .seat:hover:not(.reserved):not(.selected) { background-color: #3b82f6; color: #ffffff; }
 
-body.dark-mode .seat:hover:not(.reserved):not(.selected) {
-  background-color: #64728f;
-}
-
-body.dark-mode .seat.vip:not(.reserved):not(.selected) {
+body.dark-mode .seat.vip:not(.reserved):not(.selected), body.dark-mode .seat-demo.vip {
+  background-color: #3b2a14;
   border: 2px solid #f59e0b;
+  color: #fde68a;
 }
 
-body.dark-mode .seat.selected,
-body.dark-mode .seat-demo.selected {
+body.dark-mode .seat.selected, body.dark-mode .seat-demo.selected {
   background-color: #f59e0b;
-  color: #14171f;
+  border-color: #fbbf24;
+  color: #0f172a;
 }
 
-body.dark-mode .seat.reserved,
-body.dark-mode .seat-demo.reserved {
-  background-color: #dc2626;
-  opacity: 0.85;
+body.dark-mode .seat.reserved, body.dark-mode .seat-demo.reserved {
+  background-color: #475569;
+  border-color: #64748b;
+  color: #94a3b8;
+  opacity: 0.65;
 }
 
-/* Ticket View */
-body.dark-mode .ticket-details,
-body.dark-mode .no-tickets {
-  background-color: #222631;
-  color: #e6eaf2;
-  border-color: #343a4a;
+/* Ticket Wallet & Checkout */
+body.dark-mode .ticket-details, body.dark-mode .no-tickets {
+  background-color: #161d2e;
+  color: #f1f5f9;
+  border-color: #2b364f;
 }
 
-body.dark-mode .detail-value,
-body.dark-mode .text-info div:last-child,
-body.dark-mode .rating span {
-  color: #e6eaf2;
+body.dark-mode .barcode-inner, body.dark-mode .date-time .icon { background-color: #111726; }
+
+body.dark-mode .detail-value, body.dark-mode .text-info div:last-child, body.dark-mode .rating span,
+body.dark-mode .total-amount, body.dark-mode .price-row.total-row, body.dark-mode .summary-row.total { color: #f8fafc; }
+
+body.dark-mode .secondary-btn {
+  background-color: #111726;
+  color: #93c5fd;
+  border-color: #3b82f6;
 }
 
-body.dark-mode .detail-row,
-body.dark-mode .summary-row {
-  border-color: #343a4a;
+body.dark-mode .detail-row, body.dark-mode .summary-row, body.dark-mode .faq-section,
+body.dark-mode .info-page-title, body.dark-mode .info-section-heading, body.dark-mode .info-contact-footer { border-color: #2b364f; }
+
+body.dark-mode .partner-logo {
+  background-color: #f8fafc;
+  filter: none;
+  opacity: 0.92;
 }
 
 /* Tables (Admin & Info Pages) */
-body.dark-mode table {
-  background-color: #222631;
-  color: #e6eaf2;
+body.dark-mode table { background-color: #161d2e; color: #f1f5f9; }
+
+body.dark-mode thead th, body.dark-mode .info-table th {
+  background-color: #111726;
+  color: #cbd5e1;
+  border-color: #2b364f;
 }
 
-body.dark-mode thead th,
-body.dark-mode .info-table th {
-  background-color: #1a1e28;
-  color: #d5dce9;
-  border-color: #343a4a;
-}
+body.dark-mode tbody td, body.dark-mode .info-table td { border-color: #243047; color: #f1f5f9; }
 
-body.dark-mode tbody td,
-body.dark-mode .info-table td {
-  border-color: #2f3545;
-  color: #e6eaf2;
-}
-
-body.dark-mode tbody tr:hover {
-  background-color: #282d3b;
-}
+body.dark-mode tbody tr:hover { background-color: #1c253b; }
 
 /* Dropdowns, Popups & Notifications */
-body.dark-mode .dropdown-content,
-body.dark-mode .contact-popup-content,
-body.dark-mode .user-notification,
+body.dark-mode .dropdown-content, body.dark-mode .contact-popup-content, body.dark-mode .user-notification,
 body.dark-mode .bot-message .message-content {
-  background-color: #222631;
-  color: #e6eaf2;
-  border-color: #343a4a;
+  background-color: #161d2e;
+  color: #f1f5f9;
+  border-color: #2b364f;
 }
 
-body.dark-mode .user-info-section {
-  background-color: #191c24;
-  border-color: #343a4a;
-}
+body.dark-mode .user-info-section { background-color: #111726; border-color: #2b364f; }
 
-body.dark-mode .dropdown-item:hover {
-  background-color: #2a2f3d;
-  color: #6ea8fe;
-}
+body.dark-mode .dropdown-item:hover { background-color: #1e273d; color: #93c5fd; }

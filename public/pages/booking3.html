@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Select Seats | Alpha Striker 2.0</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <title>Select Seats | CineTix Box Office</title>
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/common/footer.css">
   <link rel="stylesheet" href="../css/booking3/booking3.css">
@@ -14,7 +13,7 @@
 <body>
   <div id="header-container"></div>
 
-  <div id="booking-page">
+  <main id="booking-page">
     <div class="container">
       <div class="booking-layout">
         <div class="booking-main">
@@ -37,34 +36,37 @@
             </div>
 
             <div class="section-title">
-              <span>Select Date</span>
-              <span class="promo-tag"><i class="fas fa-fire"></i> 30% Automatic Discount for 5+ Seats!</span>
+              <span>Select Screening Date</span>
+              <span class="promo-tag"><i class="fas fa-fire" aria-hidden="true"></i> 30% Automatic Discount for 5+ Seats!</span>
             </div>
-            <div class="date-selector"></div>
+            <div class="date-selector" role="group" aria-label="Select Screening Date"></div>
 
             <div class="section-title"><span>Select Showtime</span></div>
-            <div class="time-slots">
-              <div class="time-slot active">09:30 AM</div>
-              <div class="time-slot">12:00 PM</div>
-              <div class="time-slot">02:30 PM</div>
-              <div class="time-slot">05:15 PM</div>
-              <div class="time-slot">08:00 PM</div>
-              <div class="time-slot">10:30 PM</div>
+            <div class="time-slots" role="group" aria-label="Select Showtime">
+              <button type="button" class="time-slot active tabular-nums" aria-pressed="true">09:30 AM</button>
+              <button type="button" class="time-slot tabular-nums" aria-pressed="false">12:00 PM</button>
+              <button type="button" class="time-slot tabular-nums" aria-pressed="false">02:30 PM</button>
+              <button type="button" class="time-slot tabular-nums" aria-pressed="false">05:15 PM</button>
+              <button type="button" class="time-slot tabular-nums" aria-pressed="false">08:00 PM</button>
+              <button type="button" class="time-slot tabular-nums" aria-pressed="false">10:30 PM</button>
             </div>
 
-            <div class="section-title"><span>Select Seats (Max 10)</span></div>
+            <div class="section-title">
+              <span>Select Auditorium Seats (Max 10)</span>
+              <small class="keyboard-hint">Tip: Use Arrow Keys + Enter/Space to pick seats</small>
+            </div>
             <div class="screen-container">
-              <div class="screen"></div>
+              <div class="screen" aria-hidden="true"></div>
               <div class="seats-container">
-                <button type="button" class="vr-button" onclick="viewSeatsInVR()">
-                  <i class="fas fa-vr-cardboard"></i> 3D Auditorium View
+                <button type="button" class="vr-button">
+                  <i class="fas fa-vr-cardboard" aria-hidden="true"></i> 3D Auditorium View
                 </button>
-                <div id="seat-grid-rows"></div>
+                <div id="seat-grid-rows" role="group" aria-label="Auditorium Seat Map A1 to H12"></div>
               </div>
 
-              <div class="seat-info">
+              <div class="seat-info" aria-label="Seat Map Legend">
                 <div class="seat-type"><div class="seat-demo available"></div><span>Available</span></div>
-                <div class="seat-type"><div class="seat-demo vip"></div><span>Prime Row (D–E)</span></div>
+                <div class="seat-type"><div class="seat-demo vip"></div><span>Prime VIP (Rows D–E)</span></div>
                 <div class="seat-type"><div class="seat-demo selected"></div><span>Selected</span></div>
                 <div class="seat-type"><div class="seat-demo reserved"></div><span>Reserved</span></div>
               </div>
@@ -72,19 +74,26 @@
           </div>
         </div>
 
-        <aside class="booking-sidebar">
-          <div class="card">
-            <div class="section-title"><span>Booking Summary</span></div>
+        <aside class="booking-sidebar" aria-label="Ticket Stub Summary">
+          <div class="card ticket-stub-card">
+            <div class="section-title">
+              <span>Booking Summary</span>
+              <span class="stub-badge">LIVE STUB</span>
+            </div>
             <div class="summary-list">
               <div class="summary-row"><span>Theater</span><strong id="summary-theater">Cinemark Premium</strong></div>
-              <div class="summary-row"><span>Schedule</span><span id="summary-datetime">-</span></div>
-              <div class="summary-row"><span>Seats Selected</span><strong id="summary-count">0</strong></div>
-              <div class="summary-row total"><span>Estimated Subtotal</span><span id="summary-price">$0.00</span></div>
+              <div class="summary-row"><span>Schedule</span><span id="summary-datetime" class="tabular-nums">-</span></div>
+              <div class="summary-row"><span>Base Price</span><span id="summary-unit-price" class="tabular-nums">$39.00</span></div>
+              <div class="summary-row"><span>Seats Selected</span><strong id="summary-count" class="tabular-nums">0</strong></div>
+              <div class="summary-row total"><span>Estimated Subtotal</span><span id="summary-price" class="tabular-nums">$0.00</span></div>
             </div>
 
             <div class="selected-seats" id="selectedSeatsInfo">
-              <h3>Selected Seats</h3>
-              <div class="seat-tags"></div>
+              <div class="selected-seats-head">
+                <h3>Selected Seats</h3>
+                <button type="button" class="clear-seats-btn" id="clear-seats-btn">Clear</button>
+              </div>
+              <div class="seat-tags tabular-nums"></div>
             </div>
 
             <button type="button" class="proceed-button" disabled>Proceed to Payment</button>
@@ -92,7 +101,7 @@
         </aside>
       </div>
     </div>
-  </div>
+  </main>
 
   <div id="bottom-container"></div>
 </body>

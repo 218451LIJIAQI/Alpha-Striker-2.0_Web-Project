@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gift Cards | Alpha Striker 2.0</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <title>Digital Gift Cards | CineTix Box Office</title>
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/common/footer.css">
   <link rel="stylesheet" href="../css/homepage/homepage.css">
@@ -13,11 +12,11 @@
 <body>
   <div id="header-container"></div>
 
-  <div class="giftcard-wrapper">
+  <main class="giftcard-wrapper">
     <section class="hero">
       <div class="container">
-        <h1>Gift Cards</h1>
-        <p>Share the magic of cinema with CineTix digital and physical gift cards for every occasion.</p>
+        <h1>Digital Gift Cards</h1>
+        <p>Share the magic of cinema with instant CineTix digital gift passes and collectible box-office cards.</p>
       </div>
     </section>
 
@@ -28,18 +27,18 @@
           <form id="giftcard-issue-form" class="giftcard-form-stack">
             <div>
               <strong>Select Denomination</strong>
-              <div class="topic-chips-row" id="giftcard-amounts">
-                <button type="button" class="amount-pill" data-amount="25">$25</button>
-                <button type="button" class="amount-pill active" data-amount="50">$50</button>
-                <button type="button" class="amount-pill" data-amount="100">$100</button>
-                <button type="button" class="amount-pill" data-amount="200">$200</button>
+              <div class="topic-chips-row" id="giftcard-amounts" role="group" aria-label="Gift Card Denomination">
+                <button type="button" class="amount-pill tabular-nums" data-amount="25" aria-pressed="false">$25</button>
+                <button type="button" class="amount-pill active tabular-nums" data-amount="50" aria-pressed="true">$50</button>
+                <button type="button" class="amount-pill tabular-nums" data-amount="100" aria-pressed="false">$100</button>
+                <button type="button" class="amount-pill tabular-nums" data-amount="200" aria-pressed="false">$200</button>
               </div>
             </div>
 
             <div>
               <label for="gc-theme"><strong>Card Theme</strong></label>
               <select id="gc-theme">
-                <option value="classic">Cinema Premiere (Blue / Magenta)</option>
+                <option value="classic">Cinema Premiere (Sapphire / Crimson)</option>
                 <option value="birthday">Birthday Celebration</option>
                 <option value="vip">VIP Gold Lounge</option>
               </select>
@@ -61,7 +60,7 @@
             </div>
 
             <button type="submit" id="issue-giftcard-btn" class="btn btn-primary">
-              <i class="fas fa-gift"></i> Issue Digital Gift E-Code
+              <i class="fas fa-gift" aria-hidden="true"></i> Issue Digital Gift E-Code
             </button>
           </form>
 
@@ -72,18 +71,18 @@
                 <span id="gc-preview-theme-label">PREMIERE</span>
               </div>
               <div>
-                <div class="giftcard-visual-amount" id="gc-preview-amount">$50.00</div>
+                <div class="giftcard-visual-amount tabular-nums" id="gc-preview-amount">$50.00</div>
                 <p id="gc-preview-recipient">For: Cinema Guest</p>
                 <p id="gc-preview-note">"Enjoy movie night on me!"</p>
               </div>
-              <div class="giftcard-visual-top">
+              <div class="giftcard-visual-top tabular-nums">
                 <span id="gc-preview-code">GC-DEMO-READY</span>
                 <span>24-MO VALIDITY</span>
               </div>
             </div>
 
             <div class="info-callout">
-              <strong>Check Gift Card Balance</strong>
+              <label for="gc-check-input"><strong>Check Gift Card Balance</strong></label>
               <div class="giftcard-balance-row">
                 <input type="text" id="gc-check-input" placeholder="Enter code (e.g. GC-CINE50)">
                 <button type="button" id="check-giftcard-btn" class="btn btn-primary">Check</button>
@@ -97,15 +96,15 @@
         <h2>What Are CineTix Gift Cards?</h2>
         <div class="giftcard-features">
           <div class="giftcard-feature-item">
-            <i class="fas fa-ticket-alt"></i>
+            <i class="fas fa-ticket-alt" aria-hidden="true"></i>
             <p>Redeemable for any movie format, reserved seat, and concession combo.</p>
           </div>
           <div class="giftcard-feature-item">
-            <i class="fas fa-envelope-open-text"></i>
+            <i class="fas fa-envelope-open-text" aria-hidden="true"></i>
             <p>Instant digital e-codes or collectible physical cards at the box office.</p>
           </div>
           <div class="giftcard-feature-item">
-            <i class="fas fa-gift"></i>
+            <i class="fas fa-gift" aria-hidden="true"></i>
             <p>Flexible denominations from $25 to $200 with zero activation fees.</p>
           </div>
         </div>
@@ -115,12 +114,12 @@
         <h2>How to Redeem</h2>
         <div class="giftcard-features">
           <div class="giftcard-feature-item">
-            <i class="fas fa-laptop"></i>
+            <i class="fas fa-laptop" aria-hidden="true"></i>
             <h3>Digital E-Code</h3>
-            <p>Apply your 12-character gift code directly on the web checkout screen.</p>
+            <p>Apply your gift code directly on the web checkout screen.</p>
           </div>
           <div class="giftcard-feature-item">
-            <i class="fas fa-id-card"></i>
+            <i class="fas fa-id-card" aria-hidden="true"></i>
             <h3>Physical Card</h3>
             <p>Reveal the PIN on the back of your card to redeem online or in-theater.</p>
           </div>
@@ -141,7 +140,7 @@
         </div>
       </section>
     </div>
-  </div>
+  </main>
 
   <div id="bottom-container"></div>
 
@@ -180,8 +179,12 @@
 
       document.querySelectorAll('#giftcard-amounts .amount-pill').forEach(function (btn) {
         btn.addEventListener('click', function () {
-          document.querySelectorAll('#giftcard-amounts .amount-pill').forEach(function (b) { b.classList.remove('active'); });
+          document.querySelectorAll('#giftcard-amounts .amount-pill').forEach(function (b) {
+            b.classList.remove('active');
+            b.setAttribute('aria-pressed', 'false');
+          });
           btn.classList.add('active');
+          btn.setAttribute('aria-pressed', 'true');
           selectedAmount = parseInt(btn.dataset.amount || '50', 10);
           syncPreview();
         });

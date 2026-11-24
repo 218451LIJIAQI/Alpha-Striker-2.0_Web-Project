@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Tickets | Alpha Striker 2.0</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <title>My Tickets | CineTix Box Office</title>
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/common/footer.css">
   <link rel="stylesheet" href="../css/generate_ticket/generate_ticket.css">
@@ -13,6 +12,23 @@
 </head>
 <body>
   <div id="header-container"></div>
+
+  <section class="wallet-header-wrap is-hidden" id="wallet-toolbar">
+    <div class="wallet-header-bar">
+      <div>
+        <h1><i class="fas fa-ticket-alt" aria-hidden="true"></i> Digital Ticket Wallet</h1>
+        <p>Present your pass barcode at auditorium entry, export as PDF, or cancel seats prior to showtime.</p>
+      </div>
+      <div class="wallet-controls">
+        <span class="wallet-count-badge tabular-nums" id="wallet-count-badge">0 Passes</span>
+        <div class="wallet-zone-filters" role="group" aria-label="Filter tickets by auditorium zone">
+          <button type="button" class="btn-filter active" data-ticket-zone="all" aria-pressed="true">All Passes</button>
+          <button type="button" class="btn-filter" data-ticket-zone="vip" aria-pressed="false">Prime VIP</button>
+          <button type="button" class="btn-filter" data-ticket-zone="std" aria-pressed="false">Standard</button>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <main id="cons" class="tickets-grid"></main>
 

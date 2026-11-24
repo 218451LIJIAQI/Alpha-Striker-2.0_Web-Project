@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Movies | Alpha Striker 2.0</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <title>Movies | CineTix Box Office</title>
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/common/footer.css">
   <link rel="stylesheet" href="../css/homepage/homepage.css">
@@ -16,10 +15,11 @@
 
   <section class="hero">
     <div class="container">
-      <h1>Experience Movies Like Never Before</h1>
-      <p>Book tickets for the latest blockbusters and enjoy premium viewing experiences at theaters near you.</p>
-      <div class="search-bar">
-        <input type="text" class="search-input" placeholder="Search movies by title, genre, or tag...">
+      <span class="hero-eyebrow">NOW BOOKING &bull; 30% GROUP SAVINGS ON 5+ SEATS</span>
+      <h1>Experience Cinema Like Never Before</h1>
+      <p>Inspect interactive 3D auditorium sightlines, lock reserved recliner seats, and redeem verified member promos.</p>
+      <div class="search-bar" role="search">
+        <input type="search" class="search-input" placeholder="Search movies by title, genre, or badge..." aria-label="Search movies by title, genre, or badge">
         <button type="button" class="search-btn">Search</button>
       </div>
     </div>
@@ -28,18 +28,21 @@
   <main class="main-content">
     <div class="container">
       <div class="section-header">
-        <h2 class="section-title">Now Showing</h2>
-        <button type="button" class="btn btn-primary" onclick="fetchAllMovies()">View All</button>
+        <div class="section-title-group">
+          <h2 class="section-title">Now Showing</h2>
+          <span class="catalog-count-badge tabular-nums" id="catalog-count-badge">7 Titles</span>
+        </div>
+        <button type="button" class="btn btn-primary" id="view-all-movies-btn">View All</button>
       </div>
 
-      <div class="filters">
-        <button type="button" class="btn-filter active" data-genre="all">All</button>
-        <button type="button" class="btn-filter" data-genre="Action">Action</button>
-        <button type="button" class="btn-filter" data-genre="Adventure">Adventure</button>
-        <button type="button" class="btn-filter" data-genre="Animation">Animation</button>
-        <button type="button" class="btn-filter" data-genre="Drama">Drama</button>
-        <button type="button" class="btn-filter" data-genre="Sci-Fi">Sci-Fi</button>
-        <button type="button" class="btn-filter" data-genre="Mystery">Mystery</button>
+      <div class="filters" role="group" aria-label="Filter movies by genre">
+        <button type="button" class="btn-filter active" data-genre="all" aria-pressed="true">All</button>
+        <button type="button" class="btn-filter" data-genre="Action" aria-pressed="false">Action</button>
+        <button type="button" class="btn-filter" data-genre="Adventure" aria-pressed="false">Adventure</button>
+        <button type="button" class="btn-filter" data-genre="Animation" aria-pressed="false">Animation</button>
+        <button type="button" class="btn-filter" data-genre="Drama" aria-pressed="false">Drama</button>
+        <button type="button" class="btn-filter" data-genre="Sci-Fi" aria-pressed="false">Sci-Fi</button>
+        <button type="button" class="btn-filter" data-genre="Mystery" aria-pressed="false">Mystery</button>
       </div>
 
       <div class="movie-grid"></div>

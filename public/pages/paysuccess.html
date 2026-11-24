@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Payment Success | Alpha Striker 2.0</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <title>Booking Confirmed | CineTix Box Office</title>
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/common/footer.css">
   <link rel="stylesheet" href="../css/pay/paysuccess.css">
@@ -14,89 +13,92 @@
 <body>
   <div id="header-container"></div>
 
-  <div class="payment-status-container">
+  <main class="payment-status-container">
     <div class="payment-loading">
       <div class="loading-content">
         <div class="spinner-container">
           <div class="spinner"></div>
           <div class="spinner-glow"></div>
         </div>
-        <h2>Processing Your Payment</h2>
-        <p>Please wait while we securely process your transaction...</p>
-        <div class="progress-dots">
+        <h2>Confirming Your Seats</h2>
+        <p>Finalizing your auditorium reservation and generating your receipt...</p>
+        <div class="progress-dots" aria-hidden="true">
           <span class="dot active"></span>
           <span class="dot active"></span>
           <span class="dot"></span>
         </div>
         <div class="security-notice">
-          <i class="fas fa-shield-alt"></i>
-          <span>Your payment is secured with 256-bit SSL encryption</span>
+          <i class="fas fa-shield-alt" aria-hidden="true"></i>
+          <span>Secured with 256-bit SSL encryption &amp; transactional seat lock</span>
         </div>
       </div>
     </div>
+
+    <section id="receipt-empty-state" class="payment-empty is-hidden" aria-live="polite">
+      <div class="success-content">
+        <i class="fas fa-receipt empty-receipt-icon" aria-hidden="true"></i>
+        <h2>No Recent Checkout Receipt</h2>
+        <p class="success-message">No completed checkout receipt was found in your current browser session. Open your Ticket Wallet to view saved bookings or start a new movie reservation.</p>
+        <div class="action-buttons">
+          <a href="generate_ticket.html" class="primary-btn"><i class="fas fa-ticket-alt" aria-hidden="true"></i> View My Tickets</a>
+          <a href="homepage.html" class="secondary-btn"><i class="fas fa-home" aria-hidden="true"></i> Browse Movies</a>
+        </div>
+      </div>
+    </section>
 
     <div class="payment-success is-hidden">
       <div class="success-content">
         <div class="success-animation">
           <div class="success-checkmark">
-            <i class="fas fa-check-circle"></i>
+            <i class="fas fa-check-circle" aria-hidden="true"></i>
           </div>
         </div>
 
         <h2>Payment Successful!</h2>
-        <p class="success-message">Thank you for your purchase! Your booking has been confirmed.</p>
+        <p class="success-message">Thank you for your purchase! Your auditorium seats have been locked and confirmed.</p>
 
         <div class="booking-confirmation">
-          <div class="confirmation-details">
-            <div class="detail-item">
-              <i class="fas fa-ticket-alt"></i>
-              <span>Booking ID: <strong>#BK-CONFIRMED</strong></span>
-            </div>
-            <div class="detail-item">
-              <i class="fas fa-envelope"></i>
-              <span>Confirmation email sent</span>
-            </div>
-            <div class="detail-item">
-              <i class="fas fa-qrcode"></i>
-              <span>Digital e-ticket ready</span>
-            </div>
-          </div>
+          <div class="confirmation-details"></div>
         </div>
 
         <div class="action-buttons">
-          <button type="button" class="primary-btn" onclick="location.href='homepage.html'">
-            <i class="fas fa-home"></i>
-            Back to Home
-          </button>
-          <button type="button" class="secondary-btn" onclick="location.href='generate_ticket.html'">
-            <i class="fas fa-list"></i>
-            View My Bookings
+          <a href="homepage.html" class="primary-btn">
+            <i class="fas fa-home" aria-hidden="true"></i>
+            <span>Back to Home</span>
+          </a>
+          <a href="generate_ticket.html" class="secondary-btn">
+            <i class="fas fa-list" aria-hidden="true"></i>
+            <span>View My Bookings</span>
+          </a>
+          <button type="button" class="secondary-btn" id="print-receipt-btn">
+            <i class="fas fa-receipt" aria-hidden="true"></i>
+            <span>Print Receipt</span>
           </button>
         </div>
 
         <div class="next-steps">
           <h3>What's Next?</h3>
           <div class="steps-grid">
-            <div class="step-item" onclick="location.href='generate_ticket.html'">
-              <i class="fas fa-qrcode"></i>
+            <a href="generate_ticket.html" class="step-item step-link">
+              <i class="fas fa-qrcode" aria-hidden="true"></i>
               <h4>Print or Save Ticket</h4>
               <p>Access or print your digital ticket pass</p>
-            </div>
+            </a>
             <div class="step-item">
-              <i class="fas fa-clock"></i>
+              <i class="fas fa-clock" aria-hidden="true"></i>
               <h4>Arrive Early</h4>
               <p>Please arrive 15 minutes before showtime</p>
             </div>
             <div class="step-item">
-              <i class="fas fa-popcorn"></i>
+              <i class="fas fa-popcorn" aria-hidden="true"></i>
               <h4>Enjoy the Show</h4>
-              <p>Grab some snacks and enjoy your movie!</p>
+              <p>Grab fresh popcorn and enjoy your screening!</p>
             </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
+  </main>
 
   <div id="bottom-container"></div>
 </body>

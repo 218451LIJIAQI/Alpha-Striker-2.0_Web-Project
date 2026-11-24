@@ -3,28 +3,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Login | Alpha Striker 2.0</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <title>Admin Login | CineTix Console</title>
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/login/login.css">
   <script src="../js/common.js"></script>
   <script src="../js/admin/admin.js"></script>
 </head>
 <body>
-  <div id="admin-login-page">
+  <div class="auth-topbar">
+    <a href="../pages/homepage.html" class="auth-back-link">&larr; Back to Box Office</a>
+    <button type="button" class="dark-mode-toggle" data-theme-toggle title="Toggle Dark Mode" aria-label="Toggle Dark Mode"></button>
+  </div>
+
+  <main id="admin-login-page" class="auth-shell">
     <div class="container">
       <div class="logo-section admin-logo-section">
-        <img src="../img/logo.jpg" alt="CineTix Admin">
+        <a href="../pages/homepage.html" class="logo-brand-link">
+          <img src="../img/logo.jpg" alt="CineTix Admin">
+        </a>
         <div class="admin-branding">
           <h1>CineTix Admin Console</h1>
         </div>
-        <p>Administrative Management Portal</p>
+        <p>Theater Operations &amp; Box-Office Management</p>
       </div>
 
       <div class="auth-container card admin-container">
         <div class="auth-header">
-          <h1>Administrator Sign In</h1>
-          <p>Enter your administrator credentials to manage catalog &amp; bookings</p>
+          <h2>Administrator Sign In</h2>
+          <p>Enter your administrator credentials to manage catalog, schedules &amp; bookings</p>
         </div>
 
         <form id="admin-login-form">
@@ -46,7 +52,7 @@
         </div>
       </div>
     </div>
-  </div>
+  </main>
 
   <script>
     document.getElementById('admin-login-form').addEventListener('submit', async function (e) {
@@ -54,6 +60,7 @@
       const username = document.getElementById('admin-username').value.trim();
       const password = document.getElementById('admin-password').value;
       const btn = document.getElementById('admin-submit-btn');
+      if (btn.disabled) return;
 
       if (!username || !password) {
         window.showToast('Username and password are required', 'warning');

@@ -27,16 +27,38 @@
   }
 
   function initTabs() {
-    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabBtns = Array.from(document.querySelectorAll('.tab-btn'));
     const tabContents = document.querySelectorAll('.tab-content');
+    if (!tabBtns.length) return;
 
-    tabBtns.forEach(function (btn) {
+    function activateTab(btn) {
+      const target = btn.getAttribute('data-tab');
+      tabBtns.forEach(function (b) {
+        const isActive = b === btn;
+        b.classList.toggle('active', isActive);
+        b.setAttribute('aria-selected', String(isActive));
+        b.setAttribute('tabindex', isActive ? '0' : '-1');
+      });
+      tabContents.forEach(function (c) {
+        c.classList.toggle('active', c.id === target + '-tab');
+      });
+    }
+
+    tabBtns.forEach(function (btn, idx) {
+      btn.setAttribute('role', 'tab');
+      btn.setAttribute('aria-selected', String(btn.classList.contains('active')));
+      btn.setAttribute('tabindex', btn.classList.contains('active') ? '0' : '-1');
       btn.addEventListener('click', function () {
-        const target = btn.getAttribute('data-tab');
-        tabBtns.forEach(function (b) { b.classList.remove('active'); });
-        tabContents.forEach(function (c) { c.classList.remove('active'); });
-        btn.classList.add('active');
-        document.getElementById(target + '-tab')?.classList.add('active');
+        activateTab(btn);
+      });
+      btn.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+          e.preventDefault();
+          const dir = e.key === 'ArrowRight' ? 1 : -1;
+          const next = tabBtns[(idx + dir + tabBtns.length) % tabBtns.length];
+          activateTab(next);
+          next.focus();
+        }
       });
     });
   }
@@ -45,18 +67,36 @@
     return items.map(function (item) {
       return (
         '<div class="amenity-card">' +
-        (item.icon ? '<div class="amenity-icon"><i class="' + item.icon + '"></i></div>' : '') +
+        (item.icon ? '<div class="amenity-icon"><i class="' + item.icon + '" aria-hidden="true"></i></div>' : '') +
         '<div><h4>' + esc(item.title) + '</h4><p>' + esc(item.desc) + '</p></div>' +
         '</div>'
       );
     }).join('');
   }
 
+  function renderNotFoundState(message) {
+    const root = document.querySelector('.theater-detail-container');
+    if (!root) return;
+    const esc = window.CineTicket.escapeHtml;
+    root.innerHTML =
+      '<div class="detail-card empty-context-card">' +
+      '<h2>Theater Not Found</h2>' +
+      '<p>' + esc(message || 'The requested partner cinema could not be located.') + '</p>' +
+      '<a href="theater.html" class="btn-primary">Browse All Theaters</a>' +
+      '</div>';
+  }
+
   function renderTheaterPage(theater) {
     const CT = window.CineTicket;
     const esc = CT.escapeHtml;
     const theaterId = parseInt(theater.theater_code, 10) || 1;
-    const vrHref = '3d-model.html?theater_code=' + encodeURIComponent(theaterId);
+    const movies = Array.isArray(theater.movies) ? theater.movies : [];
+    const defaultMovieCode = movies.length > 0 ? movies[0].movie_code : 1;
+    const vrParams = new URLSearchParams({
+      movie_code: String(defaultMovieCode),
+      theater_code: String(theaterId),
+    });
+    const vrHref = '3d-model.html?' + vrParams.toString();
     const amenities = (theater.amenity || '')
       .split(',')
       .map(function (a) { return a.trim(); })
@@ -79,15 +119,15 @@
         '<div class="theater-subtitle">Immersive sight, sound, and reserved recliner comfort</div>' +
         '<div class="theater-rating-hero">' +
         '<div class="stars">' + CT.renderStarIcons(theater.star) + '</div>' +
-        '<span>' + esc(theater.star) + '/5 (' + esc(formatReviewCount(theater.reviews)) + ')</span>' +
+        '<span class="tabular-nums">' + esc(theater.star) + '/5 (' + esc(formatReviewCount(theater.reviews)) + ')</span>' +
         '</div>' +
         '<div class="theater-address-hero">' +
-        '<i class="fas fa-map-marker-alt"></i>' +
+        '<i class="fas fa-map-marker-alt" aria-hidden="true"></i>' +
         '<span>' + esc(theater.address) + (theater.distance ? ' • ' + esc(theater.distance) : '') + '</span>' +
         '</div>' +
         '<div class="hero-actions">' +
-        '<a href="#now-showing-section" class="btn-primary"><i class="fas fa-ticket-alt"></i> Browse Showtimes</a>' +
-        '<button type="button" class="btn-secondary" id="hero-vr-btn"><i class="fas fa-vr-cardboard"></i> 3D Auditorium Tour</button>' +
+        '<a href="#now-showing-section" class="btn-primary"><i class="fas fa-ticket-alt" aria-hidden="true"></i> Browse Showtimes</a>' +
+        '<button type="button" class="btn-secondary" id="hero-vr-btn"><i class="fas fa-vr-cardboard" aria-hidden="true"></i> 3D Auditorium Tour</button>' +
         '</div>' +
         '</div>';
 
@@ -106,8 +146,8 @@
       ].map(function (item) {
         return (
           '<div class="quick-info-card detail-card">' +
-          '<div class="info-icon"><i class="' + item.icon + '"></i></div>' +
-          '<div class="info-details"><h4>' + esc(item.value) + '</h4><p>' + esc(item.label) + '</p></div>' +
+          '<div class="info-icon"><i class="' + item.icon + '" aria-hidden="true"></i></div>' +
+          '<div class="info-details"><h4 class="tabular-nums">' + esc(item.value) + '</h4><p>' + esc(item.label) + '</p></div>' +
           '</div>'
         );
       }).join('');
@@ -115,25 +155,26 @@
 
     const moviesList = document.getElementById('movies-list');
     if (moviesList) {
-      const movies = Array.isArray(theater.movies) ? theater.movies : [];
       moviesList.innerHTML = !movies.length
-        ? '<p>Schedule updating — check back soon for upcoming screenings.</p>'
+        ? '<div class="grid-empty-state"><p>Schedule updating — check back soon for upcoming screenings.</p></div>'
         : movies.map(function (movie) {
             const price = movie.money !== undefined ? '$' + parseFloat(movie.money).toFixed(2) : '$39.00';
             const bookingHref = 'booking3.html?movie_code=' + encodeURIComponent(movie.movie_code) + '&theater_code=' + encodeURIComponent(theaterId);
             return (
-              '<div class="movie-card detail-card schedule-card">' +
-              '<img src="' + esc(CT.resolveAssetUrl(movie.img)) + '" alt="' + esc(movie.movie_name) + '">' +
+              '<article class="movie-card detail-card schedule-card">' +
+              '<div class="schedule-poster-wrap">' +
+              '<img src="' + esc(CT.resolveAssetUrl(movie.img)) + '" alt="' + esc(movie.movie_name) + '" loading="lazy">' +
+              '</div>' +
               '<div class="schedule-card-body">' +
               '<h3>' + esc(movie.movie_name) + '</h3>' +
               '<div class="schedule-card-meta">' +
-              '<span><i class="fas fa-film"></i> ' + esc(movie.movie_type) + '</span>' +
-              '<span><i class="fas fa-clock"></i> ' + esc(movie.times) + '</span>' +
+              '<span><i class="fas fa-film" aria-hidden="true"></i> ' + esc(movie.movie_type) + '</span>' +
+              '<span><i class="fas fa-clock" aria-hidden="true"></i> ' + esc(movie.times) + '</span>' +
               '</div>' +
-              '<div class="schedule-card-price">' + esc(String(movie.daily_showtimes || 4)) + ' showtimes daily • ' + esc(price) + '</div>' +
+              '<div class="schedule-card-price tabular-nums">' + esc(String(movie.daily_showtimes || 4)) + ' showtimes daily • ' + esc(price) + '</div>' +
               '<a href="' + esc(bookingHref) + '" class="btn-primary schedule-book-btn">Book Seats</a>' +
               '</div>' +
-              '</div>'
+              '</article>'
             );
           }).join('');
     }
@@ -149,9 +190,9 @@
     const techGrid = document.getElementById('tech-specs-grid');
     if (techGrid) {
       techGrid.innerHTML = renderAmenityCards([
-        { title: '4K RGB Laser Projection', desc: 'HDR contrast ratio exceeding 1,000,000:1 on silver screens.' },
-        { title: 'Immersive Spatial Audio', desc: '64-channel object-oriented speaker arrays calibrated daily.' },
-        { title: 'Acoustic Isolation', desc: 'THX-grade wall baffling eliminates cross-auditorium bleed.' },
+        { icon: 'fas fa-tv', title: '4K RGB Laser Projection', desc: 'HDR contrast ratio exceeding 1,000,000:1 on silver screens.' },
+        { icon: 'fas fa-volume-up', title: 'Immersive Spatial Audio', desc: '64-channel object-oriented speaker arrays calibrated daily.' },
+        { icon: 'fas fa-layer-group', title: 'Acoustic Isolation', desc: 'THX-grade wall baffling eliminates cross-auditorium bleed.' },
       ], esc);
     }
 
@@ -192,7 +233,7 @@
         { d: 'Saturday', h: '09:00 AM - 12:00 AM', idx: 6 },
         { d: 'Sunday', h: '09:00 AM - 11:00 PM', idx: 0 },
       ].map(function (row) {
-        return '<div class="detail-list-row' + (row.idx === todayIdx ? ' is-today' : '') + '"><span>' + row.d + '</span><span>' + row.h + '</span></div>';
+        return '<div class="detail-list-row tabular-nums' + (row.idx === todayIdx ? ' is-today' : '') + '"><span>' + row.d + '</span><span>' + row.h + '</span></div>';
       }).join('');
     }
 
@@ -203,16 +244,16 @@
         { label: 'Student Pass (STUDENT30)', price: '$34.00' },
         { label: 'Group 5+ Tickets (30% Off)', price: '$27.30' },
       ].map(function (tier) {
-        return '<div class="detail-list-row bordered"><span>' + esc(tier.label) + '</span><strong>' + esc(tier.price) + '</strong></div>';
+        return '<div class="detail-list-row bordered tabular-nums"><span>' + esc(tier.label) + '</span><strong>' + esc(tier.price) + '</strong></div>';
       }).join('');
     }
 
     const contactEl = document.getElementById('contact-info');
     if (contactEl) {
       contactEl.innerHTML =
-        '<p class="contact-line"><i class="fas fa-phone"></i> +60 17-607 3401</p>' +
-        '<p class="contact-line"><i class="fas fa-envelope"></i> lijiaqi0807@gmail.com</p>' +
-        '<p class="contact-line"><i class="fas fa-map-pin"></i> ' + esc(theater.address) + '</p>';
+        '<p class="contact-line"><i class="fas fa-phone" aria-hidden="true"></i> +60 17-607 3401</p>' +
+        '<p class="contact-line"><i class="fas fa-envelope" aria-hidden="true"></i> lijiaqi0807@gmail.com</p>' +
+        '<p class="contact-line"><i class="fas fa-map-pin" aria-hidden="true"></i> ' + esc(theater.address) + '</p>';
     }
 
     const locationEl = document.getElementById('location-section');
@@ -221,7 +262,7 @@
       locationEl.innerHTML =
         '<div class="detail-card location-card">' +
         '<div><h3>' + esc(theater.theater_name) + '</h3><p>' + esc(theater.address) + '</p></div>' +
-        '<a href="https://www.google.com/maps/search/?api=1&query=' + mapQuery + '" target="_blank" rel="noopener noreferrer" class="btn-primary"><i class="fas fa-directions"></i> Open in Google Maps</a>' +
+        '<a href="https://www.google.com/maps/search/?api=1&query=' + mapQuery + '" target="_blank" rel="noopener noreferrer" class="btn-primary"><i class="fas fa-directions" aria-hidden="true"></i> Open in Google Maps</a>' +
         '</div>';
     }
 
@@ -249,7 +290,7 @@
         '<div class="detail-card vr-tour-card">' +
         '<h3>Interactive 3D Auditorium Preview</h3>' +
         '<p>Inspect sightlines from every row before locking in your seats.</p>' +
-        '<a href="' + esc(vrHref) + '" class="btn-primary vr-launch-link"><i class="fas fa-vr-cardboard"></i> Launch 3D Seat Preview</a>' +
+        '<a href="' + esc(vrHref) + '" class="btn-primary vr-launch-link"><i class="fas fa-vr-cardboard" aria-hidden="true"></i> Launch 3D Seat Preview</a>' +
         '</div>';
     }
   }
@@ -266,6 +307,7 @@
         renderTheaterPage(payload.data);
       } else {
         window.showToast(payload.message || 'Theater not found', 'error');
+        renderNotFoundState(payload.message);
       }
     } catch (_) {
       window.showToast('Failed to load theater details', 'error');

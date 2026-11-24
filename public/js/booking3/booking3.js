@@ -1,5 +1,5 @@
 /**
- * Interactive Seat Selection & Screening Schedule Controller
+ * Interactive Seat Selection, Keyboard Matrix Navigation & Screening Schedule Controller
  */
 (function () {
   'use strict';
@@ -11,6 +11,7 @@
 
   const state = {
     movieCode: '1',
+    movieValid: true,
     theaterCode: '1',
     theaterName: 'Cinemark Premium',
     unitPrice: 39.0,
@@ -29,33 +30,93 @@
     );
   }
 
+  function updateSeatAria(seatEl) {
+    const code = seatEl.dataset.seat || '';
+    const isVip = seatEl.classList.contains('vip');
+    const isReserved = seatEl.classList.contains('reserved');
+    const isSelected = seatEl.classList.contains('selected');
+    const statusText = isReserved ? 'Reserved' : (isSelected ? 'Selected' : 'Available');
+    seatEl.setAttribute('aria-pressed', String(isSelected));
+    seatEl.setAttribute('aria-disabled', String(isReserved));
+    seatEl.setAttribute(
+      'aria-label',
+      'Seat ' + code + (isVip ? ', Prime VIP Row' : ', Standard Row') + ', ' + statusText
+    );
+  }
+
+  function focusSeatByRowCol(rowIdx, colNum) {
+    const clampedRow = Math.max(0, Math.min(ROWS.length - 1, rowIdx));
+    const clampedCol = Math.max(1, Math.min(SEATS_PER_ROW, colNum));
+    const targetCode = ROWS[clampedRow] + clampedCol;
+    const targetEl = document.querySelector('.seat[data-seat="' + targetCode + '"]');
+    if (targetEl) targetEl.focus();
+  }
+
   function buildSeatGrid() {
     const container = document.getElementById('seat-grid-rows');
     if (!container) return;
 
     container.innerHTML = '';
-    ROWS.forEach(function (rowLetter) {
+    ROWS.forEach(function (rowLetter, rowIdx) {
       const rowEl = document.createElement('div');
       rowEl.className = 'seat-row';
+      rowEl.setAttribute('role', 'group');
+      rowEl.setAttribute('aria-label', 'Row ' + rowLetter + (VIP_ROWS.has(rowLetter) ? ' Prime VIP' : ''));
 
-      const labelEl = document.createElement('span');
-      labelEl.className = 'row-label';
-      labelEl.textContent = rowLetter;
-      rowEl.appendChild(labelEl);
+      const leftLabel = document.createElement('span');
+      leftLabel.className = 'row-label';
+      leftLabel.textContent = rowLetter;
+      leftLabel.setAttribute('aria-hidden', 'true');
+      rowEl.appendChild(leftLabel);
 
       for (let num = 1; num <= SEATS_PER_ROW; num++) {
         const seatCode = rowLetter + num;
-        const seatEl = document.createElement('div');
-        seatEl.className = 'seat' + (VIP_ROWS.has(rowLetter) ? ' vip' : '');
+        const seatEl = document.createElement('button');
+        seatEl.type = 'button';
+        seatEl.className =
+          'seat tabular-nums' +
+          (VIP_ROWS.has(rowLetter) ? ' vip' : '') +
+          (num === 3 || num === 9 ? ' seat-aisle-right' : '');
         seatEl.dataset.seat = seatCode;
-        seatEl.title = 'Seat ' + seatCode + (VIP_ROWS.has(rowLetter) ? ' (Prime Row)' : '');
+        seatEl.textContent = seatCode;
+        seatEl.title = 'Seat ' + seatCode + (VIP_ROWS.has(rowLetter) ? ' (Prime VIP Row)' : '');
+        updateSeatAria(seatEl);
+
         seatEl.addEventListener('click', function () {
-          if (!state.loadingSeats && !seatEl.classList.contains('reserved')) {
-            toggleSeatSelection(seatCode, seatEl);
+          if (!state.movieValid || state.loadingSeats || seatEl.classList.contains('reserved')) return;
+          toggleSeatSelection(seatCode, seatEl);
+        });
+
+        seatEl.addEventListener('keydown', function (e) {
+          if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            focusSeatByRowCol(rowIdx, num + 1);
+          } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            focusSeatByRowCol(rowIdx, num - 1);
+          } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            focusSeatByRowCol(rowIdx + 1, num);
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            focusSeatByRowCol(rowIdx - 1, num);
+          } else if (e.key === 'Home') {
+            e.preventDefault();
+            focusSeatByRowCol(rowIdx, 1);
+          } else if (e.key === 'End') {
+            e.preventDefault();
+            focusSeatByRowCol(rowIdx, SEATS_PER_ROW);
           }
         });
+
         rowEl.appendChild(seatEl);
       }
+
+      const rightLabel = document.createElement('span');
+      rightLabel.className = 'row-label row-label-right';
+      rightLabel.textContent = rowLetter;
+      rightLabel.setAttribute('aria-hidden', 'true');
+      rowEl.appendChild(rightLabel);
 
       container.appendChild(rowEl);
     });
@@ -92,9 +153,13 @@
     dates.forEach(function (entry) {
       const d = entry.dateObj;
       const iso = entry.iso;
-      const item = document.createElement('div');
-      item.className = 'date-item' + (iso === activeIso ? ' active' : '');
+      const isSelected = iso === activeIso;
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'date-item tabular-nums' + (isSelected ? ' active' : '');
       item.dataset.isoDate = iso;
+      item.setAttribute('aria-pressed', String(isSelected));
+      item.setAttribute('aria-label', dayNames[d.getDay()] + ', ' + monthNames[d.getMonth()] + ' ' + d.getDate());
       item.innerHTML =
         '<span class="date-day">' + dayNames[d.getDay()] + '</span>' +
         '<span class="date-date">' + d.getDate() + '</span>' +
@@ -102,8 +167,12 @@
 
       item.addEventListener('click', function () {
         if (state.date === iso) return;
-        dateContainer.querySelectorAll('.date-item').forEach(function (el) { el.classList.remove('active'); });
+        dateContainer.querySelectorAll('.date-item').forEach(function (el) {
+          el.classList.remove('active');
+          el.setAttribute('aria-pressed', 'false');
+        });
         item.classList.add('active');
+        item.setAttribute('aria-pressed', 'true');
         state.date = iso;
         loadOccupiedSeats([]);
       });
@@ -125,14 +194,20 @@
     }
 
     slots.forEach(function (slot) {
-      if (slot.classList.contains('active')) {
+      const isAct = slot.classList.contains('active');
+      slot.setAttribute('aria-pressed', String(isAct));
+      if (isAct) {
         state.time = slot.textContent.trim();
       }
       slot.addEventListener('click', function () {
         const chosen = slot.textContent.trim();
         if (state.time === chosen) return;
-        slots.forEach(function (s) { s.classList.remove('active'); });
+        slots.forEach(function (s) {
+          s.classList.remove('active');
+          s.setAttribute('aria-pressed', 'false');
+        });
         slot.classList.add('active');
+        slot.setAttribute('aria-pressed', 'true');
         state.time = chosen;
         loadOccupiedSeats([]);
       });
@@ -141,17 +216,29 @@
 
   async function loadMovieDetails() {
     const CT = window.CineTicket;
+    const esc = CT.escapeHtml;
     try {
       const payload = await CT.fetchJson('/index.php/movie/movies/getMovieByCode?movie_code=' + encodeURIComponent(state.movieCode));
       if (!payload.success || !payload.data) {
+        state.movieValid = false;
         window.showToast(payload.message || 'Movie not found', 'error');
+        const movieInfo = document.querySelector('.movie-info');
+        if (movieInfo) {
+          movieInfo.innerHTML =
+            '<div class="movie-details">' +
+            '<h1>Movie Not Found</h1>' +
+            '<p class="muted-note">Please return to the Movies catalog and choose an active screening.</p>' +
+            '<a href="homepage.html" class="inline-action-link">Return to Movies Catalog &rarr;</a>' +
+            '</div>';
+        }
+        updateSummaryPanel();
         return;
       }
 
+      state.movieValid = true;
       const movie = payload.data;
       state.unitPrice = parseFloat(movie.money) || 39.0;
 
-      const esc = CT.escapeHtml;
       const movieInfo = document.querySelector('.movie-info');
       if (movieInfo) {
         movieInfo.innerHTML =
@@ -159,11 +246,11 @@
           '<div class="movie-details">' +
           '<h1>' + esc(movie.movie_name) + '</h1>' +
           '<div class="movie-meta">' +
-          '<span class="meta-item"><i class="fas fa-film"></i> ' + esc(movie.movie_type) + '</span>' +
-          '<span class="meta-item"><i class="fas fa-clock"></i> ' + esc(movie.times) + '</span>' +
-          '<span class="meta-item"><i class="fas fa-tag"></i> $' + state.unitPrice.toFixed(2) + ' / ticket</span>' +
+          '<span class="meta-item"><i class="fas fa-film" aria-hidden="true"></i> ' + esc(movie.movie_type) + '</span>' +
+          '<span class="meta-item"><i class="fas fa-clock" aria-hidden="true"></i> ' + esc(movie.times) + '</span>' +
+          '<span class="meta-item tabular-nums"><i class="fas fa-tag" aria-hidden="true"></i> $' + state.unitPrice.toFixed(2) + ' / seat</span>' +
           '</div>' +
-          '<div class="movie-rating"><i class="fas fa-star"></i> ' + esc(movie.star) + ' / 5.0</div>' +
+          '<div class="movie-rating tabular-nums"><i class="fas fa-star" aria-hidden="true"></i> ' + esc(movie.star) + ' / 5.0</div>' +
           '</div>';
       }
 
@@ -234,12 +321,13 @@
   }
 
   async function loadOccupiedSeats(restoreList) {
-    if (!state.movieCode || !state.theaterCode || !state.date || !state.time) return;
+    if (!state.movieValid || !state.movieCode || !state.theaterCode || !state.date || !state.time) return;
 
     state.selectedSeats = [];
     state.loadingSeats = true;
     document.querySelectorAll('.seat[data-seat]').forEach(function (seatEl) {
       seatEl.classList.remove('selected');
+      updateSeatAria(seatEl);
     });
     updateSummaryPanel();
 
@@ -276,6 +364,7 @@
         const isRestored = !isReserved && desiredRestore.has(code);
         seatEl.classList.toggle('reserved', isReserved);
         seatEl.classList.toggle('selected', isRestored);
+        updateSeatAria(seatEl);
         if (isRestored) {
           state.selectedSeats.push(code);
         }
@@ -306,6 +395,16 @@
       sortSeatCodes(state.selectedSeats);
       seatEl.classList.add('selected');
     }
+    updateSeatAria(seatEl);
+    updateSummaryPanel();
+  }
+
+  function clearSelectedSeats() {
+    state.selectedSeats = [];
+    document.querySelectorAll('.seat.selected[data-seat]').forEach(function (seatEl) {
+      seatEl.classList.remove('selected');
+      updateSeatAria(seatEl);
+    });
     updateSummaryPanel();
   }
 
@@ -314,7 +413,10 @@
     const tagsContainer = document.querySelector('.seat-tags');
     if (tagsContainer) {
       tagsContainer.innerHTML = state.selectedSeats
-        .map(function (code) { return '<div class="seat-tag">' + code + '</div>'; })
+        .map(function (code) {
+          const isVip = VIP_ROWS.has(code[0]);
+          return '<div class="seat-tag' + (isVip ? ' vip-tag' : '') + '">' + code + '</div>';
+        })
         .join('');
     }
     document.getElementById('selectedSeatsInfo')?.classList.toggle('active', count > 0);
@@ -322,12 +424,14 @@
     const theaterEl = document.getElementById('summary-theater');
     const datetimeEl = document.getElementById('summary-datetime');
     const countEl = document.getElementById('summary-count');
+    const unitEl = document.getElementById('summary-unit-price');
     const subtotalEl = document.getElementById('summary-price');
     const proceedBtn = document.querySelector('.proceed-button');
 
     if (theaterEl) theaterEl.textContent = state.theaterName;
     if (datetimeEl) datetimeEl.textContent = state.date + ' • ' + state.time;
     if (countEl) countEl.textContent = String(count);
+    if (unitEl) unitEl.textContent = '$' + state.unitPrice.toFixed(2);
 
     const pricing = window.CineTicket.calculateCheckoutPricing(state.unitPrice, count, 0);
     if (subtotalEl) {
@@ -335,20 +439,25 @@
         (pricing.groupDiscount > 0 ? ' (30% group savings)' : '');
     }
     if (proceedBtn) {
-      proceedBtn.disabled = count === 0 || !state.theaterCode;
+      proceedBtn.disabled = !state.movieValid || count === 0 || !state.theaterCode;
     }
   }
 
-  window.viewSeatsInVR = function () {
+  function viewSeatsInVR() {
     const params = new URLSearchParams({
       movie_code: state.movieCode,
       theater_code: state.theaterCode || '1',
     });
+    if (state.date) params.set('date', state.date);
+    if (state.time) params.set('time', state.time);
     if (state.selectedSeats.length) {
       params.set('seat', state.selectedSeats[0]);
+      params.set('seats', state.selectedSeats.join(','));
     }
     window.location.href = '3d-model.html?' + params.toString();
-  };
+  }
+
+  window.viewSeatsInVR = viewSeatsInVR;
 
   document.addEventListener('DOMContentLoaded', async function () {
     const urlParams = new URLSearchParams(window.location.search);
@@ -364,6 +473,9 @@
     buildSeatGrid();
     buildDateSelector(initialDate);
     bindTimeSlots(initialTime);
+
+    document.querySelector('.vr-button')?.addEventListener('click', viewSeatsInVR);
+    document.getElementById('clear-seats-btn')?.addEventListener('click', clearSelectedSeats);
 
     document.querySelector('.proceed-button')?.addEventListener('click', function () {
       if (!state.selectedSeats.length) {

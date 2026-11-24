@@ -3,30 +3,38 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign In | Alpha Striker 2.0</title>
+  <title>Sign In | CineTix Box Office</title>
   <link rel="stylesheet" href="css/common/header.css">
   <link rel="stylesheet" href="css/login/login.css">
   <script src="js/common.js"></script>
   <script src="js/login/login.js" defer></script>
 </head>
 <body>
+  <div class="auth-topbar">
+    <a href="pages/homepage.html" class="auth-back-link">&larr; Back to Box Office</a>
+    <button type="button" class="dark-mode-toggle" data-theme-toggle title="Toggle Dark Mode" aria-label="Toggle Dark Mode"></button>
+  </div>
+
   <!-- Sign In View -->
-  <div id="login-page">
+  <main id="login-page" class="auth-shell">
     <div class="container">
       <div class="logo-section">
-        <a href="pages/homepage.html"><img src="img/logo.jpg" alt="CineTix Logo"></a>
-        <p>Your Ultimate Movie Experience</p>
+        <a href="pages/homepage.html" class="logo-brand-link">
+          <img src="img/logo.jpg" alt="CineTix Logo">
+          <span>CineTix</span>
+        </a>
+        <p>Your Desktop Cinema Box Office</p>
       </div>
 
       <div class="auth-container card">
         <div class="auth-header">
           <h1>Welcome Back</h1>
-          <p>Sign in to continue your movie journey</p>
+          <p>Sign in to manage bookings, member promos, and digital tickets</p>
         </div>
 
-        <form id="login-form" onsubmit="loginUser(event)">
+        <form id="login-form">
           <div class="form-group">
-            <label for="email" class="form-label">Email</label>
+            <label for="email" class="form-label">Email Address</label>
             <input type="email" id="email" class="form-input" placeholder="Enter your email" required autocomplete="email">
           </div>
 
@@ -47,7 +55,7 @@
         </form>
 
         <div class="auth-footer">
-          <p>Don't have an account? <a href="login.html?mode=register" class="auth-link" onclick="showPage('register-page'); return false;">Create Account</a></p>
+          <p>Don't have an account? <a href="login.html?mode=register" class="auth-link" data-auth-switch="register-page">Create Account</a></p>
           <p>Browse without signing in: <a href="pages/homepage.html" class="auth-link">Continue as Guest</a></p>
           <p>Administrator access: <a href="admin/login.html" class="auth-link">Admin Console</a></p>
         </div>
@@ -55,13 +63,13 @@
         <div class="social-buttons">
           <p>Or continue with</p>
           <div class="social-icons">
-            <button type="button" class="social-icon" onclick="showToast('Please use email &amp; password login in this demo environment.', 'info')" aria-label="Google">
+            <button type="button" class="social-icon" aria-label="Continue with Google">
               <img src="img/google.png" alt="Google">
             </button>
-            <button type="button" class="social-icon" onclick="showToast('Please use email &amp; password login in this demo environment.', 'info')" aria-label="GitHub">
+            <button type="button" class="social-icon" aria-label="Continue with GitHub">
               <img src="img/github.png" alt="GitHub">
             </button>
-            <button type="button" class="social-icon" onclick="showToast('Please use email &amp; password login in this demo environment.', 'info')" aria-label="Apple">
+            <button type="button" class="social-icon" aria-label="Continue with Apple">
               <img src="img/apple.png" alt="Apple">
             </button>
           </div>
@@ -72,41 +80,44 @@
         <p>&copy; 2026 Alpha Striker 2.0 (CineTix). All rights reserved.</p>
       </div>
     </div>
-  </div>
+  </main>
 
   <!-- Create Account View -->
-  <div id="register-page" class="is-hidden">
+  <section id="register-page" class="auth-shell is-hidden" aria-label="Create Account">
     <div class="container">
       <div class="logo-section">
-        <a href="pages/homepage.html" class="logo-brand-link"><h1>CineTix</h1></a>
-        <p>Your Ultimate Movie Experience</p>
+        <a href="pages/homepage.html" class="logo-brand-link">
+          <img src="img/logo.jpg" alt="CineTix Logo">
+          <span>CineTix</span>
+        </a>
+        <p>Your Desktop Cinema Box Office</p>
       </div>
 
       <div class="auth-container card">
         <div class="auth-header">
-          <h1>Create Account</h1>
-          <p>Sign up to start your movie journey</p>
+          <h2>Create Account</h2>
+          <p>Register to save digital tickets and unlock member offers</p>
         </div>
 
-        <form id="register-form" onsubmit="registerUser(event)">
+        <form id="register-form">
           <div class="form-group">
             <label for="name" class="form-label">Full Name</label>
-            <input type="text" id="name" class="form-input" placeholder="Enter your full name" required maxlength="50">
+            <input type="text" id="name" class="form-input" placeholder="Enter your full name" required maxlength="50" autocomplete="name">
           </div>
 
           <div class="form-group">
-            <label for="reg-email" class="form-label">Email</label>
-            <input type="email" id="reg-email" class="form-input" placeholder="Enter your email" required maxlength="100">
+            <label for="reg-email" class="form-label">Email Address</label>
+            <input type="email" id="reg-email" class="form-input" placeholder="Enter your email" required maxlength="100" autocomplete="email">
           </div>
 
           <div class="form-group">
             <label for="reg-password" class="form-label">Password</label>
-            <input type="password" id="reg-password" class="form-input" placeholder="At least 6 characters" required minlength="6">
+            <input type="password" id="reg-password" class="form-input" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password">
           </div>
 
           <div class="form-group">
             <label for="confirm-password" class="form-label">Confirm Password</label>
-            <input type="password" id="confirm-password" class="form-input" placeholder="Confirm your password" required minlength="6">
+            <input type="password" id="confirm-password" class="form-input" placeholder="Confirm your password" required minlength="6" autocomplete="new-password">
           </div>
 
           <div class="terms-check">
@@ -118,7 +129,7 @@
         </form>
 
         <div class="auth-footer">
-          <p>Already have an account? <a href="login.html?mode=login" class="auth-link" onclick="showPage('login-page'); return false;">Sign In</a></p>
+          <p>Already have an account? <a href="login.html?mode=login" class="auth-link" data-auth-switch="login-page">Sign In</a></p>
         </div>
       </div>
 
@@ -126,6 +137,6 @@
         <p>&copy; 2026 Alpha Striker 2.0 (CineTix). All rights reserved.</p>
       </div>
     </div>
-  </div>
+  </section>
 </body>
 </html>

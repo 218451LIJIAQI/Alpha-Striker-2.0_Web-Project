@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Add User | CineTix Admin</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../css/common/header.css">
   <link rel="stylesheet" href="../css/admin/admin.css">
   <script src="../js/common.js"></script>
@@ -16,7 +15,7 @@
   <main class="admin-content narrow">
     <div class="page-header">
       <div>
-        <h1><i class="fas fa-user-plus"></i> Add Registered User</h1>
+        <h1><i class="fas fa-user-plus" aria-hidden="true"></i> Add Registered User</h1>
         <p>Create a new customer account with bcrypt password hashing.</p>
       </div>
     </div>
@@ -25,23 +24,23 @@
       <div class="form-grid">
         <div class="form-group">
           <label for="user_name" class="form-label">Display Name *</label>
-          <input type="text" id="user_name" name="user_name" class="form-input" placeholder="e.g. Jane Tan" required maxlength="50">
+          <input type="text" id="user_name" name="user_name" class="form-input" placeholder="e.g. Jane Tan" required maxlength="50" autocomplete="name">
         </div>
 
         <div class="form-group">
           <label for="email" class="form-label">Email Address *</label>
-          <input type="email" id="email" name="email" class="form-input" placeholder="jane@example.com" required maxlength="100">
+          <input type="email" id="email" name="email" class="form-input" placeholder="jane@example.com" required maxlength="100" autocomplete="email">
         </div>
 
         <div class="form-group full-width">
           <label for="login_pwd" class="form-label">Initial Password *</label>
-          <input type="password" id="login_pwd" name="login_pwd" class="form-input" placeholder="At least 6 characters" required minlength="6">
+          <input type="password" id="login_pwd" name="login_pwd" class="form-input" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password">
         </div>
       </div>
 
       <div class="form-actions">
         <a href="user.html" class="cancel-btn">Cancel</a>
-        <button type="submit" class="submit-btn"><i class="fas fa-save"></i> Create User</button>
+        <button type="submit" class="submit-btn"><i class="fas fa-save" aria-hidden="true"></i> Create User</button>
       </div>
     </form>
   </main>
@@ -57,7 +56,7 @@
           user_name: document.getElementById('user_name').value.trim(),
           email: document.getElementById('email').value.trim(),
           login_pwd: document.getElementById('login_pwd').value,
-        }, 'user.html', 'User created successfully', 'Failed to create user');
+        }, 'user.html', 'User created successfully', 'Failed to create user', e.submitter);
       });
     });
   </script>

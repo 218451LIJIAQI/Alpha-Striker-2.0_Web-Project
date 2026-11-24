@@ -13,11 +13,11 @@ class Seat extends ApiController
     {
         try {
             $movieCode   = $this->idParam('movie_code');
-            $theaterCode = $this->idParam('theater_code') ?: 1;
+            $theaterCode = $this->optionalIdWithDefault('theater_code', 1);
             $date        = $this->strParam('date');
             $time        = $this->strParam('time');
 
-            if ($movieCode <= 0 || $theaterCode <= 0 || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || $time === '') {
+            if ($movieCode <= 0 || $theaterCode <= 0 || !$this->isValidIsoDate($date) || $time === '') {
                 return $this->fail('Valid movie_code, theater_code, date (YYYY-MM-DD), and time are required');
             }
 
@@ -41,7 +41,7 @@ class Seat extends ApiController
         try {
             $data          = $this->payload();
             $movieCode     = $this->idParam('movie_code');
-            $theaterCode   = $this->idParam('theater_code') ?: 1;
+            $theaterCode   = $this->optionalIdWithDefault('theater_code', 1);
             $date          = $this->strParam('date');
             $time          = $this->strParam('time');
             $promoCode     = strtoupper($this->strParam('promo_code'));
@@ -55,7 +55,7 @@ class Seat extends ApiController
             if (
                 $movieCode <= 0 ||
                 $theaterCode <= 0 ||
-                !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) ||
+                !$this->isValidIsoDate($date) ||
                 $time === '' ||
                 $this->textLen($time) > 30 ||
                 empty($rawSeats)
