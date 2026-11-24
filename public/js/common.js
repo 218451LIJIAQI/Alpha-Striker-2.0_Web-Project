@@ -1,8 +1,8 @@
 /**
  * CineTix (Alpha Striker 2.0) — Shared Frontend Runtime
- * Centralizes path resolution, XSS-safe escaping, JSON API requests, server-synced user session state,
- * reversible light/dark theme switching, authoritative pricing/expiry helpers, toast notifications,
- * keyboard modal/dropdown dismissal (Escape), and shared header/footer/FAQ UI.
+ * Centralizes path resolution, XSS-safe escaping, calendar/email validation, JSON API requests,
+ * server-synced & multi-tab user session state, reversible light/dark theme switching,
+ * authoritative pricing/expiry helpers, toast notifications, keyboard Escape dismissal, and shared header/footer/FAQ UI.
  */
 (function () {
   'use strict';
@@ -10,6 +10,7 @@
   const SERVICE_FEE = 2.50;
   const GROUP_DISCOUNT_MIN_SEATS = 5;
   const GROUP_DISCOUNT_RATE = 0.30;
+  const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   function currentDepthPrefix() {
     const path = window.location.pathname || '';
@@ -55,6 +56,35 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  function toIsoDate(dateObj) {
+    const d = dateObj instanceof Date ? dateObj : new Date();
+    return (
+      d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0')
+    );
+  }
+
+  function todayIso() {
+    return toIsoDate(new Date());
+  }
+
+  function isValidIsoDate(value) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '').trim());
+    if (!m) return false;
+    const year = parseInt(m[1], 10);
+    const month = parseInt(m[2], 10);
+    const day = parseInt(m[3], 10);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+    const probe = new Date(year, month - 1, day);
+    return probe.getFullYear() === year && probe.getMonth() === month - 1 && probe.getDate() === day;
+  }
+
+  function isValidEmail(value) {
+    const str = String(value || '').trim();
+    return str.length > 0 && str.length <= 100 && EMAIL_PATTERN.test(str);
   }
 
   function formatStars(score) {
@@ -135,6 +165,12 @@
     return parsed;
   }
 
+  function dispatchAuthChange() {
+    if (typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('cinetix:authchange', { detail: AuthStore.getUser() }));
+    }
+  }
+
   let sessionSyncPromise = null;
 
   const AuthStore = {
@@ -166,12 +202,14 @@
       }
       localStorage.removeItem('pwd');
       localStorage.removeItem('email');
+      dispatchAuthChange();
     },
 
     clearLocal() {
       ['userToken', 'userId', 'userName', 'userEmail', 'email', 'pwd'].forEach(function (k) {
         localStorage.removeItem(k);
       });
+      dispatchAuthChange();
     },
 
     async syncSession() {
@@ -590,6 +628,19 @@
     });
   }
 
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('storage', function (event) {
+      if (!event) return;
+      if (event.key === 'darkMode' || event.key === null) {
+        applyTheme(localStorage.getItem('darkMode') === 'true');
+      }
+      if (event.key === null || ['userToken', 'userId', 'userName', 'userEmail'].includes(event.key)) {
+        renderHeader();
+        dispatchAuthChange();
+      }
+    });
+  }
+
   document.addEventListener('click', function (event) {
     if (event.target && typeof event.target.closest === 'function' && !event.target.closest('#user-profile-menu')) {
       const dd = document.getElementById('userDropdown');
@@ -649,13 +700,17 @@
     fetchJson: fetchJson,
     formatStars: formatStars,
     isCardExpiryValid: isCardExpiryValid,
+    isValidEmail: isValidEmail,
+    isValidIsoDate: isValidIsoDate,
     pageUrl: pageUrl,
     renderStarIcons: renderStarIcons,
     resolveAssetUrl: resolveAssetUrl,
     rootUrl: rootUrl,
     showToast: showToast,
     themeToggleSvgMarkup: themeToggleSvgMarkup,
+    todayIso: todayIso,
     toggleDarkMode: toggleDarkMode,
+    toIsoDate: toIsoDate,
   };
 
   window.toggleDarkMode = toggleDarkMode;

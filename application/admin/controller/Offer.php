@@ -25,22 +25,15 @@ class Offer extends BaseAdmin
                 return $this->ok([]);
             }
 
-            $links    = Db::table('movie_offer')->select();
-            $movieMap = [];
-            foreach ($links as $row) {
-                $oid = (int) $row['offer_code'];
-                $movieMap[$oid][] = (int) $row['movie_code'];
-            }
-
-            $userIds = array_values(array_unique(array_filter(array_column($offers, 'user_code'))));
-            $users   = !empty($userIds)
+            $movieMap = $this->mapRelationIds('movie_offer', 'offer_code', 'movie_code');
+            $userIds  = array_values(array_unique(array_filter(array_column($offers, 'user_code'))));
+            $users    = !empty($userIds)
                 ? Db::name('user')->where('user_code', 'in', $userIds)->column('user_code, user_name, email', 'user_code')
                 : [];
 
             foreach ($offers as &$o) {
                 $oid              = (int) $o['offer_code'];
                 $mCodes           = $movieMap[$oid] ?? [];
-                sort($mCodes);
                 $o['movie_codes'] = $mCodes;
                 $o['movie_count'] = count($mCodes);
                 $uCode            = !empty($o['user_code']) ? (int) $o['user_code'] : 0;
@@ -253,9 +246,9 @@ class Offer extends BaseAdmin
         }
 
         $ownerUserCode = null;
-        if (isset($data['user_code']) && $data['user_code'] !== '' && (int) $data['user_code'] > 0) {
-            $candidateUid = (int) $data['user_code'];
-            if (!Db::name('user')->where('user_code', $candidateUid)->find()) {
+        if (isset($data['user_code']) && $data['user_code'] !== '') {
+            $candidateUid = $this->parsePositiveInt($data['user_code']);
+            if ($candidateUid <= 0 || !Db::name('user')->where('user_code', $candidateUid)->find()) {
                 return [null, 'Selected exclusive member account does not exist'];
             }
             $ownerUserCode = $candidateUid;

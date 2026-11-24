@@ -84,9 +84,10 @@
             <div class="info-callout">
               <label for="gc-check-input"><strong>Check Gift Card Balance</strong></label>
               <div class="giftcard-balance-row">
-                <input type="text" id="gc-check-input" placeholder="Enter code (e.g. GC-CINE50)">
+                <input type="text" id="gc-check-input" placeholder="Enter code (e.g. GC-CINE50)" maxlength="32">
                 <button type="button" id="check-giftcard-btn" class="btn btn-primary">Check</button>
               </div>
+              <div id="gc-balance-result" class="giftcard-balance-result tabular-nums is-hidden" role="status" aria-live="polite"></div>
             </div>
           </div>
         </div>
@@ -153,6 +154,8 @@
       const noteEl = document.getElementById('gc-preview-note');
       const codeEl = document.getElementById('gc-preview-code');
       const themeLabelEl = document.getElementById('gc-preview-theme-label');
+      const checkInput = document.getElementById('gc-check-input');
+      const balanceResultEl = document.getElementById('gc-balance-result');
 
       const recipientInput = document.getElementById('gc-recipient');
       const emailInput = document.getElementById('gc-email');
@@ -165,6 +168,12 @@
         } catch (_) {
           return { 'GC-CINE50': 50 };
         }
+      }
+
+      function renderBalanceStatus(text, isOk) {
+        balanceResultEl.textContent = text;
+        balanceResultEl.classList.remove('is-hidden', 'success', 'error');
+        balanceResultEl.classList.add(isOk ? 'success' : 'error');
       }
 
       function syncPreview() {
@@ -198,7 +207,7 @@
         e.preventDefault();
         const rec = recipientInput.value.trim();
         const em = emailInput.value.trim();
-        if (!rec || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+        if (!rec || !window.CineTicket.isValidEmail(em)) {
           window.showToast('Please enter recipient name and a valid email address', 'warning');
           return;
         }
@@ -207,21 +216,33 @@
         ledger[newCode] = selectedAmount;
         localStorage.setItem('cinetixGiftCards', JSON.stringify(ledger));
         codeEl.textContent = newCode;
-        document.getElementById('gc-check-input').value = newCode;
+        checkInput.value = newCode;
+        renderBalanceStatus('Issued ' + newCode + ' — Active balance: $' + selectedAmount.toFixed(2), true);
         window.showToast('Issued $' + selectedAmount + ' e-Gift Card (' + newCode + ') for ' + rec + '!', 'success');
       });
 
-      document.getElementById('check-giftcard-btn').addEventListener('click', function () {
-        const queryCode = (document.getElementById('gc-check-input').value || '').trim().toUpperCase();
+      function checkBalance() {
+        const queryCode = (checkInput.value || '').trim().toUpperCase();
         if (!queryCode) {
           window.showToast('Enter a gift card code to check its balance', 'warning');
           return;
         }
         const ledger = loadLedger();
         if (ledger[queryCode] !== undefined) {
-          window.showToast('Card ' + queryCode + ' active balance: $' + Number(ledger[queryCode]).toFixed(2), 'success');
+          const msg = 'Card ' + queryCode + ' active balance: $' + Number(ledger[queryCode]).toFixed(2);
+          renderBalanceStatus(msg, true);
+          window.showToast(msg, 'success');
         } else {
+          renderBalanceStatus('Gift card code "' + queryCode + '" was not found.', false);
           window.showToast('Gift card code not found', 'error');
+        }
+      }
+
+      document.getElementById('check-giftcard-btn').addEventListener('click', checkBalance);
+      checkInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          checkBalance();
         }
       });
     });

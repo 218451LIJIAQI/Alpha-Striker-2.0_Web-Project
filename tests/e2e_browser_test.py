@@ -776,7 +776,116 @@ def run_e2e_suite() -> None:
         check_no_local_errors(driver, "Multi-viewport & 125%/150%/200% zoom checks", base_url)
         print("[PASS] E2E 10: Desktop viewports (1280x720..1920x1080) & 125%/150%/200% zoom zero horizontal clipping verified")
 
-        print("ALL 10 HEADLESS CHROMIUM E2E, ACCESSIBILITY, VIEWPORT/ZOOM & CONCURRENCY SUITES PASSED.")
+
+        # 11. Deep Remediation Contracts: Strict Integer/Scalar Guards, 72B Password Ceiling, Role-Isolated Logout,
+        #     Bidirectional Movie<->Offer Links, Expired Offer Filtering, Tampered Checkout Block, Batch Admin Actions & Dark Mode Contrast
+        bad_id_code, bad_id_body, _ = http_json(f"{raw_url}/index.php/movie/movies/getMovieByCode?movie_code=1abc")
+        assert_eq(bad_id_body["success"], False, "Mixed alphanumeric ID 1abc must be rejected")
+
+        arr_login_code, arr_login_body, _ = http_json(
+            f"{raw_url}/index.php/user/user/login",
+            method="POST",
+            payload={"email": ["array@injection.test"], "password": ["123456"]},
+        )
+        assert_eq(arr_login_code, 200, "JSON array scalar injection must return clean 200 validation response instead of 500")
+        assert_eq(arr_login_body["success"], False, "Array login rejected cleanly")
+
+        long_pwd_code, long_pwd_body, _ = http_json(
+            f"{raw_url}/index.php/user/user/register",
+            method="POST",
+            payload={"user_name": "LongPwd", "email": "longpwd@example.com", "login_pwd": "x" * 73},
+        )
+        assert_eq(long_pwd_body["success"], False, "Password exceeding 72 bcrypt bytes must be rejected")
+
+        # Role-isolated logout: sharing one session cookie between Admin and Customer must NOT wipe Admin when Customer logs out
+        _, adm_lbody, adm_lhdrs = http_json(
+            f"{raw_url}/index.php/admin/auth/login",
+            method="POST",
+            payload={"username": "admin", "password": "admin"},
+        )
+        shared_sid = extract_phpsessid(adm_lhdrs)
+        adm_token = adm_lbody["token"]
+        _, _, usr_lhdrs = http_json(
+            f"{raw_url}/index.php/user/user/login",
+            method="POST",
+            payload={"email": "218451@student.upm.edu.my", "password": "218451"},
+            headers={"Cookie": f"PHPSESSID={shared_sid}"},
+        )
+        shared_sid2 = extract_phpsessid(usr_lhdrs) or shared_sid
+        _, _, usr_out_hdrs = http_json(
+            f"{raw_url}/index.php/user/user/logout",
+            method="POST",
+            headers={"Cookie": f"PHPSESSID={shared_sid2}"},
+        )
+        shared_sid3 = extract_phpsessid(usr_out_hdrs) or shared_sid2
+        chk_code, chk_body, _ = http_json(
+            f"{raw_url}/index.php/admin/auth/checkAuth",
+            method="POST",
+            headers={"Cookie": f"PHPSESSID={shared_sid3}", "X-Admin-Token": adm_token},
+        )
+        assert_eq(chk_code, 200, "Customer logout must preserve active Admin session in same browser")
+        assert_eq(chk_body["success"], True, "Admin remains authenticated after customer logout")
+
+        # Create an expired offer via Admin API and verify public getOfferList filters it out while Admin index retains it
+        _, exp_create, _ = http_json(
+            f"{raw_url}/index.php/admin/offer/create",
+            method="POST",
+            payload={
+                "offer_title": "Past Holiday Deal",
+                "offer_type": "Weekday Specials",
+                "promo_code": "PAST2020",
+                "money": 8.0,
+                "offer_validity": "2020-01-01",
+                "img": "../img/offer/student_price.png",
+                "offer_description": "Historical expired promo.",
+                "movie_codes": [1],
+            },
+            headers={"Cookie": f"PHPSESSID={shared_sid3}", "X-Admin-Token": adm_token},
+        )
+        assert_eq(exp_create["success"], True, "Admin created expired offer for filtering test")
+        exp_offer_id = exp_create["data"]["offer_code"]
+        _, pub_offers, _ = http_json(f"{raw_url}/index.php/offer/offer/getOfferList")
+        assert_true(
+            all(o["promo_code"] != "PAST2020" for o in pub_offers["data"]),
+            "Expired offer PAST2020 leaked into public getOfferList!",
+        )
+
+        # Verify tampered/non-existent movie_code on pay.html disables Pay button and displays error alert
+        driver.set_window_size(1440, 900)
+        driver.get(f"{base_url}/pages/pay.html?movie_code=999&theater_code=1&date=2026-12-05&time=09%3A30+AM&seats=A1")
+        wait.until(lambda d: d.find_element(By.ID, "checkout-empty-state").is_displayed())
+        assert_true("Screening Unavailable" in driver.find_element(By.ID, "checkout-empty-state").text, "Tampered movie_code=999 must show Screening Unavailable")
+        assert_true(not driver.find_element(By.CSS_SELECTOR, ".pay-now-btn").is_enabled(), "Tampered movie_code=999 must disable Pay button")
+        driver.get_log("browser")  # Clear expected 404 from intentional movie_code=999 probe
+
+        # Verify Dark Mode WCAG AA contrast on primary CTA buttons (.pay-now-btn) & distance pill on theater.html
+        driver.get(f"{base_url}/pages/theater.html")
+        wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, ".theater-distance-pill")) >= 1)
+        driver.execute_script("if (!document.body.classList.contains('dark-mode')) window.toggleDarkMode();")
+        pill_contrast = driver.execute_script(WCAG_CONTRAST_JS, ".theater-distance-pill")
+        view_btn_contrast = driver.execute_script(WCAG_CONTRAST_JS, ".view-details")
+        assert_true(pill_contrast >= 4.5 and view_btn_contrast >= 4.5, f"Dark WCAG AA failed: pill={pill_contrast}, btn={view_btn_contrast}")
+        driver.execute_script("if (document.body.classList.contains('dark-mode')) window.toggleDarkMode();")
+
+        # Verify Admin batch checkbox selection + bulk delete on admin/offers.html removes PAST2020 cleanly
+        driver.get(f"{base_url}/admin/offers.html")
+        wait.until(lambda d: "PAST2020" in d.find_element(By.ID, "offers-tbody").text)
+        o_filter = driver.find_element(By.CSS_SELECTOR, '#offers-toolbar [data-role="filter"]')
+        driver.execute_script("arguments[0].value = 'expired'; arguments[0].dispatchEvent(new Event('change'));", o_filter)
+        wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, "#offers-tbody tr")) == 1)
+        driver.find_element(By.CSS_SELECTOR, f'#offers-tbody .row-check[value="{exp_offer_id}"]').click()
+        bulk_btn = driver.find_element(By.CSS_SELECTOR, '#offers-toolbar [data-role="bulk"]')
+        assert_true(bulk_btn.is_displayed(), "Bulk delete button should appear when row checkbox is checked")
+        bulk_btn.click()
+        driver.switch_to.alert.accept()
+        wait.until(lambda d: "No matching records" in d.find_element(By.ID, "offers-tbody").text)
+        driver.find_element(By.CSS_SELECTOR, '#offers-toolbar [data-role="reset"]').click()
+        wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, "#offers-tbody tr")) >= 5)
+
+        check_no_local_errors(driver, "Deep remediation contracts & batch admin actions", base_url)
+        print("[PASS] E2E 11: Scalar/ID/72B guards, isolated logout, expired-offer filter, tampered checkout block, dark CTA contrast & bulk admin delete")
+
+        print("ALL 11 HEADLESS CHROMIUM E2E, ACCESSIBILITY, VIEWPORT/ZOOM & CONCURRENCY SUITES PASSED.")
     finally:
         driver.quit()
         server.shutdown()

@@ -16,7 +16,7 @@
     <div class="page-header">
       <div>
         <h1><i class="fas fa-film" aria-hidden="true"></i> Movie Catalog</h1>
-        <p>Add, edit, or remove feature films and manage theater screening assignments.</p>
+        <p>Add, edit, or remove feature films and manage theater schedules and eligible offers.</p>
       </div>
       <a href="add-movie.html" class="add-btn"><i class="fas fa-plus" aria-hidden="true"></i> Add Movie</a>
     </div>
@@ -26,6 +26,7 @@
       <table>
         <thead>
           <tr>
+            <th class="check-col"><input type="checkbox" data-role="check-all" aria-label="Select all movies on page"></th>
             <th>ID</th>
             <th>Poster</th>
             <th>Title</th>
@@ -33,13 +34,13 @@
             <th>Duration</th>
             <th>Rating</th>
             <th>Price</th>
-            <th>Theaters</th>
+            <th>Coverage</th>
             <th>Badge</th>
-            <th>Actions</th>
+            <th class="actions-col">Actions</th>
           </tr>
         </thead>
         <tbody id="movies-tbody">
-          <tr><td colspan="10" class="empty-state">Loading movies...</td></tr>
+          <tr><td colspan="11" class="empty-state">Loading movies...</td></tr>
         </tbody>
       </table>
     </div>
@@ -54,7 +55,7 @@
       const tableCtrl = AdminApp.createTableController({
         toolbarId: 'movies-toolbar',
         tbodyId: 'movies-tbody',
-        colSpan: 10,
+        colSpan: 11,
         emptyText: 'No movies found.',
         searchPlaceholder: 'Search by title, genre, badge, or ID...',
         filters: [
@@ -74,6 +75,23 @@
           { key: 'rating_desc', label: 'Sort: Rating (High–Low)', compare: function (a, b) { return (parseFloat(b.star) || 0) - (parseFloat(a.star) || 0); } },
           { key: 'price_desc', label: 'Sort: Price (High–Low)', compare: function (a, b) { return (parseFloat(b.money) || 0) - (parseFloat(a.money) || 0); } },
         ],
+        bulkAction: {
+          label: 'Delete Selected',
+          endpoint: '/index.php/admin/movie/delete',
+          idKey: 'movie_code',
+          confirmText: function (n) { return 'Delete ' + n + ' selected movie(s)? Related schedules, offer links, and seat bookings will also be removed.'; },
+          successPrefix: 'Deleted',
+          onSuccess: loadMovies,
+        },
+        exportCsv: {
+          filename: 'cinetix-movies.csv',
+          headers: ['ID', 'Title', 'Genre', 'Duration', 'Rating', 'Price ($)', 'Theaters', 'Offers', 'Badge'],
+          row: function (m) {
+            const tCount = Array.isArray(m.theater_codes) ? m.theater_codes.length : (m.theater_count || 0);
+            const oCount = Array.isArray(m.offer_codes) ? m.offer_codes.length : (m.offer_count || 0);
+            return [m.movie_code, m.movie_name, m.movie_type, m.times, m.star, (parseFloat(m.money) || 0).toFixed(2), tCount, oCount, m.tag || ''];
+          },
+        },
         searchText: function (m) {
           return '#' + m.movie_code + ' ' + (m.movie_name || '') + ' ' + (m.movie_type || '') + ' ' + (m.tag || '');
         },
@@ -84,9 +102,11 @@
           const poster = AdminApp.resolveAdminAsset(m.img);
           const price = '$' + (parseFloat(m.money) || 0).toFixed(2);
           const tCount = Array.isArray(m.theater_codes) ? m.theater_codes.length : (m.theater_count || 0);
+          const oCount = Array.isArray(m.offer_codes) ? m.offer_codes.length : (m.offer_count || 0);
           const tagHtml = m.tag ? '<span class="tag-badge">' + esc(m.tag) + '</span>' : '<span class="muted-dash">—</span>';
           return (
             '<tr>' +
+            '<td class="check-col"><input type="checkbox" class="row-check" value="' + esc(m.movie_code) + '" aria-label="Select movie #' + esc(m.movie_code) + '"></td>' +
             '<td class="tabular-nums">#' + esc(m.movie_code) + '</td>' +
             '<td><img src="' + esc(poster) + '" alt="' + esc(m.movie_name) + '" class="movie-poster"></td>' +
             '<td><strong>' + esc(m.movie_name) + '</strong></td>' +
@@ -94,9 +114,9 @@
             '<td class="tabular-nums">' + esc(m.times) + '</td>' +
             '<td class="tabular-nums"><i class="fas fa-star star-amber" aria-hidden="true"></i> ' + esc(m.star) + '</td>' +
             '<td class="tabular-nums"><strong>' + esc(price) + '</strong></td>' +
-            '<td><span class="scope-badge tabular-nums">' + esc(tCount + ' cinema' + (tCount === 1 ? '' : 's')) + '</span></td>' +
+            '<td><span class="scope-badge tabular-nums">' + esc(tCount + ' cinema' + (tCount === 1 ? '' : 's')) + '</span><br><small class="sub-meta tabular-nums">' + esc(oCount + ' offer' + (oCount === 1 ? '' : 's')) + '</small></td>' +
             '<td>' + tagHtml + '</td>' +
-            '<td><div class="action-buttons">' +
+            '<td class="actions-col"><div class="action-buttons">' +
             '<a href="edit-movie.html?movie_code=' + encodeURIComponent(m.movie_code) + '" class="edit-btn"><i class="fas fa-edit" aria-hidden="true"></i> Edit</a>' +
             '<button type="button" class="delete-btn" data-id="' + esc(m.movie_code) + '"><i class="fas fa-trash" aria-hidden="true"></i> Delete</button>' +
             '</div></td>' +

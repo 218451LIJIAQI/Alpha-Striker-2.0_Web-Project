@@ -118,12 +118,7 @@
       AdminApp.renderCheckList(movieGrid, movies, 'movie_code', function (m) { return m.movie_name; }, null);
 
       const users = usersRes.success && Array.isArray(usersRes.data) ? usersRes.data : [];
-      users.forEach(function (u) {
-        const opt = document.createElement('option');
-        opt.value = String(u.user_code);
-        opt.textContent = u.user_name + ' (' + u.email + ')';
-        userSelect.appendChild(opt);
-      });
+      AdminApp.populateUserSelect(userSelect, users);
 
       document.getElementById('add-offer-form').addEventListener('submit', function (e) {
         e.preventDefault();

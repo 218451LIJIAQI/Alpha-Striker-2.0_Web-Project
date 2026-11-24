@@ -26,6 +26,7 @@
       <table>
         <thead>
           <tr>
+            <th class="check-col"><input type="checkbox" data-role="check-all" aria-label="Select all offers on page"></th>
             <th>ID</th>
             <th>Image</th>
             <th>Title &amp; Category</th>
@@ -34,11 +35,11 @@
             <th>Scope</th>
             <th>Valid Until</th>
             <th>Badge</th>
-            <th>Actions</th>
+            <th class="actions-col">Actions</th>
           </tr>
         </thead>
         <tbody id="offers-tbody">
-          <tr><td colspan="9" class="empty-state">Loading offers...</td></tr>
+          <tr><td colspan="10" class="empty-state">Loading offers...</td></tr>
         </tbody>
       </table>
     </div>
@@ -50,16 +51,12 @@
       if (!(await AdminApp.ensureAuthenticated())) return;
 
       const esc = AdminApp.escapeHtml;
-      const now = new Date();
-      const todayIso =
-        now.getFullYear() + '-' +
-        String(now.getMonth() + 1).padStart(2, '0') + '-' +
-        String(now.getDate()).padStart(2, '0');
+      const todayIso = window.CineTicket.todayIso();
 
       const tableCtrl = AdminApp.createTableController({
         toolbarId: 'offers-toolbar',
         tbodyId: 'offers-tbody',
-        colSpan: 9,
+        colSpan: 10,
         emptyText: 'No promotional offers found.',
         searchPlaceholder: 'Search by title, promo code, category, or owner...',
         filters: [
@@ -74,6 +71,23 @@
           { key: 'discount_desc', label: 'Sort: Discount (High–Low)', compare: function (a, b) { return (parseFloat(b.money) || 0) - (parseFloat(a.money) || 0); } },
           { key: 'validity_asc', label: 'Sort: Expiry (Soonest)', compare: function (a, b) { return String(a.offer_validity || '').localeCompare(String(b.offer_validity || '')); } },
         ],
+        bulkAction: {
+          label: 'Delete Selected',
+          endpoint: '/index.php/admin/offer/delete',
+          idKey: 'offer_code',
+          confirmText: function (n) { return 'Delete ' + n + ' selected offer(s)? Movie applicability links will also be removed.'; },
+          successPrefix: 'Deleted',
+          onSuccess: loadOffers,
+        },
+        exportCsv: {
+          filename: 'cinetix-offers.csv',
+          headers: ['ID', 'Title', 'Category', 'Promo Code', 'Discount ($)', 'Eligible Movies', 'Audience', 'Valid Until', 'Badge'],
+          row: function (o) {
+            const mCount = Array.isArray(o.movie_codes) ? o.movie_codes.length : (o.movie_count || 0);
+            const ownerTxt = o.owner && o.owner.user_name ? o.owner.user_name : 'Public';
+            return [o.offer_code, o.offer_title, o.offer_type, o.promo_code, (parseFloat(o.money) || 0).toFixed(2), mCount, ownerTxt, o.offer_validity, o.badge || ''];
+          },
+        },
         searchText: function (o) {
           const ownerTxt = o.owner && o.owner.user_name ? o.owner.user_name : 'public';
           return '#' + o.offer_code + ' ' + (o.offer_title || '') + ' ' + (o.promo_code || '') + ' ' + (o.offer_type || '') + ' ' + ownerTxt;
@@ -95,6 +109,7 @@
           const isExpired = Boolean(o.offer_validity && String(o.offer_validity) < todayIso);
           return (
             '<tr>' +
+            '<td class="check-col"><input type="checkbox" class="row-check" value="' + esc(o.offer_code) + '" aria-label="Select offer #' + esc(o.offer_code) + '"></td>' +
             '<td class="tabular-nums">#' + esc(o.offer_code) + '</td>' +
             '<td><img src="' + esc(imgSrc) + '" alt="' + esc(o.offer_title) + '" class="offer-img"></td>' +
             '<td><strong>' + esc(o.offer_title) + '</strong><br><small class="sub-meta">' + esc(o.offer_type) + '</small></td>' +
@@ -103,7 +118,7 @@
             '<td><span class="scope-badge tabular-nums">' + esc(mCount + ' movie' + (mCount === 1 ? '' : 's')) + '</span><br><small class="sub-meta">' + esc(ownerTxt) + '</small></td>' +
             '<td class="tabular-nums">' + esc(o.offer_validity) + (isExpired ? ' <small class="expired-pill">Expired</small>' : '') + '</td>' +
             '<td>' + badgeHtml + '</td>' +
-            '<td><div class="action-buttons">' +
+            '<td class="actions-col"><div class="action-buttons">' +
             '<a href="edit-offer.html?offer_code=' + encodeURIComponent(o.offer_code) + '" class="edit-btn"><i class="fas fa-edit" aria-hidden="true"></i> Edit</a>' +
             '<button type="button" class="delete-btn" data-id="' + esc(o.offer_code) + '"><i class="fas fa-trash" aria-hidden="true"></i> Delete</button>' +
             '</div></td>' +

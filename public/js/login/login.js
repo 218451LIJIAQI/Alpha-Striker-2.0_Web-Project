@@ -4,6 +4,8 @@
 (function () {
   'use strict';
 
+  const REMEMBER_EMAIL_KEY = 'cinetixRememberedEmail';
+
   function showPage(pageId) {
     const loginView = document.getElementById('login-page');
     const registerView = document.getElementById('register-page');
@@ -21,6 +23,7 @@
     const CT = window.CineTicket;
     const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
+    const rememberBox = document.getElementById('remember');
     const submitBtn = document.querySelector('#login-form button[type="submit"]');
 
     if (!email || !password) {
@@ -35,6 +38,11 @@
         body: { email: email, password: password },
       });
       if (result.success && result.data) {
+        if (rememberBox && rememberBox.checked) {
+          localStorage.setItem(REMEMBER_EMAIL_KEY, email);
+        } else {
+          localStorage.removeItem(REMEMBER_EMAIL_KEY);
+        }
         CT.AuthStore.setUser(result.data);
         const rawRedirect = new URLSearchParams(window.location.search).get('redirect') || '';
         const safeRedirect = rawRedirect && !/^(?:https?:|javascript:|\/\/)/i.test(rawRedirect)
@@ -64,8 +72,8 @@
       window.showToast('Please complete all required fields', 'warning');
       return;
     }
-    if (password.length < 6) {
-      window.showToast('Password must be at least 6 characters', 'warning');
+    if (password.length < 6 || password.length > 72) {
+      window.showToast('Password must be 6-72 characters', 'warning');
       return;
     }
     if (password !== confirmPassword) {
@@ -98,6 +106,14 @@
       showPage('register-page');
     }
 
+    const remembered = localStorage.getItem(REMEMBER_EMAIL_KEY);
+    const emailEl = document.getElementById('email');
+    const rememberEl = document.getElementById('remember');
+    if (remembered && emailEl && !emailEl.value) {
+      emailEl.value = remembered;
+      if (rememberEl) rememberEl.checked = true;
+    }
+
     document.getElementById('login-form')?.addEventListener('submit', loginUser);
     document.getElementById('register-form')?.addEventListener('submit', registerUser);
 
@@ -114,8 +130,4 @@
       });
     });
   });
-
-  window.showPage = showPage;
-  window.loginUser = loginUser;
-  window.registerUser = registerUser;
 })();

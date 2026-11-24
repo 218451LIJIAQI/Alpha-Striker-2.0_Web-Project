@@ -43,10 +43,9 @@ class User extends BaseAdmin
     public function create()
     {
         try {
-            $payload  = $this->payload();
             $name     = $this->strParam('user_name');
             $email    = strtolower($this->strParam('email'));
-            $password = isset($payload['login_pwd']) ? (string) $payload['login_pwd'] : '';
+            $password = $this->rawStrParam('login_pwd');
 
             $error = $this->validateUserInput($name, $email, $password, true, 0);
             if ($error !== null) {
@@ -89,10 +88,9 @@ class User extends BaseAdmin
                 return $this->fail('User not found', 404);
             }
 
-            $payload  = $this->payload();
             $name     = $this->strParam('user_name');
             $email    = strtolower($this->strParam('email'));
-            $password = isset($payload['login_pwd']) ? (string) $payload['login_pwd'] : '';
+            $password = $this->rawStrParam('login_pwd');
 
             $error = $this->validateUserInput($name, $email, $password, false, $userId);
             if ($error !== null) {
@@ -163,11 +161,11 @@ class User extends BaseAdmin
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100) {
             return 'Valid email address is required';
         }
-        if ($requirePassword && strlen($password) < 6) {
-            return 'Password must be at least 6 characters';
+        if ($requirePassword && (strlen($password) < 6 || strlen($password) > self::MAX_PASSWORD_BYTES)) {
+            return 'Password must be 6-72 characters';
         }
-        if (!$requirePassword && $password !== '' && strlen($password) < 6) {
-            return 'New password must be at least 6 characters';
+        if (!$requirePassword && $password !== '' && (strlen($password) < 6 || strlen($password) > self::MAX_PASSWORD_BYTES)) {
+            return 'New password must be 6-72 characters';
         }
 
         $dupQuery = Db::name('user')->where('email', $email);

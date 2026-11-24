@@ -6,7 +6,7 @@
 
   let requestSeq = 0;
 
-  async function fetchOffers(offerType) {
+  async function fetchOffers(offerType, onReset) {
     const seq = ++requestSeq;
     const url = '/index.php/offer/offer/getOfferList' +
       (offerType ? '?offer_type=' + encodeURIComponent(offerType) : '');
@@ -15,7 +15,7 @@
       const payload = await window.CineTicket.fetchJson(url);
       if (seq !== requestSeq) return;
       if (payload.success) {
-        renderOffers(payload.data || []);
+        renderOffers(payload.data || [], onReset);
       } else {
         window.showToast(payload.message || 'Failed to load offers', 'error');
       }
@@ -37,7 +37,7 @@
     }
   }
 
-  function renderOffers(offers) {
+  function renderOffers(offers, onReset) {
     const containers = document.querySelectorAll('.offers-container');
     const featuredContainer = containers[0];
     const moreContainer = containers[1];
@@ -52,7 +52,11 @@
         '<div class="grid-empty-state">' +
         '<h3>No active offers in this category</h3>' +
         '<p>Select All Offers to view active student, weekday, and VIP promotions.</p>' +
+        '<button type="button" class="btn btn-primary empty-reset-btn">Show All Offers</button>' +
         '</div>';
+      if (typeof onReset === 'function') {
+        featuredContainer.querySelector('.empty-reset-btn')?.addEventListener('click', onReset);
+      }
       if (moreSection) moreSection.classList.add('is-hidden');
       return;
     }
@@ -138,13 +142,29 @@
     const featuredContainer = document.querySelector('.featured-offers .offers-container');
     if (!featuredContainer) return;
 
-    await window.CineTicket.AuthStore.syncSession();
-
+    const CT = window.CineTicket;
     const tabButtons = document.querySelectorAll('.filter-tabs button');
+    let activeType = '';
+
+    function resetAllOffers() {
+      activeType = '';
+      tabButtons.forEach(function (btn, idx) {
+        btn.classList.toggle('active', idx === 0);
+        btn.setAttribute('aria-pressed', String(idx === 0));
+      });
+      fetchOffers('', resetAllOffers);
+    }
+
     tabButtons.forEach(function (btn, idx) {
       btn.setAttribute('aria-pressed', String(idx === 0));
     });
-    fetchOffers('');
+
+    await CT.AuthStore.syncSession();
+    fetchOffers('', resetAllOffers);
+
+    window.addEventListener('cinetix:authchange', function () {
+      fetchOffers(activeType, resetAllOffers);
+    });
 
     tabButtons.forEach(function (button) {
       button.addEventListener('click', function () {
@@ -155,7 +175,8 @@
         this.classList.add('active');
         this.setAttribute('aria-pressed', 'true');
         const label = this.textContent.trim();
-        fetchOffers(label === 'All Offers' ? '' : label);
+        activeType = label === 'All Offers' ? '' : label;
+        fetchOffers(activeType, resetAllOffers);
       });
     });
 
@@ -164,7 +185,7 @@
       e.preventDefault();
       const emailInput = form.querySelector('input[type="email"]');
       const email = emailInput ? emailInput.value.trim() : '';
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (!CT.isValidEmail(email)) {
         window.showToast('Please enter a valid email address', 'warning');
         emailInput?.focus();
         return;

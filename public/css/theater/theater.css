@@ -93,6 +93,7 @@
 }
 
 .theater-image {
+  position: relative;
   height: 196px;
   background: #0f172a;
   overflow: hidden;
@@ -103,6 +104,21 @@
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.theater-distance-pill {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 700;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
 }
 
 .theater-details {
@@ -149,11 +165,23 @@
 .theater-rating {
   display: flex;
   align-items: center;
-  gap: 6px;
-  color: var(--brand-star);
+  gap: 8px;
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 16px;
+}
+
+.rating-stars {
+  color: var(--brand-amber);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rating-meta {
+  color: var(--text-muted);
+  font-size: 13.5px;
+  font-weight: 600;
 }
 
 .view-details {

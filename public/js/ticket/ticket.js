@@ -7,6 +7,40 @@
   let cachedSeats = [];
   let activeZoneFilter = 'all';
 
+  function purgeCancelledSeatFromReceipt(cancelledSeat) {
+    if (!cancelledSeat) return;
+    try {
+      const raw = sessionStorage.getItem('lastBookingReceipt');
+      if (!raw) return;
+      const receipt = JSON.parse(raw);
+      if (!receipt || !Array.isArray(receipt.seats)) return;
+
+      const sameDate = String(receipt.date || '') === String(cancelledSeat.date || '');
+      const sameTime = String(receipt.time || '') === String(cancelledSeat.time || '');
+      const sameMovie = receipt.movieCode
+        ? Number(receipt.movieCode) === Number(cancelledSeat.movie_code)
+        : (!cancelledSeat.movie_info || receipt.movieTitle === cancelledSeat.movie_info.movie_name);
+      const sameTheater = receipt.theaterCode
+        ? Number(receipt.theaterCode) === Number(cancelledSeat.theater_code || 1)
+        : true;
+
+      if (!sameDate || !sameTime || !sameMovie || !sameTheater) return;
+
+      const targetNum = String(cancelledSeat.seat_num || '').toUpperCase();
+      const remaining = receipt.seats.filter(function (s) {
+        return String(s).toUpperCase() !== targetNum;
+      });
+      if (remaining.length === 0) {
+        sessionStorage.removeItem('lastBookingReceipt');
+      } else if (remaining.length !== receipt.seats.length) {
+        receipt.seats = remaining;
+        sessionStorage.setItem('lastBookingReceipt', JSON.stringify(receipt));
+      }
+    } catch (_) {
+      // Ignore malformed sessionStorage receipt
+    }
+  }
+
   async function loadUserTickets() {
     const container = document.getElementById('cons');
     const walletToolbar = document.getElementById('wallet-toolbar');
@@ -15,6 +49,7 @@
     const CT = window.CineTicket;
     const user = CT.AuthStore.getUser();
     if (!user.isLoggedIn || user.userId <= 0) {
+      cachedSeats = [];
       if (walletToolbar) walletToolbar.classList.add('is-hidden');
       renderTicketEmptyState(
         container,
@@ -30,6 +65,7 @@
       const payload = await CT.fetchJson('/index.php/movie/seat/getSeatListByUserCode');
 
       if (payload.httpStatus === 401) {
+        cachedSeats = [];
         CT.AuthStore.clearLocal();
         if (walletToolbar) walletToolbar.classList.add('is-hidden');
         renderTicketEmptyState(
@@ -82,7 +118,7 @@
         container,
         'No tickets in this zone filter',
         'Switch back to All Passes to view your other active reservations.',
-        '#',
+        '',
         'Show All Passes',
         function () {
           activeZoneFilter = 'all';
@@ -200,7 +236,7 @@
     });
     const cancelBtn = wrapper.querySelector('.cancel-button');
     cancelBtn.addEventListener('click', function () {
-      cancelTicket(seat.seat_code, cancelBtn);
+      cancelTicket(seat, cancelBtn);
     });
 
     return wrapper;
@@ -214,7 +250,7 @@
     document.body.classList.remove('printing-single-ticket');
   }
 
-  async function cancelTicket(seatCode, btnEl) {
+  async function cancelTicket(seatObj, btnEl) {
     if (!window.confirm('Are you sure you want to cancel this seat reservation?')) {
       return;
     }
@@ -224,10 +260,11 @@
     try {
       const payload = await CT.fetchJson('/index.php/movie/seat/delete', {
         method: 'POST',
-        body: { seat_code: seatCode },
+        body: { seat_code: seatObj.seat_code },
       });
 
       if (payload.success) {
+        purgeCancelledSeatFromReceipt(seatObj);
         window.showToast('Seat booking cancelled and seat released', 'success');
         await loadUserTickets();
         return;
@@ -247,6 +284,15 @@
         syncZoneFilterButtons();
         renderFilteredTickets();
       });
+    });
+
+    window.addEventListener('cinetix:authchange', function () {
+      loadUserTickets();
+    });
+    window.addEventListener('pageshow', function (event) {
+      if (event && event.persisted) {
+        loadUserTickets();
+      }
     });
 
     await window.CineTicket.AuthStore.syncSession();

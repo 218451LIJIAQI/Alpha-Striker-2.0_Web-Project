@@ -13,6 +13,7 @@ class Offer extends ApiController
             $offerType     = $this->strParam('offer_type');
             $movieCode     = $this->idParam('movie_code');
             $sessionUserId = (int) Session::get('user_id', 0);
+            $today         = date('Y-m-d');
 
             $query = Db::name('offer')
                 ->field('offer_code, offer_title, offer_description, promo_code, offer_validity, img, badge, money, offer_type, user_code')
@@ -36,19 +37,25 @@ class Offer extends ApiController
             }
 
             $offerIds  = array_values(array_unique(array_column($offers, 'offer_code')));
-            $linkRows  = Db::table('movie_offer')->where('offer_code', 'in', $offerIds)->select();
+            $linkQuery = Db::table('movie_offer')->where('offer_code', 'in', $offerIds);
+            $linkRows  = $this->applyDateWindow($linkQuery, 'valid_from', 'valid_to', $today)->select();
             $movieMap  = [];
             foreach ($linkRows as $lr) {
                 $oid = (int) $lr['offer_code'];
-                $mid = (int) $lr['movie_code'];
-                $movieMap[$oid][] = $mid;
+                $movieMap[$oid][] = (int) $lr['movie_code'];
             }
 
             $filtered = [];
             foreach ($offers as $offer) {
-                $oid                  = (int) $offer['offer_code'];
-                $linkedMovies         = $movieMap[$oid] ?? [];
-                $offer['movie_codes'] = $linkedMovies;
+                $validity = trim((string) ($offer['offer_validity'] ?? ''));
+                if ($this->isValidIsoDate($validity) && $validity < $today) {
+                    continue;
+                }
+
+                $oid          = (int) $offer['offer_code'];
+                $linkedMovies = $movieMap[$oid] ?? [];
+                sort($linkedMovies);
+                $offer['movie_codes']  = $linkedMovies;
                 $offer['is_exclusive'] = !empty($offer['user_code']);
                 unset($offer['user_code']);
 

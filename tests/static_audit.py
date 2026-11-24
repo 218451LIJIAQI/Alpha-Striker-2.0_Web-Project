@@ -4,13 +4,13 @@ Static, Security, Accessibility & Relational Contract Audit Suite for CineTix (A
 Verifies:
 1. movies.sql relational schema, foreign keys, unique constraints, and seed asset paths (case-sensitive) in SQLite (PRAGMA foreign_keys=ON).
 2. PHP syntax structure, balanced delimiters, zero bare mb_* calls, zero hardcoded '888888', strict non-empty CSRF check in BaseAdmin,
-   shared BaseAdmin::resolveValidIds deduplication, ApiController::isValidIsoDate parity, and 3-way route parity across
-   Frontend <-> PHP Controllers <-> mock_thinkphp_server.py.
-3. JavaScript syntax across all external .js modules and inline HTML <script> blocks via `node --check`.
+   shared BaseAdmin relation helpers (resolveValidIds, mapRelationIds, syncScheduleRows), ApiController strict scalar/integer/date/password
+   validation parity, and 3-way route parity across Frontend <-> PHP Controllers <-> mock_thinkphp_server.py.
+3. JavaScript syntax across all external .js modules and inline HTML <script> blocks via `node --check`, plus zero leaked window.* globals.
 4. HTML/JS zero `href="#"` dead links, zero external CDN <link>/<script> dependencies, case-sensitive local asset integrity,
    100% offline CSS coverage for every `fa-*` icon class, and all 39 binary images/icons readability.
-5. CSS brace balance, single centralized dark-mode variable block, `:focus-visible` & `prefers-reduced-motion` accessibility rules,
-   and absence of destructive global overrides.
+5. CSS brace balance, single centralized dark-mode variable block, `:focus-visible`, `prefers-reduced-motion`, sticky table headers,
+   viewport-safe sidebar/modal scroll rules, `.theater-distance-pill` coverage, and absence of destructive global overrides.
 """
 
 from __future__ import annotations
@@ -214,10 +214,15 @@ def verify_php_and_security_contracts() -> None:
                 )
 
     api_ctrl_src = (ROOT / "application/common/controller/ApiController.php").read_text(encoding="utf-8")
-    assert_true(
-        "function isValidIsoDate(" in api_ctrl_src and "function optionalIdWithDefault(" in api_ctrl_src,
-        "ApiController.php missing strict date/ID validation helpers",
-    )
+    for helper_sig in (
+        "function parsePositiveInt(",
+        "function rawStrParam(",
+        "function isValidIsoDate(",
+        "function optionalIdWithDefault(",
+        "function applyDateWindow(",
+    ):
+        assert_true(helper_sig in api_ctrl_src, f"ApiController.php missing {helper_sig}")
+    assert_true(re.search(r"MAX_PASSWORD_BYTES\s*=\s*72", api_ctrl_src) is not None, "ApiController.php missing MAX_PASSWORD_BYTES = 72")
     assert_true("function textSub(" not in api_ctrl_src, "Dead ApiController::textSub helper should remain removed")
 
     base_admin_src = (ROOT / "application/admin/controller/BaseAdmin.php").read_text(encoding="utf-8")
@@ -225,16 +230,14 @@ def verify_php_and_security_contracts() -> None:
         "$clientToken === '' ||" not in base_admin_src and "hash_equals($sessionToken, $clientToken)" in base_admin_src,
         "BaseAdmin.php CSRF short-circuit vulnerability not remediated!",
     )
-    assert_true(
-        "function resolveValidIds(" in base_admin_src,
-        "BaseAdmin.php missing shared resolveValidIds helper",
-    )
+    for admin_helper in ("function resolveValidIds(", "function mapRelationIds(", "function syncScheduleRows("):
+        assert_true(admin_helper in base_admin_src, f"BaseAdmin.php missing shared {admin_helper}")
 
     for admin_ctrl_name in ("Movie.php", "Theater.php", "Offer.php"):
         ctrl_src = (ROOT / "application/admin/controller" / admin_ctrl_name).read_text(encoding="utf-8")
         assert_true(
-            "$this->resolveValidIds(" in ctrl_src,
-            f"{admin_ctrl_name} must delegate relation ID resolution to BaseAdmin::resolveValidIds",
+            "$this->resolveValidIds(" in ctrl_src and "$this->mapRelationIds(" in ctrl_src,
+            f"{admin_ctrl_name} must delegate relation handling to BaseAdmin helpers",
         )
 
     admin_user_src = (ROOT / "application/admin/controller/User.php").read_text(encoding="utf-8")
@@ -247,9 +250,16 @@ def verify_php_and_security_contracts() -> None:
         "Seat.php still trusts client-supplied user_code fallback!",
     )
 
-    # Verify 3-way route parity: Frontend <-> PHP Controllers <-> mock_thinkphp_server.py
+    # Verify 3-way route & helper parity: Frontend <-> PHP Controllers <-> mock_thinkphp_server.py
     mock_src = (ROOT / "tests/mock_thinkphp_server.py").read_text(encoding="utf-8")
-    assert_true("def is_valid_iso_date(" in mock_src, "mock_thinkphp_server.py missing 1:1 is_valid_iso_date parity")
+    for mock_sig in (
+        "def is_valid_iso_date(",
+        "def parse_positive_int(",
+        "def scalar_str(",
+        "def _rotate_session(",
+    ):
+        assert_true(mock_sig in mock_src, f"mock_thinkphp_server.py missing 1:1 {mock_sig} parity")
+    assert_true(re.search(r"MAX_PASSWORD_BYTES\s*=\s*72", mock_src) is not None, "mock_thinkphp_server.py missing MAX_PASSWORD_BYTES = 72")
     mock_routes = set(re.findall(r'route\s*==\s*"([a-z0-9_]+/[a-z0-9_]+/[a-z0-9_]+)"', mock_src))
 
     all_php_routes = {
@@ -291,12 +301,27 @@ def verify_js_html_css_and_binaries() -> None:
     js_files = sorted((ROOT / "public" / "js").rglob("*.js"))
     used_fa_icons: set[str] = set()
     fa_token_re = re.compile(r"\bfa-([a-z0-9-]+)\b")
+    allowed_window_exports = {
+        "CineTicket",
+        "AdminApp",
+        "toggleDarkMode",
+        "showToast",
+        "showNotification",
+        "clickEmailUs",
+        "clickCallUs",
+        "clickLink",
+    }
 
     for jf in js_files:
         proc = subprocess.run(["node", "--check", str(jf)], capture_output=True, text=True)
         assert_true(proc.returncode == 0, f"JS syntax error in {jf}: {proc.stderr}")
         js_txt = jf.read_text(encoding="utf-8")
         assert_true(re.search(r'href=["\']#["\']', js_txt) is None, f"Dead href='#' link found in {jf}")
+        for win_prop in re.findall(r"\bwindow\.([A-Za-z0-9_$]+)\s*=(?!=)", js_txt):
+            assert_true(
+                win_prop in allowed_window_exports,
+                f"Unused/leaked global window.{win_prop} assignment found in {jf.relative_to(ROOT)}",
+            )
         for tok in fa_token_re.findall(js_txt):
             if tok != "spin":
                 used_fa_icons.add(f"fa-{tok}")
@@ -363,6 +388,16 @@ def verify_js_html_css_and_binaries() -> None:
     assert_true(":focus-visible" in header_css_txt, "Missing :focus-visible rules in header.css")
     assert_true("prefers-reduced-motion" in header_css_txt, "Missing prefers-reduced-motion media query in header.css")
 
+    theater_css_txt = (ROOT / "public/css/theater/theater.css").read_text(encoding="utf-8")
+    assert_true(".theater-distance-pill" in theater_css_txt, "Missing .theater-distance-pill rule in theater.css")
+
+    admin_css_txt = (ROOT / "public/css/admin/admin.css").read_text(encoding="utf-8")
+    assert_true("position: sticky" in admin_css_txt and "@media print" in admin_css_txt, "Missing sticky thead or @media print in admin.css")
+
+    for scroll_css in ("public/css/booking3/booking3.css", "public/css/pay/pay.css", "public/css/about/about.css"):
+        sc_txt = (ROOT / scroll_css).read_text(encoding="utf-8")
+        assert_true("max-height: calc(100vh -" in sc_txt, f"Missing viewport-safe max-height in {scroll_css}")
+
     css_files = sorted((ROOT / "public" / "css").rglob("*.css"))
     assert_true(len(css_files) == 14, f"Expected 14 CSS files, found {len(css_files)}")
     for cf in css_files:
@@ -391,9 +426,14 @@ def verify_js_html_css_and_binaries() -> None:
         with Image.open(bf) as img:
             img.verify()
 
-    # Verify zero __pycache__ or .pyc artifacts inside repository
-    pycache_dirs = list(ROOT.rglob("__pycache__")) + list(ROOT.rglob("*.pyc"))
-    assert_true(len(pycache_dirs) == 0, f"Bytecode artifacts found inside repo: {pycache_dirs}")
+    # Verify zero __pycache__, .pyc, temporary .db, or log artifacts inside repository
+    stray_artifacts = (
+        list(ROOT.rglob("__pycache__"))
+        + list(ROOT.rglob("*.pyc"))
+        + list(ROOT.rglob("*.db"))
+        + list(ROOT.rglob("*.sqlite*"))
+    )
+    assert_true(len(stray_artifacts) == 0, f"Temporary/bytecode artifacts found inside repo: {stray_artifacts}")
 
     print(
         f"[PASS] {len(js_files)} JS modules, {inline_script_count} inline scripts, "

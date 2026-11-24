@@ -34,7 +34,7 @@
 
         <div class="form-group full-width">
           <label for="login_pwd" class="form-label">New Password (Optional)</label>
-          <input type="password" id="login_pwd" name="login_pwd" class="form-input" placeholder="Leave blank to keep current password" minlength="6" autocomplete="new-password">
+          <input type="password" id="login_pwd" name="login_pwd" class="form-input" placeholder="Leave blank to keep current password (6–72 chars)" minlength="6" maxlength="72" autocomplete="new-password">
           <span class="form-hint">Only fill this field if you want to reset the user's password.</span>
         </div>
       </div>
@@ -51,8 +51,8 @@
       AdminApp.renderAdminNav('users');
       if (!(await AdminApp.ensureAuthenticated())) return;
 
-      const userCode = new URLSearchParams(window.location.search).get('user_code');
-      if (!userCode) {
+      const userCode = (new URLSearchParams(window.location.search).get('user_code') || '').trim();
+      if (!/^[1-9]\d*$/.test(userCode)) {
         window.location.href = 'user.html';
         return;
       }

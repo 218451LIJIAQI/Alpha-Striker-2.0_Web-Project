@@ -24,6 +24,7 @@
     const container = document.getElementById('category-form');
     if (!container) return;
 
+    const CT = window.CineTicket;
     const titles = {
       booking: 'Booking & Refund Support',
       technical: 'Technical Issue Report',
@@ -33,7 +34,7 @@
 
     container.classList.remove('is-hidden');
     container.innerHTML =
-      '<h4>' + window.CineTicket.escapeHtml(titles[category] || 'Support Inquiry') + '</h4>' +
+      '<h4>' + CT.escapeHtml(titles[category] || 'Support Inquiry') + '</h4>' +
       '<div class="form-group"><label for="cat-email-input">Contact Email</label><input type="email" id="cat-email-input" class="cat-email" placeholder="your.email@example.com"></div>' +
       '<div class="form-group"><label for="cat-details-input">Details</label><textarea id="cat-details-input" class="cat-details" rows="3" placeholder="Share relevant booking ID or details..."></textarea></div>' +
       '<button type="button" class="send-email-btn submit-category-form">Submit Request</button>';
@@ -41,7 +42,7 @@
     container.querySelector('.submit-category-form').addEventListener('click', function () {
       const email = container.querySelector('.cat-email').value.trim();
       const details = container.querySelector('.cat-details').value.trim();
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !details) {
+      if (!CT.isValidEmail(email) || !details) {
         window.showToast('Please provide a valid email and inquiry details', 'warning');
         return;
       }
@@ -110,10 +111,10 @@
       return 'You can cancel any reserved seat directly from the Tickets page in the top navigation bar.';
     }
     if (q.includes('promo') || q.includes('discount') || q.includes('offer')) {
-      return 'Try STUDENT30, WEDNESDAYSIP, or FAMILY4FUN at checkout for $5.00 off, or book 5+ seats for 30% group savings!';
+      return 'Visit the Offers tab to copy any active promo code for instant savings, or book 5+ seats for 30% group savings!';
     }
     if (q.includes('theater') || q.includes('showtime')) {
-      return 'Visit the Theaters tab to explore all 6 partner locations, amenities, and daily screening schedules.';
+      return 'Visit the Theaters tab to explore partner locations, amenities, 3D sightlines, and daily screening schedules.';
     }
     if (q.includes('booking') || q.includes('ticket')) {
       return 'Open the Tickets tab in the header to view your digital tickets, row/seat details, and print/PDF export.';
@@ -122,6 +123,8 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
+    const CT = window.CineTicket;
+
     document.querySelectorAll('.close-modal').forEach(function (btn) {
       btn.addEventListener('click', function () {
         const modal = btn.closest('.contact-modal');
@@ -194,12 +197,12 @@
         const targetId = tab.getAttribute('data-tab');
         document.querySelectorAll('.email-tab').forEach(function (t) {
           const act = t === tab;
-          t.classList.remove('active');
+          t.classList.toggle('active', act);
           t.setAttribute('aria-selected', String(act));
         });
-        document.querySelectorAll('.email-tab-content').forEach(function (c) { c.classList.remove('active'); });
-        tab.classList.add('active');
-        document.getElementById(targetId)?.classList.add('active');
+        document.querySelectorAll('.email-tab-content').forEach(function (c) {
+          c.classList.toggle('active', c.id === targetId);
+        });
       });
     });
 
@@ -219,7 +222,7 @@
         window.showToast('Please select an inquiry type', 'warning');
         return;
       }
-      if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (!name || !CT.isValidEmail(email)) {
         window.showToast('Please enter your name and a valid email address', 'warning');
         return;
       }
@@ -251,9 +254,4 @@
       });
     }
   });
-
-  window.makeCall = makeCall;
-  window.openEmail = openEmail;
-  window.selectCategory = selectCategory;
-  window.selectQuickAction = selectQuickAction;
 })();

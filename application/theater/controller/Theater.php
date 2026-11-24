@@ -18,15 +18,9 @@ class Theater extends ApiController
                 ->order('theater_code', 'asc');
 
             if ($movieCode > 0) {
-                $today            = date('Y-m-d');
-                $scheduledTheaters = Db::table('theater_movie')
-                    ->where('movie_code', $movieCode)
-                    ->where(function ($q) use ($today) {
-                        $q->whereNull('start_date')->whereOr('start_date', '<=', $today);
-                    })
-                    ->where(function ($q) use ($today) {
-                        $q->whereNull('end_date')->whereOr('end_date', '>=', $today);
-                    })
+                $today             = date('Y-m-d');
+                $schedQuery        = Db::table('theater_movie')->where('movie_code', $movieCode);
+                $scheduledTheaters = $this->applyDateWindow($schedQuery, 'start_date', 'end_date', $today)
                     ->column('theater_code');
 
                 if (empty($scheduledTheaters)) {
@@ -64,17 +58,13 @@ class Theater extends ApiController
                 return $this->fail('Theater does not exist', 404);
             }
 
-            $today = date('Y-m-d');
-            $theater['movies'] = Db::table('theater_movie')
+            $today      = date('Y-m-d');
+            $movieQuery = Db::table('theater_movie')
                 ->alias('tm')
                 ->join('t_movies m', 'tm.movie_code = m.movie_code')
-                ->where('tm.theater_code', $theaterCode)
-                ->where(function ($q) use ($today) {
-                    $q->whereNull('tm.start_date')->whereOr('tm.start_date', '<=', $today);
-                })
-                ->where(function ($q) use ($today) {
-                    $q->whereNull('tm.end_date')->whereOr('tm.end_date', '>=', $today);
-                })
+                ->where('tm.theater_code', $theaterCode);
+
+            $theater['movies'] = $this->applyDateWindow($movieQuery, 'tm.start_date', 'tm.end_date', $today)
                 ->field('m.movie_code, m.movie_name, m.star, m.tag, m.money, m.movie_type, m.img, m.times, tm.daily_showtimes')
                 ->order('m.movie_code', 'asc')
                 ->select();

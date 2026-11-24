@@ -10,6 +10,7 @@
 .theater-hero {
   position: relative;
   min-height: 430px;
+  background-color: #0f172a;
   border-radius: var(--radius-xl);
   overflow: hidden;
   margin-bottom: 36px;
@@ -404,7 +405,7 @@
   margin-bottom: 8px;
 }
 
-.review-stars { color: var(--brand-star); }
+.review-stars { color: var(--brand-amber); font-weight: 700; }
 
 .vr-tour-card {
   background: var(--card-bg);

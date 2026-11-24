@@ -5,24 +5,69 @@
   'use strict';
 
   let requestSeq = 0;
+  let activeGenre = 'all';
 
   function setGenreActive(targetGenre) {
-    document.querySelectorAll('.btn-filter').forEach(function (btn) {
-      const isActive = (btn.dataset.genre || 'all') === targetGenre;
+    activeGenre = targetGenre || 'all';
+    document.querySelectorAll('.filters .btn-filter').forEach(function (btn) {
+      const isActive = (btn.dataset.genre || 'all') === activeGenre;
       btn.classList.toggle('active', isActive);
       btn.setAttribute('aria-pressed', String(isActive));
     });
   }
 
+  function bindGenreButton(button) {
+    if (button.dataset.genreBound === 'true') return;
+    button.dataset.genreBound = 'true';
+    button.addEventListener('click', function () {
+      const genre = this.dataset.genre || 'all';
+      setGenreActive(genre);
+      const searchInput = document.querySelector('.search-input');
+      if (searchInput) searchInput.value = '';
+      fetchMovies(genre);
+    });
+  }
+
+  function syncDynamicGenres(movies) {
+    const filterContainer = document.querySelector('.filters');
+    if (!filterContainer || !Array.isArray(movies)) return;
+
+    const existing = new Set(
+      Array.from(filterContainer.querySelectorAll('.btn-filter')).map(function (b) {
+        return (b.dataset.genre || '').toLowerCase();
+      })
+    );
+
+    movies.forEach(function (m) {
+      const g = String(m.movie_type || '').trim();
+      if (!g || existing.has(g.toLowerCase())) return;
+      existing.add(g.toLowerCase());
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn-filter';
+      btn.dataset.genre = g;
+      btn.setAttribute('aria-pressed', 'false');
+      btn.textContent = g;
+      bindGenreButton(btn);
+      filterContainer.appendChild(btn);
+    });
+    setGenreActive(activeGenre);
+  }
+
   async function fetchMovies(genre) {
     const seq = ++requestSeq;
+    const target = genre || 'all';
     try {
       const payload = await window.CineTicket.fetchJson(
-        '/index.php/movie/movies/getMovieList?genre=' + encodeURIComponent(genre || 'all')
+        '/index.php/movie/movies/getMovieList?genre=' + encodeURIComponent(target)
       );
       if (seq !== requestSeq) return;
       if (payload.success) {
-        renderMovies(payload.data || []);
+        const list = payload.data || [];
+        if (target === 'all') {
+          syncDynamicGenres(list);
+        }
+        renderMovies(list);
       } else {
         window.showToast(payload.message || 'Failed to load movies', 'error');
       }
@@ -104,21 +149,12 @@
 
     const searchInput = document.querySelector('.search-input');
     const searchBtn = document.querySelector('.search-btn');
-    const filterButtons = document.querySelectorAll('.btn-filter');
 
+    document.querySelectorAll('.filters .btn-filter').forEach(bindGenreButton);
     setGenreActive('all');
     fetchMovies('all');
 
     document.getElementById('view-all-movies-btn')?.addEventListener('click', fetchAllMovies);
-
-    filterButtons.forEach(function (button) {
-      button.addEventListener('click', function () {
-        const genre = this.dataset.genre || 'all';
-        setGenreActive(genre);
-        if (searchInput) searchInput.value = '';
-        fetchMovies(genre);
-      });
-    });
 
     async function triggerSearch() {
       const keyword = searchInput ? searchInput.value.trim() : '';
@@ -153,6 +189,4 @@
       }
     });
   });
-
-  window.fetchAllMovies = fetchAllMovies;
 })();

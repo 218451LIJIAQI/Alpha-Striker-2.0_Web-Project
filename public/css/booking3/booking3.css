@@ -50,7 +50,16 @@
   width: 348px;
   flex-shrink: 0;
   position: sticky;
-  top: 20px;
+  top: 16px;
+  margin-top: 24px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.booking-sidebar > .card {
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 /* Movie Header Summary */
@@ -125,7 +134,7 @@
   font-size: 13px;
 }
 
-.movie-rating i { color: var(--accent); }
+.movie-rating i { color: var(--brand-amber); }
 
 .promo-tag {
   display: inline-flex;
@@ -349,9 +358,9 @@
 .seat.reserved {
   background-color: #e2e8f0;
   border-color: #cbd5e1;
-  color: #64748b;
+  color: #475569;
   cursor: not-allowed;
-  opacity: 0.75;
+  opacity: 0.78;
 }
 
 .vr-button {
@@ -371,11 +380,17 @@
   align-items: center;
   gap: 6px;
   box-shadow: 0 4px 12px rgba(190, 18, 60, 0.28);
-  transition: background-color 0.18s ease, transform 0.18s ease;
+  transition: background-color 0.18s ease, transform 0.18s ease, opacity 0.18s ease;
   z-index: 5;
 }
 
-.vr-button:hover { background-color: var(--brand-accent-hover); transform: translateY(-1px); }
+.vr-button:hover:not(:disabled) { background-color: var(--brand-accent-hover); transform: translateY(-1px); }
+
+.vr-button:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+  box-shadow: none;
+}
 
 .seat-info {
   display: flex;
@@ -538,6 +553,8 @@
   .booking-sidebar {
     width: 100%;
     position: static;
+    max-height: none;
+    overflow-y: visible;
   }
 }
 

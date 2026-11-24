@@ -8,9 +8,9 @@ use think\facade\Session;
 
 /**
  * Shared JSON API base controller.
- * Centralizes payload parsing, mbstring-free UTF-8 string helpers, ISO date validation,
- * session rotation/destruction, authoritative promo verification, checkout pricing calculation,
- * and SQL conflict detection.
+ * Centralizes payload parsing, strict integer/scalar guards, mbstring-free UTF-8 helpers,
+ * ISO calendar validation, role-aware session lifecycle, date-window query scoping,
+ * authoritative promo verification, checkout pricing calculation, and SQL conflict detection.
  */
 abstract class ApiController
 {
@@ -18,6 +18,7 @@ abstract class ApiController
     public const GROUP_DISCOUNT_MIN_SEATS = 5;
     public const GROUP_DISCOUNT_RATE      = 0.30;
     public const MAX_SEATS_PER_ORDER      = 10;
+    public const MAX_PASSWORD_BYTES       = 72;
 
     /** @var array|null */
     private $cachedPayload = null;
@@ -44,13 +45,29 @@ abstract class ApiController
         return $this->cachedPayload = $params;
     }
 
+    protected function parsePositiveInt($raw)
+    {
+        if (is_int($raw)) {
+            return $raw > 0 ? $raw : 0;
+        }
+        if ($raw === null || is_bool($raw) || is_array($raw) || is_object($raw) || is_float($raw)) {
+            return 0;
+        }
+        $str = trim((string) $raw);
+        if (!preg_match('/^\d+$/', $str)) {
+            return 0;
+        }
+        $val = (int) $str;
+        return $val > 0 ? $val : 0;
+    }
+
     protected function idParam($key, $direct = '')
     {
         if ($direct !== '' && $direct !== null) {
-            return is_numeric($direct) ? (int) $direct : 0;
+            return $this->parsePositiveInt($direct);
         }
         $payload = $this->payload();
-        return isset($payload[$key]) && is_numeric($payload[$key]) ? (int) $payload[$key] : 0;
+        return isset($payload[$key]) ? $this->parsePositiveInt($payload[$key]) : 0;
     }
 
     protected function optionalIdWithDefault($key, $defaultId = 1)
@@ -59,23 +76,32 @@ abstract class ApiController
         if (!isset($payload[$key]) || $payload[$key] === '' || $payload[$key] === null) {
             return (int) $defaultId;
         }
-        if (is_array($payload[$key]) || is_object($payload[$key]) || !is_numeric($payload[$key])) {
-            return 0;
-        }
-        return (int) $payload[$key];
+        return $this->parsePositiveInt($payload[$key]);
     }
 
     protected function strParam($key, $default = '')
     {
         $payload = $this->payload();
-        if (!isset($payload[$key]) || is_array($payload[$key]) || is_object($payload[$key])) {
+        if (!isset($payload[$key]) || is_array($payload[$key]) || is_object($payload[$key]) || is_bool($payload[$key])) {
             return $default;
         }
         return trim((string) $payload[$key]);
     }
 
+    protected function rawStrParam($key, $default = '')
+    {
+        $payload = $this->payload();
+        if (!isset($payload[$key]) || is_array($payload[$key]) || is_object($payload[$key]) || is_bool($payload[$key])) {
+            return $default;
+        }
+        return (string) $payload[$key];
+    }
+
     protected function isValidIsoDate($value)
     {
+        if (is_array($value) || is_object($value) || is_bool($value)) {
+            return false;
+        }
         $str = trim((string) $value);
         if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $str, $m)) {
             return false;
@@ -88,6 +114,9 @@ abstract class ApiController
      */
     protected function textLen($value)
     {
+        if (is_array($value) || is_object($value) || is_bool($value) || $value === null) {
+            return 0;
+        }
         $str = (string) $value;
         if ($str === '') {
             return 0;
@@ -120,8 +149,15 @@ abstract class ApiController
         $allowed  = array_flip($allowedFields);
         $filtered = [];
         foreach ($source as $key => $value) {
-            if (isset($allowed[$key])) {
-                $filtered[$key] = is_string($value) ? trim($value) : $value;
+            if (!isset($allowed[$key])) {
+                continue;
+            }
+            if (is_array($value) || is_object($value) || is_bool($value)) {
+                $filtered[$key] = '';
+            } elseif (is_string($value)) {
+                $filtered[$key] = trim($value);
+            } else {
+                $filtered[$key] = $value;
             }
         }
         return $filtered;
@@ -137,12 +173,23 @@ abstract class ApiController
         }
         $ids = [];
         foreach ($raw as $item) {
-            if (is_numeric($item) && (int) $item > 0) {
-                $id = (int) $item;
+            $id = $this->parsePositiveInt($item);
+            if ($id > 0) {
                 $ids[$id] = $id;
             }
         }
         return array_values($ids);
+    }
+
+    protected function applyDateWindow($query, $startCol, $endCol, $date)
+    {
+        return $query
+            ->where(function ($q) use ($startCol, $date) {
+                $q->whereNull($startCol)->whereOr($startCol, '<=', $date);
+            })
+            ->where(function ($q) use ($endCol, $date) {
+                $q->whereNull($endCol)->whereOr($endCol, '>=', $date);
+            });
     }
 
     protected function escapeLike($keyword)

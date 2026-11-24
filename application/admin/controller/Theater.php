@@ -19,25 +19,15 @@ class Theater extends BaseAdmin
     public function index()
     {
         try {
-            $theaters = Db::name('theater')
-                ->order('theater_code', 'asc')
-                ->select();
-
+            $theaters = Db::name('theater')->order('theater_code', 'asc')->select();
             if (empty($theaters)) {
                 return $this->ok([]);
             }
 
-            $links    = Db::table('theater_movie')->select();
-            $movieMap = [];
-            foreach ($links as $row) {
-                $tid = (int) $row['theater_code'];
-                $movieMap[$tid][] = (int) $row['movie_code'];
-            }
-
+            $movieMap = $this->mapRelationIds('theater_movie', 'theater_code', 'movie_code');
             foreach ($theaters as &$t) {
                 $tid              = (int) $t['theater_code'];
                 $mCodes           = $movieMap[$tid] ?? [];
-                sort($mCodes);
                 $t['movie_codes'] = $mCodes;
                 $t['movie_count'] = count($mCodes);
             }
@@ -101,7 +91,7 @@ class Theater extends BaseAdmin
                     Db::name('theater')->where('theater_code', $theaterId)->update(['theater_id' => $autoCode]);
                 }
 
-                $this->syncTheaterMovies($theaterId, $movieCodes);
+                $this->syncScheduleRows('theater_code', $theaterId, $movieCodes, 'movie_code');
                 Db::commit();
 
                 return $this->ok([
@@ -134,6 +124,9 @@ class Theater extends BaseAdmin
             if ($error !== null) {
                 return $this->fail($error);
             }
+            if (empty($data['theater_id'])) {
+                $data['theater_id'] = 'TH-' . str_pad((string) $theaterId, 3, '0', STR_PAD_LEFT);
+            }
 
             $movieCodes = array_key_exists('movie_codes', $payload)
                 ? $this->resolveValidIds('movies', 'movie_code', $payload['movie_codes'])
@@ -148,7 +141,7 @@ class Theater extends BaseAdmin
                 }
 
                 if ($movieCodes !== null) {
-                    $this->syncTheaterMovies($theaterId, $movieCodes);
+                    $this->syncScheduleRows('theater_code', $theaterId, $movieCodes, 'movie_code');
                 }
 
                 Db::commit();
@@ -190,28 +183,6 @@ class Theater extends BaseAdmin
         } catch (\Throwable $e) {
             return $this->serverError('Failed to delete theater', $e);
         }
-    }
-
-    private function syncTheaterMovies($theaterId, array $movieCodes)
-    {
-        Db::table('theater_movie')->where('theater_code', $theaterId)->delete();
-        if (empty($movieCodes)) {
-            return;
-        }
-
-        $now  = date('Y-m-d H:i:s');
-        $rows = [];
-        foreach ($movieCodes as $mid) {
-            $rows[] = [
-                'theater_code'    => (int) $theaterId,
-                'movie_code'      => (int) $mid,
-                'start_date'      => '2026-01-01',
-                'end_date'        => '2027-12-31',
-                'daily_showtimes' => 4,
-                'created_time'    => $now,
-            ];
-        }
-        Db::table('theater_movie')->insertAll($rows);
     }
 
     private function prepareTheaterData(array $payload)

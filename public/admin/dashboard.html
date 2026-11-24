@@ -18,6 +18,9 @@
         <h1><i class="fas fa-chart-pie" aria-hidden="true"></i> Operations Dashboard</h1>
         <p>Live overview of movies, active promotions, partner cinemas, seat bookings, and registered members.</p>
       </div>
+      <div class="page-header-actions">
+        <button type="button" class="toolbar-btn" id="print-dashboard-btn"><i class="fas fa-print" aria-hidden="true"></i> Print Report</button>
+      </div>
     </div>
 
     <section class="stats-container" aria-label="Key Box Office Metrics">
@@ -114,12 +117,12 @@
       AdminApp.renderAdminNav('dashboard');
       if (!(await AdminApp.ensureAuthenticated())) return;
 
+      document.getElementById('print-dashboard-btn')?.addEventListener('click', function () {
+        window.print();
+      });
+
       const palette = ['#1d4ed8', '#be123c', '#0284c7', '#15803d', '#d97706', '#7c3aed', '#0f766e'];
-      const now = new Date();
-      const todayIso =
-        now.getFullYear() + '-' +
-        String(now.getMonth() + 1).padStart(2, '0') + '-' +
-        String(now.getDate()).padStart(2, '0');
+      const todayIso = window.CineTicket.todayIso();
 
       try {
         const [moviesRes, offersRes, seatsRes, usersRes, theatersRes] = await Promise.all([

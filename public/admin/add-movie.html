@@ -16,7 +16,7 @@
     <div class="page-header">
       <div>
         <h1><i class="fas fa-plus-circle" aria-hidden="true"></i> Add New Movie</h1>
-        <p>Enter movie metadata, pricing, poster path, and screening theaters.</p>
+        <p>Enter movie metadata, pricing, poster path, screening theaters, and eligible promotional offers.</p>
       </div>
     </div>
 
@@ -80,6 +80,18 @@
           <div id="theater-check-grid" class="relation-check-grid"></div>
           <span class="form-hint">Checked partner cinemas will list this film under Now Showing and accept seat bookings.</span>
         </div>
+
+        <div class="form-group full-width">
+          <div class="form-label-row">
+            <span class="form-label">Eligible Promotional Offers</span>
+            <div class="mini-link-group">
+              <button type="button" class="mini-link-btn" id="select-all-offers">Select All</button>
+              <button type="button" class="mini-link-btn" id="clear-all-offers">Clear</button>
+            </div>
+          </div>
+          <div id="offer-check-grid" class="relation-check-grid"></div>
+          <span class="form-hint">Checked promo codes can be redeemed immediately when booking this film at checkout.</span>
+        </div>
       </div>
 
       <div class="form-actions">
@@ -98,10 +110,26 @@
       AdminApp.bindImagePreview(imgInput, document.getElementById('poster-preview'));
 
       const theaterGrid = document.getElementById('theater-check-grid');
-      const theatersRes = await AdminApp.apiFetch('/index.php/admin/theater/index');
-      const theaters = theatersRes.success && Array.isArray(theatersRes.data) ? theatersRes.data : [];
-      AdminApp.renderCheckList(theaterGrid, theaters, 'theater_code', function (t) { return t.theater_name; }, null);
+      const offerGrid = document.getElementById('offer-check-grid');
       AdminApp.bindCheckControls(theaterGrid, 'select-all-theaters', 'clear-all-theaters');
+      AdminApp.bindCheckControls(offerGrid, 'select-all-offers', 'clear-all-offers');
+
+      const [theatersRes, offersRes] = await Promise.all([
+        AdminApp.apiFetch('/index.php/admin/theater/index'),
+        AdminApp.apiFetch('/index.php/admin/offer/index'),
+      ]);
+      const theaters = theatersRes.success && Array.isArray(theatersRes.data) ? theatersRes.data : [];
+      const offers = offersRes.success && Array.isArray(offersRes.data) ? offersRes.data : [];
+      const defaultOfferIds = offers.filter(function (o) { return !o.user_code; }).map(function (o) { return o.offer_code; });
+
+      AdminApp.renderCheckList(theaterGrid, theaters, 'theater_code', function (t) { return t.theater_name; }, null);
+      AdminApp.renderCheckList(
+        offerGrid,
+        offers,
+        'offer_code',
+        function (o) { return o.promo_code + ' — ' + o.offer_title + ' (-$' + (parseFloat(o.money) || 0).toFixed(2) + ')'; },
+        defaultOfferIds
+      );
 
       document.getElementById('add-movie-form').addEventListener('submit', function (e) {
         e.preventDefault();
@@ -114,6 +142,7 @@
           tag: document.getElementById('tag').value.trim(),
           img: imgInput.value.trim(),
           theater_codes: AdminApp.getCheckedIds(theaterGrid),
+          offer_codes: AdminApp.getCheckedIds(offerGrid),
         }, 'movies.html', 'Movie created successfully', 'Failed to create movie', e.submitter);
       });
     });

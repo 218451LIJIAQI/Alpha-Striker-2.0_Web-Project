@@ -101,8 +101,8 @@
       AdminApp.renderAdminNav('offers');
       if (!(await AdminApp.ensureAuthenticated())) return;
 
-      const offerCode = new URLSearchParams(window.location.search).get('offer_code');
-      if (!offerCode) {
+      const offerCode = (new URLSearchParams(window.location.search).get('offer_code') || '').trim();
+      if (!/^[1-9]\d*$/.test(offerCode)) {
         window.location.href = 'offers.html';
         return;
       }
@@ -124,22 +124,16 @@
         return;
       }
 
-      const users = usersRes.success && Array.isArray(usersRes.data) ? usersRes.data : [];
-      users.forEach(function (u) {
-        const opt = document.createElement('option');
-        opt.value = String(u.user_code);
-        opt.textContent = u.user_name + ' (' + u.email + ')';
-        userSelect.appendChild(opt);
-      });
-
       const o = detailRes.data;
+      const users = usersRes.success && Array.isArray(usersRes.data) ? usersRes.data : [];
+      AdminApp.populateUserSelect(userSelect, users, o.user_code ? String(o.user_code) : '');
+
       document.getElementById('offer_title').value = o.offer_title || '';
-      document.getElementById('offer_type').value = o.offer_type || 'Student Deals';
+      AdminApp.ensureSelectOption(document.getElementById('offer_type'), o.offer_type || 'Student Deals');
       document.getElementById('promo_code').value = o.promo_code || '';
       document.getElementById('money').value = o.money !== undefined ? o.money : '5.00';
       document.getElementById('offer_validity').value = o.offer_validity || '';
       document.getElementById('badge').value = o.badge || '';
-      userSelect.value = o.user_code ? String(o.user_code) : '';
       imgInput.value = o.img || '';
       syncPreview();
       document.getElementById('offer_description').value = o.offer_description || '';

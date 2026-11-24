@@ -6,7 +6,7 @@
 
   let requestSeq = 0;
 
-  async function fetchTheaters(address, amenity) {
+  async function fetchTheaters(address, amenity, onReset) {
     const seq = ++requestSeq;
     const params = new URLSearchParams();
     if (address) params.append('address', address);
@@ -19,7 +19,7 @@
       );
       if (seq !== requestSeq) return;
       if (payload.success) {
-        renderTheaters(payload.data || []);
+        renderTheaters(payload.data || [], onReset);
       } else {
         window.showToast(payload.message || 'Failed to load theaters', 'error');
       }
@@ -29,7 +29,7 @@
     }
   }
 
-  function renderTheaters(theaters) {
+  function renderTheaters(theaters, onReset) {
     const theaterList = document.querySelector('.theater-list');
     if (!theaterList) return;
 
@@ -41,7 +41,11 @@
         '<div class="grid-empty-state">' +
         '<h3>No theaters matched your criteria</h3>' +
         '<p>Try clearing your location filter or choosing All Theaters.</p>' +
+        '<button type="button" class="btn btn-primary empty-reset-btn">Show All Theaters</button>' +
         '</div>';
+      if (typeof onReset === 'function') {
+        theaterList.querySelector('.empty-reset-btn')?.addEventListener('click', onReset);
+      }
       return;
     }
 
@@ -61,7 +65,7 @@
       card.innerHTML =
         '<div class="theater-image">' +
         '<img src="' + esc(CT.resolveAssetUrl(theater.img)) + '" alt="' + esc(theater.theater_name) + '" loading="lazy">' +
-        (theater.distance ? '<span class="theater-distance-pill">' + esc(theater.distance) + '</span>' : '') +
+        (theater.distance ? '<span class="theater-distance-pill tabular-nums">' + esc(theater.distance) + '</span>' : '') +
         '</div>' +
         '<div class="theater-details">' +
         '<h3>' + esc(theater.theater_name) + '</h3>' +
@@ -93,11 +97,21 @@
       btn.setAttribute('aria-pressed', String(idx === 0));
     });
 
-    fetchTheaters('', '');
+    function resetAll() {
+      if (searchInput) searchInput.value = '';
+      activeAmenity = '';
+      filterButtons.forEach(function (btn, idx) {
+        btn.classList.toggle('active', idx === 0);
+        btn.setAttribute('aria-pressed', String(idx === 0));
+      });
+      fetchTheaters('', '', resetAll);
+    }
 
     function runSearch() {
-      fetchTheaters(searchInput ? searchInput.value.trim() : '', activeAmenity);
+      fetchTheaters(searchInput ? searchInput.value.trim() : '', activeAmenity, resetAll);
     }
+
+    fetchTheaters('', '', resetAll);
 
     searchBtn?.addEventListener('click', runSearch);
     searchInput?.addEventListener('keydown', function (e) {

@@ -216,7 +216,7 @@
     }
 
     .seat-3d.active-pov {
-      background: #16a34a;
+      background: #15803d;
       border-color: #bbf7d0;
       color: #ffffff;
       transform: translateZ(24px) scale(1.16);
@@ -248,7 +248,7 @@
       color: #e2e8f0;
       padding: 15px 18px;
       border-radius: 14px;
-      max-width: 420px;
+      max-width: 440px;
       font-size: 13px;
       line-height: 1.5;
       backdrop-filter: blur(8px);
@@ -357,8 +357,8 @@
 
     <div class="bottom-hud">
       <div id="infoBox">
-        <div class="info-heading">Auditorium Hall A — 3D Sightline Simulator</div>
-        <div>Drag to orbit, use arrow keys, or click any seat (A1–H12) to inspect screen elevation and acoustic balance offline or online.</div>
+        <div class="info-heading" id="hall-heading">Auditorium Hall A — 3D Sightline Simulator</div>
+        <div>Drag to orbit, use arrow keys, press Esc to exit, or click any seat (A1–H12) to inspect screen elevation and acoustic balance.</div>
         <div class="telemetry-badges">
           <span class="telemetry-pill" id="pov-seat-label">Seat: D6</span>
           <span class="telemetry-pill" id="pov-angle-label">Angle: 36° THX Optimal</span>
@@ -392,10 +392,13 @@
       const ROW_ANGLES = { A: '54° Close', B: '47° Immersive', C: '41° Wide', D: '36° THX Optimal', E: '34° THX Optimal', F: '30° Balanced', G: '27° Elevated', H: '24° Panoramic' };
 
       const params = new URLSearchParams(window.location.search);
-      const movieCode = params.get('movie_code') || '1';
-      const theaterCode = params.get('theater_code') || '1';
-      const dateParam = params.get('date') || '';
-      const timeParam = params.get('time') || '';
+      const rawMovie = (params.get('movie_code') || '').trim();
+      const rawTheater = (params.get('theater_code') || '').trim();
+      const movieCode = /^[1-9]\d*$/.test(rawMovie) ? rawMovie : '1';
+      const theaterCode = /^[1-9]\d*$/.test(rawTheater) ? rawTheater : '1';
+      const rawDate = (params.get('date') || '').trim();
+      const dateParam = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : '';
+      const timeParam = (params.get('time') || '').trim();
       const priorSeats = (params.get('seats') || '')
         .split(',')
         .map(function (s) { return s.trim().toUpperCase(); })
@@ -421,6 +424,7 @@
       const zoomSlider = document.getElementById('zoom-slider');
       const bookBtn = document.getElementById('book-pov-seat-btn');
       const captionEl = document.getElementById('screen-sightline-caption');
+      const headingEl = document.getElementById('hall-heading');
       const seatLabel = document.getElementById('pov-seat-label');
       const angleLabel = document.getElementById('pov-angle-label');
       const zoneLabel = document.getElementById('pov-zone-label');
@@ -459,6 +463,14 @@
         floor.appendChild(rowEl);
       });
 
+      function closeExternalMesh() {
+        externalActive = false;
+        extWrap.classList.remove('active');
+        extWrap.innerHTML = '';
+        toggleExtBtn.textContent = 'External 3D Mesh';
+        toggleExtBtn.setAttribute('aria-pressed', 'false');
+      }
+
       function applyTransform() {
         const scale = (zoom / 100).toFixed(2);
         room.style.transform = 'scale(' + scale + ') rotateX(' + pitch + 'deg) rotateY(' + yaw + 'deg)';
@@ -495,19 +507,36 @@
         bookBtn.textContent = isReserved ? ('Seat ' + code + ' Unavailable') : ('Reserve Seat ' + code);
       }
 
-      async function syncOccupiedSeats() {
-        if (!dateParam || !timeParam) return;
+      async function syncContextAndSeats() {
         try {
-          const q = new URLSearchParams({
-            movie_code: movieCode,
-            theater_code: theaterCode,
-            date: dateParam,
-            time: timeParam,
-          });
-          const res = await fetch('/index.php/movie/seat/getSeatList?' + q.toString(), { credentials: 'same-origin' });
-          const payload = await res.json();
-          if (payload && payload.success && Array.isArray(payload.data)) {
-            payload.data.forEach(function (s) {
+          const tasks = [
+            fetch('/index.php/movie/movies/getMovieByCode?movie_code=' + encodeURIComponent(movieCode), { credentials: 'same-origin' }).then(function (r) { return r.json(); }),
+            fetch('/index.php/theater/theater/getTheaterDetails?theater_code=' + encodeURIComponent(theaterCode), { credentials: 'same-origin' }).then(function (r) { return r.json(); }),
+          ];
+          if (dateParam && timeParam) {
+            const q = new URLSearchParams({
+              movie_code: movieCode,
+              theater_code: theaterCode,
+              date: dateParam,
+              time: timeParam,
+            });
+            tasks.push(fetch('/index.php/movie/seat/getSeatList?' + q.toString(), { credentials: 'same-origin' }).then(function (r) { return r.json(); }));
+          }
+          const results = await Promise.all(tasks);
+          const movieRes = results[0];
+          const theaterRes = results[1];
+          const seatRes = results[2];
+
+          const mTitle = movieRes && movieRes.success && movieRes.data ? movieRes.data.movie_name : '';
+          const tTitle = theaterRes && theaterRes.success && theaterRes.data ? theaterRes.data.theater_name : '';
+          if (mTitle && tTitle) {
+            headingEl.textContent = mTitle + ' @ ' + tTitle + ' — 3D Sightlines';
+          } else if (mTitle || tTitle) {
+            headingEl.textContent = (mTitle || tTitle) + ' — 3D Sightline Simulator';
+          }
+
+          if (seatRes && seatRes.success && Array.isArray(seatRes.data)) {
+            seatRes.data.forEach(function (s) {
               const c = String(s.seat_num || '').toUpperCase();
               occupiedSet.add(c);
               const el = floor.querySelector('.seat-3d[data-seat="' + c + '"]');
@@ -518,6 +547,24 @@
         } catch (_) {
           // Offline sightline preview continues without network error
         }
+      }
+
+      function buildReturnParams(includeActiveSeat) {
+        const dest = new URLSearchParams({
+          movie_code: movieCode,
+          theater_code: theaterCode,
+        });
+        if (dateParam) dest.set('date', dateParam);
+        if (timeParam) dest.set('time', timeParam);
+        const merged = priorSeats.slice();
+        if (includeActiveSeat && !occupiedSet.has(activeSeat) && merged.indexOf(activeSeat) === -1) {
+          if (merged.length < 10) merged.push(activeSeat);
+          else merged[merged.length - 1] = activeSeat;
+        }
+        if (merged.length) {
+          dest.set('seats', merged.join(','));
+        }
+        return dest.toString();
       }
 
       stage.addEventListener('pointerdown', function (e) {
@@ -539,6 +586,15 @@
       window.addEventListener('pointerup', function () { dragging = false; });
 
       window.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          if (externalActive) {
+            closeExternalMesh();
+          } else {
+            window.location.href = 'booking3.html?' + buildReturnParams(false);
+          }
+          return;
+        }
         if (e.target && e.target.tagName === 'INPUT') return;
         const rIdx = ROWS.indexOf(activeSeat.charAt(0));
         const col = parseInt(activeSeat.slice(1), 10);
@@ -568,13 +624,7 @@
           });
           btn.classList.add('active');
           btn.setAttribute('aria-pressed', 'true');
-          if (externalActive) {
-            externalActive = false;
-            extWrap.classList.remove('active');
-            extWrap.innerHTML = '';
-            toggleExtBtn.textContent = 'External 3D Mesh';
-            toggleExtBtn.setAttribute('aria-pressed', 'false');
-          }
+          if (externalActive) closeExternalMesh();
           selectPovSeat(btn.dataset.seat || 'D6');
           yaw = Number(btn.dataset.yaw || 0);
           pitch = Number(btn.dataset.pitch || 24);
@@ -585,11 +635,7 @@
 
       toggleExtBtn.addEventListener('click', function () {
         if (externalActive) {
-          externalActive = false;
-          extWrap.classList.remove('active');
-          extWrap.innerHTML = '';
-          toggleExtBtn.textContent = 'External 3D Mesh';
-          toggleExtBtn.setAttribute('aria-pressed', 'false');
+          closeExternalMesh();
           return;
         }
         if (!navigator.onLine) {
@@ -603,24 +649,6 @@
         toggleExtBtn.setAttribute('aria-pressed', 'true');
       });
 
-      function buildReturnParams(includeActiveSeat) {
-        const dest = new URLSearchParams({
-          movie_code: movieCode,
-          theater_code: theaterCode,
-        });
-        if (dateParam) dest.set('date', dateParam);
-        if (timeParam) dest.set('time', timeParam);
-        const merged = priorSeats.slice();
-        if (includeActiveSeat && !occupiedSet.has(activeSeat) && merged.indexOf(activeSeat) === -1) {
-          if (merged.length < 10) merged.push(activeSeat);
-          else merged[merged.length - 1] = activeSeat;
-        }
-        if (merged.length) {
-          dest.set('seats', merged.join(','));
-        }
-        return dest.toString();
-      }
-
       document.getElementById('backBtn').addEventListener('click', function () {
         window.location.href = 'booking3.html?' + buildReturnParams(false);
       });
@@ -631,7 +659,7 @@
       });
 
       selectPovSeat(activeSeat);
-      syncOccupiedSeats();
+      syncContextAndSeats();
     })();
   </script>
 </body>

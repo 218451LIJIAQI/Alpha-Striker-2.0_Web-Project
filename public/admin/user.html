@@ -26,16 +26,17 @@
       <table>
         <thead>
           <tr>
+            <th class="check-col"><input type="checkbox" data-role="check-all" aria-label="Select all users on page"></th>
             <th>User ID</th>
             <th>Display Name</th>
             <th>Email Address</th>
             <th>Registered At</th>
             <th>Last Updated</th>
-            <th>Actions</th>
+            <th class="actions-col">Actions</th>
           </tr>
         </thead>
         <tbody id="users-tbody">
-          <tr><td colspan="6" class="empty-state">Loading users...</td></tr>
+          <tr><td colspan="7" class="empty-state">Loading users...</td></tr>
         </tbody>
       </table>
     </div>
@@ -50,7 +51,7 @@
       const tableCtrl = AdminApp.createTableController({
         toolbarId: 'users-toolbar',
         tbodyId: 'users-tbody',
-        colSpan: 6,
+        colSpan: 7,
         emptyText: 'No registered users found.',
         searchPlaceholder: 'Search by display name, email address, or user ID...',
         sorts: [
@@ -58,18 +59,34 @@
           { key: 'id_asc', label: 'Sort: User ID (Low–High)', compare: function (a, b) { return Number(a.user_code) - Number(b.user_code); } },
           { key: 'name_asc', label: 'Sort: Name (A–Z)', compare: function (a, b) { return String(a.user_name || '').localeCompare(String(b.user_name || '')); } },
         ],
+        bulkAction: {
+          label: 'Delete Selected',
+          endpoint: '/index.php/admin/user/delete',
+          idKey: 'user_code',
+          confirmText: function (n) { return 'Delete ' + n + ' selected user account(s)?'; },
+          successPrefix: 'Deleted',
+          onSuccess: loadUsers,
+        },
+        exportCsv: {
+          filename: 'cinetix-users.csv',
+          headers: ['User ID', 'Display Name', 'Email Address', 'Registered At', 'Last Updated'],
+          row: function (u) {
+            return [u.user_code, u.user_name, u.email, u.create_time || '', u.update_time || ''];
+          },
+        },
         searchText: function (u) {
           return '#' + u.user_code + ' ' + (u.user_name || '') + ' ' + (u.email || '');
         },
         renderRow: function (u) {
           return (
             '<tr>' +
+            '<td class="check-col"><input type="checkbox" class="row-check" value="' + esc(u.user_code) + '" aria-label="Select user #' + esc(u.user_code) + '"></td>' +
             '<td class="tabular-nums">#' + esc(u.user_code) + '</td>' +
             '<td><strong>' + esc(u.user_name) + '</strong></td>' +
             '<td>' + esc(u.email) + '</td>' +
             '<td class="tabular-nums">' + esc(u.create_time || '—') + '</td>' +
             '<td class="tabular-nums">' + esc(u.update_time || '—') + '</td>' +
-            '<td><div class="action-buttons">' +
+            '<td class="actions-col"><div class="action-buttons">' +
             '<a href="edit-user.html?user_code=' + encodeURIComponent(u.user_code) + '" class="edit-btn"><i class="fas fa-edit" aria-hidden="true"></i> Edit</a>' +
             '<button type="button" class="delete-btn" data-id="' + esc(u.user_code) + '"><i class="fas fa-trash" aria-hidden="true"></i> Delete</button>' +
             '</div></td>' +

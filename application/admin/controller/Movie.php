@@ -23,19 +23,17 @@ class Movie extends BaseAdmin
                 return $this->ok([]);
             }
 
-            $links      = Db::table('theater_movie')->select();
-            $theaterMap = [];
-            foreach ($links as $row) {
-                $mid = (int) $row['movie_code'];
-                $theaterMap[$mid][] = (int) $row['theater_code'];
-            }
+            $theaterMap = $this->mapRelationIds('theater_movie', 'movie_code', 'theater_code');
+            $offerMap   = $this->mapRelationIds('movie_offer', 'movie_code', 'offer_code');
 
             foreach ($movies as &$m) {
                 $mid                = (int) $m['movie_code'];
                 $tCodes             = $theaterMap[$mid] ?? [];
-                sort($tCodes);
+                $oCodes             = $offerMap[$mid] ?? [];
                 $m['theater_codes'] = $tCodes;
                 $m['theater_count'] = count($tCodes);
+                $m['offer_codes']   = $oCodes;
+                $m['offer_count']   = count($oCodes);
             }
             unset($m);
 
@@ -102,13 +100,14 @@ class Movie extends BaseAdmin
                     return $this->fail('Failed to create movie');
                 }
 
-                $this->syncMovieTheaters($movieId, $theaterCodes);
+                $this->syncScheduleRows('movie_code', $movieId, $theaterCodes, 'theater_code');
                 $this->syncMovieOffers($movieId, $offerCodes);
                 Db::commit();
 
                 return $this->ok([
                     'movie_code'    => $movieId,
                     'theater_codes' => $theaterCodes,
+                    'offer_codes'   => $offerCodes,
                 ], 'Movie created successfully');
             } catch (\Throwable $txErr) {
                 Db::rollback();
@@ -153,7 +152,7 @@ class Movie extends BaseAdmin
                 }
 
                 if ($theaterCodes !== null) {
-                    $this->syncMovieTheaters($movieId, $theaterCodes);
+                    $this->syncScheduleRows('movie_code', $movieId, $theaterCodes, 'theater_code');
                 }
                 if ($offerCodes !== null) {
                     $this->syncMovieOffers($movieId, $offerCodes);
@@ -199,28 +198,6 @@ class Movie extends BaseAdmin
         } catch (\Throwable $e) {
             return $this->serverError('Failed to delete movie', $e);
         }
-    }
-
-    private function syncMovieTheaters($movieId, array $theaterCodes)
-    {
-        Db::table('theater_movie')->where('movie_code', $movieId)->delete();
-        if (empty($theaterCodes)) {
-            return;
-        }
-
-        $now  = date('Y-m-d H:i:s');
-        $rows = [];
-        foreach ($theaterCodes as $tid) {
-            $rows[] = [
-                'theater_code'    => (int) $tid,
-                'movie_code'      => (int) $movieId,
-                'start_date'      => '2026-01-01',
-                'end_date'        => '2027-12-31',
-                'daily_showtimes' => 4,
-                'created_time'    => $now,
-            ];
-        }
-        Db::table('theater_movie')->insertAll($rows);
     }
 
     private function syncMovieOffers($movieId, array $offerCodes)

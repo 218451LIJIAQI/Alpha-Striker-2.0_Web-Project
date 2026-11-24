@@ -58,7 +58,9 @@ class Seat extends ApiController
                 !$this->isValidIsoDate($date) ||
                 $time === '' ||
                 $this->textLen($time) > 30 ||
-                empty($rawSeats)
+                empty($rawSeats) ||
+                is_object($rawSeats) ||
+                is_bool($rawSeats)
             ) {
                 return $this->fail('Complete screening and seat parameters are required');
             }
@@ -66,6 +68,9 @@ class Seat extends ApiController
             $seatList        = is_array($rawSeats) ? $rawSeats : explode(',', (string) $rawSeats);
             $normalizedSeats = [];
             foreach ($seatList as $seat) {
+                if (is_array($seat) || is_object($seat) || is_bool($seat)) {
+                    return $this->fail('Invalid seat coordinate');
+                }
                 $code = strtoupper(trim((string) $seat));
                 if ($code === '') {
                     continue;

@@ -1,7 +1,8 @@
 /**
  * Shared Admin Console Runtime
- * Centralizes authenticated API calls (X-Admin-Token), navigation, relation checklists,
- * reusable search/filter/sort/pagination table tools, anti-double-submit CRUD helpers, and Canvas charts.
+ * Centralizes authenticated API calls (X-Admin-Token), cross-tab session guard, navigation,
+ * relation checklists, search/filter/sort/reset/pagination/bulk-action/CSV/print table controller,
+ * anti-double-submit CRUD helpers, and Canvas charts.
  */
 (function () {
   'use strict';
@@ -20,6 +21,17 @@
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
     localStorage.removeItem('adminRemember');
+  }
+
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('storage', function (e) {
+      if (e && (e.key === 'adminToken' || e.key === null) && !getToken()) {
+        const path = window.location.pathname || '';
+        if (path.includes('/admin/') && !path.endsWith('/login.html')) {
+          window.location.href = 'login.html';
+        }
+      }
+    });
   }
 
   async function apiFetch(url, options) {
@@ -168,6 +180,51 @@
       .filter(function (n) { return n > 0; });
   }
 
+  function populateUserSelect(selectEl, users, selectedCode) {
+    if (!selectEl || !Array.isArray(users)) return;
+    users.forEach(function (u) {
+      const opt = document.createElement('option');
+      opt.value = String(u.user_code);
+      opt.textContent = u.user_name + ' (' + u.email + ')';
+      selectEl.appendChild(opt);
+    });
+    if (selectedCode !== undefined && selectedCode !== null && selectedCode !== '') {
+      selectEl.value = String(selectedCode);
+    }
+  }
+
+  function ensureSelectOption(selectEl, value) {
+    if (!selectEl || !value) return;
+    const strVal = String(value);
+    const exists = Array.from(selectEl.options || []).some(function (o) { return o.value === strVal; });
+    if (!exists) {
+      const opt = document.createElement('option');
+      opt.value = strVal;
+      opt.textContent = strVal;
+      selectEl.appendChild(opt);
+    }
+    selectEl.value = strVal;
+  }
+
+  function downloadCsv(filename, headers, rows) {
+    const csvCell = function (val) {
+      const s = val === null || val === undefined ? '' : String(val);
+      return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const lines = [headers.map(csvCell).join(',')].concat(
+      rows.map(function (r) { return r.map(csvCell).join(','); })
+    );
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 500);
+  }
+
   function bindDeleteActions(container, opts) {
     container.querySelectorAll(opts.selector || '.delete-btn').forEach(function (btn) {
       btn.addEventListener('click', async function () {
@@ -231,17 +288,22 @@
   }
 
   /**
-   * Reusable client-side search, filter, sort & pagination controller for Admin tables.
+   * Reusable client-side search, filter, sort, reset, pagination, bulk-action & CSV/Print controller.
    */
   function createTableController(config) {
     const toolbarEl = document.getElementById(config.toolbarId);
     const tbody = document.getElementById(config.tbodyId);
+    const defaultSortKey = (config.sorts && config.sorts[0] && config.sorts[0].key) || 'default';
     let allItems = [];
+    let filteredCache = [];
     let query = '';
     let filterVal = 'all';
-    let sortKey = (config.sorts && config.sorts[0] && config.sorts[0].key) || 'default';
+    let sortKey = defaultSortKey;
     let page = 1;
-    let pageSize = config.pageSize || 25;
+    const pageSize = config.pageSize || 25;
+    const selectedIds = new Set();
+    const bulkCfg = config.bulkAction || null;
+    const exportCfg = config.exportCsv || null;
 
     if (toolbarEl) {
       const filterSelectHtml = Array.isArray(config.filters) && config.filters.length
@@ -260,33 +322,129 @@
           '</select>'
         : '';
 
+      const resetBtnHtml = '<button type="button" class="toolbar-btn is-hidden" data-role="reset" aria-label="Reset table filters">Reset</button>';
+      const bulkBtnHtml = bulkCfg
+        ? '<button type="button" class="delete-btn toolbar-bulk-btn is-hidden" data-role="bulk"></button>'
+        : '';
+      const exportBtnsHtml = exportCfg
+        ? '<button type="button" class="toolbar-btn" data-role="export" title="Export filtered rows as CSV"><i class="fas fa-clipboard-list" aria-hidden="true"></i> Export CSV</button>' +
+          '<button type="button" class="toolbar-btn" data-role="print" title="Print current table"><i class="fas fa-print" aria-hidden="true"></i> Print</button>'
+        : '';
+
       toolbarEl.innerHTML =
         '<div class="admin-toolbar-left">' +
         '<input type="search" class="toolbar-search" placeholder="' + CT.escapeHtml(config.searchPlaceholder || 'Search records...') + '" aria-label="Search table">' +
         filterSelectHtml +
         sortSelectHtml +
+        resetBtnHtml +
         '</div>' +
         '<div class="admin-toolbar-right">' +
+        bulkBtnHtml +
+        exportBtnsHtml +
         '<span class="toolbar-count tabular-nums" data-role="count">0 records</span>' +
         '<div class="toolbar-pager" data-role="pager"></div>' +
         '</div>';
 
-      toolbarEl.querySelector('.toolbar-search')?.addEventListener('input', function (e) {
+      const searchEl = toolbarEl.querySelector('.toolbar-search');
+      const filterEl = toolbarEl.querySelector('[data-role="filter"]');
+      const sortEl = toolbarEl.querySelector('[data-role="sort"]');
+
+      searchEl?.addEventListener('input', function (e) {
         query = e.target.value.trim().toLowerCase();
         page = 1;
         render();
       });
-      toolbarEl.querySelector('[data-role="filter"]')?.addEventListener('change', function (e) {
+      filterEl?.addEventListener('change', function (e) {
         filterVal = e.target.value;
         page = 1;
         render();
       });
-      toolbarEl.querySelector('[data-role="sort"]')?.addEventListener('change', function (e) {
+      sortEl?.addEventListener('change', function (e) {
         sortKey = e.target.value;
         page = 1;
         render();
       });
+      toolbarEl.querySelector('[data-role="reset"]')?.addEventListener('click', function () {
+        query = '';
+        filterVal = 'all';
+        sortKey = defaultSortKey;
+        page = 1;
+        if (searchEl) searchEl.value = '';
+        if (filterEl) filterEl.value = 'all';
+        if (sortEl) sortEl.value = defaultSortKey;
+        render();
+      });
+      toolbarEl.querySelector('[data-role="export"]')?.addEventListener('click', function () {
+        if (!exportCfg) return;
+        downloadCsv(
+          exportCfg.filename || 'cinetix-export.csv',
+          exportCfg.headers || [],
+          filteredCache.map(exportCfg.row)
+        );
+      });
+      toolbarEl.querySelector('[data-role="print"]')?.addEventListener('click', function () {
+        window.print();
+      });
+      toolbarEl.querySelector('[data-role="bulk"]')?.addEventListener('click', async function (e) {
+        if (!bulkCfg || !selectedIds.size) return;
+        const btn = e.currentTarget;
+        if (btn.disabled) return;
+        const ids = Array.from(selectedIds);
+        const msg = typeof bulkCfg.confirmText === 'function'
+          ? bulkCfg.confirmText(ids.length)
+          : ('Delete ' + ids.length + ' selected record(s)?');
+        if (!window.confirm(msg)) return;
+        btn.disabled = true;
+        let okCount = 0;
+        try {
+          for (let i = 0; i < ids.length; i++) {
+            const payload = {};
+            payload[bulkCfg.idKey] = ids[i];
+            const res = await apiFetch(bulkCfg.endpoint, { method: 'POST', body: payload });
+            if (res && res.success) {
+              okCount += 1;
+              selectedIds.delete(ids[i]);
+            }
+          }
+          if (okCount > 0) {
+            window.showToast((bulkCfg.successPrefix || 'Removed') + ' ' + okCount + ' record(s)', 'success');
+            if (typeof bulkCfg.onSuccess === 'function') bulkCfg.onSuccess();
+          } else {
+            window.showToast('Bulk operation could not complete', 'error');
+          }
+        } finally {
+          btn.disabled = false;
+        }
+      });
     }
+
+    const checkAllEl = tbody && tbody.closest && tbody.closest('table')
+      ? tbody.closest('table').querySelector('[data-role="check-all"]')
+      : null;
+
+    function syncBulkToolbar(slice) {
+      if (!bulkCfg || !toolbarEl) return;
+      const bulkBtn = toolbarEl.querySelector('[data-role="bulk"]');
+      if (bulkBtn) {
+        const n = selectedIds.size;
+        bulkBtn.classList.toggle('is-hidden', n === 0);
+        bulkBtn.innerHTML = '<i class="fas fa-trash" aria-hidden="true"></i> ' + CT.escapeHtml((bulkCfg.label || 'Delete Selected') + ' (' + n + ')');
+      }
+      if (checkAllEl) {
+        const sliceIds = (slice || []).map(function (it) { return String(it[bulkCfg.idKey]); });
+        checkAllEl.checked = sliceIds.length > 0 && sliceIds.every(function (id) { return selectedIds.has(id); });
+      }
+    }
+
+    checkAllEl?.addEventListener('change', function () {
+      if (!bulkCfg || !tbody) return;
+      tbody.querySelectorAll('.row-check').forEach(function (cb) {
+        cb.checked = checkAllEl.checked;
+        if (checkAllEl.checked) selectedIds.add(String(cb.value));
+        else selectedIds.delete(String(cb.value));
+      });
+      syncBulkToolbar(filteredCache.slice((page - 1) * pageSize, page * pageSize));
+    });
 
     function render() {
       if (!tbody) return;
@@ -307,6 +465,7 @@
         list.sort(sortDef.compare);
       }
 
+      filteredCache = list;
       const total = list.length;
       const totalPages = Math.max(1, Math.ceil(total / pageSize));
       if (page > totalPages) page = totalPages;
@@ -314,6 +473,10 @@
       const slice = list.slice((page - 1) * pageSize, page * pageSize);
 
       if (toolbarEl) {
+        const resetEl = toolbarEl.querySelector('[data-role="reset"]');
+        if (resetEl && resetEl.classList) {
+          resetEl.classList.toggle('is-hidden', !query && filterVal === 'all' && sortKey === defaultSortKey);
+        }
         const countEl = toolbarEl.querySelector('[data-role="count"]');
         if (countEl) {
           countEl.textContent =
@@ -345,10 +508,23 @@
           '<tr><td colspan="' + (config.colSpan || 8) + '" class="empty-state">' +
           CT.escapeHtml(allItems.length === 0 ? (config.emptyText || 'No records found.') : 'No matching records for current filter.') +
           '</td></tr>';
+        syncBulkToolbar([]);
         return;
       }
 
       tbody.innerHTML = slice.map(config.renderRow).join('');
+      if (bulkCfg) {
+        tbody.querySelectorAll('.row-check').forEach(function (cb) {
+          const val = String(cb.value);
+          cb.checked = selectedIds.has(val);
+          cb.addEventListener('change', function () {
+            if (cb.checked) selectedIds.add(val);
+            else selectedIds.delete(val);
+            syncBulkToolbar(slice);
+          });
+        });
+      }
+      syncBulkToolbar(slice);
       if (typeof config.afterRender === 'function') {
         config.afterRender(tbody);
       }
@@ -357,6 +533,12 @@
     return {
       setItems: function (items) {
         allItems = Array.isArray(items) ? items : [];
+        if (bulkCfg) {
+          const validSet = new Set(allItems.map(function (it) { return String(it[bulkCfg.idKey]); }));
+          Array.from(selectedIds).forEach(function (id) {
+            if (!validSet.has(id)) selectedIds.delete(id);
+          });
+        }
         render();
       },
       refresh: render,
@@ -442,10 +624,13 @@
     bindDeleteActions: bindDeleteActions,
     bindImagePreview: bindImagePreview,
     createTableController: createTableController,
+    downloadCsv: downloadCsv,
     drawBarChart: drawBarChart,
     ensureAuthenticated: ensureAuthenticated,
+    ensureSelectOption: ensureSelectOption,
     escapeHtml: CT.escapeHtml,
     getCheckedIds: getCheckedIds,
+    populateUserSelect: populateUserSelect,
     renderAdminNav: renderAdminNav,
     renderCheckList: renderCheckList,
     resolveAdminAsset: CT.resolveAssetUrl,

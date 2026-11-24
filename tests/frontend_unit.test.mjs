@@ -15,6 +15,7 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
   const appended = [];
   const fetchCalls = [];
   const windowEvents = [];
+  const windowListeners = new Map();
   const domById = new Map();
 
   const makeClassList = (set) => ({
@@ -32,15 +33,30 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
   const makeElement = (tag) => {
     const attrs = new Map();
     const listeners = new Map();
+    const elClasses = new Set();
+    const children = [];
     return {
       tagName: tag.toUpperCase(),
       id: '',
       rel: '',
       href: '',
+      value: '',
+      download: '',
+      checked: false,
+      disabled: false,
       className: '',
       innerHTML: '',
       textContent: '',
+      options: children,
+      classList: makeClassList(elClasses),
       parentNode: { removeChild: () => {} },
+      appendChild(child) {
+        children.push(child);
+        return child;
+      },
+      click() {
+        this.clicked = true;
+      },
       setAttribute: (k, v) => attrs.set(k, String(v)),
       getAttribute: (k) => (attrs.has(k) ? attrs.get(k) : null),
       remove() {
@@ -56,6 +72,19 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
   const sandbox = {
     window: null,
     Date: Date,
+    Blob: class Blob {
+      constructor(parts, opts) {
+        this.parts = parts;
+        this.type = opts?.type || '';
+      }
+    },
+    URL: {
+      createObjectURL: (blob) => {
+        sandbox.__lastBlob = blob;
+        return 'blob:cinetix-test';
+      },
+      revokeObjectURL: () => {},
+    },
     CustomEvent: class CustomEvent {
       constructor(type, init) {
         this.type = type;
@@ -63,6 +92,10 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
       }
     },
     FormData: class FormData {},
+    confirm: () => true,
+    print: () => {
+      sandbox.__printed = true;
+    },
     localStorage: {
       getItem: (k) => (storage.has(k) ? storage.get(k) : null),
       setItem: (k, v) => storage.set(k, String(v)),
@@ -76,7 +109,15 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
     },
     setTimeout: (fn) => fn,
     clearTimeout: () => {},
-    dispatchEvent: (ev) => windowEvents.push(ev),
+    addEventListener: (ev, fn) => {
+      const arr = windowListeners.get(ev) || [];
+      arr.push(fn);
+      windowListeners.set(ev, arr);
+    },
+    dispatchEvent: (ev) => {
+      windowEvents.push(ev);
+      (windowListeners.get(ev.type) || []).forEach((fn) => fn(ev));
+    },
     document: {
       documentElement: { classList: makeClassList(classes) },
       body: {
@@ -98,7 +139,7 @@ function createBrowserSandbox(pathname = '/pages/homepage.html', customFetchImpl
 
   const commonCode = fs.readFileSync(path.join(ROOT, 'public/js/common.js'), 'utf8');
   vm.runInNewContext(commonCode, sandbox);
-  return { sandbox, storage, classes, bodyClasses, appended, fetchCalls, windowEvents, domById, makeElement };
+  return { sandbox, storage, classes, bodyClasses, appended, fetchCalls, windowEvents, windowListeners, domById, makeElement };
 }
 
 test('escapeHtml neutralizes XSS characters accurately', () => {
@@ -124,7 +165,7 @@ test('path resolution adapts cleanly across root, /pages/, and /admin/', () => {
 
 test('AuthStore persists user identity, syncs server session state, and purges stale pseudo-login state', async () => {
   let serverAuth = false;
-  const { sandbox, storage } = createBrowserSandbox('/pages/homepage.html', async () => ({
+  const { sandbox, storage, windowEvents } = createBrowserSandbox('/pages/homepage.html', async () => ({
     status: 200,
     json: async () => ({
       success: true,
@@ -143,6 +184,7 @@ test('AuthStore persists user identity, syncs server session state, and purges s
 
   assert.equal(storage.has('pwd'), false);
   assert.equal(sandbox.CineTicket.AuthStore.getUser().isLoggedIn, true);
+  assert.ok(windowEvents.some((e) => e.type === 'cinetix:authchange'));
 
   await sandbox.CineTicket.AuthStore.syncSession();
   assert.equal(sandbox.CineTicket.AuthStore.getUser().isLoggedIn, false);
@@ -191,7 +233,7 @@ test('showNotification supports both 2-argument and 3-argument call signatures s
   assert.ok(secondToast.innerHTML.includes('&lt;script&gt;'));
 });
 
-test('shared pricing, card expiry validation, star-rating, and fetchJson helpers enforce unified contracts', async () => {
+test('shared pricing, card expiry, Gregorian calendar date, email validation, and fetchJson helpers enforce unified contracts', async () => {
   const { sandbox, fetchCalls } = createBrowserSandbox('/pages/pay.html');
   const CT = sandbox.CineTicket;
 
@@ -222,6 +264,17 @@ test('shared pricing, card expiry validation, star-rating, and fetchJson helpers
   assert.equal(CT.isCardExpiryValid('13/28', refDate), false);
   assert.equal(CT.isCardExpiryValid('00/28', refDate), false);
 
+  assert.equal(CT.toIsoDate(new Date(2026, 0, 5)), '2026-01-05');
+  assert.match(CT.todayIso(), /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(CT.isValidIsoDate('2024-02-29'), true);
+  assert.equal(CT.isValidIsoDate('2026-02-29'), false);
+  assert.equal(CT.isValidIsoDate('2026-04-31'), false);
+  assert.equal(CT.isValidIsoDate('not-a-date'), false);
+
+  assert.equal(CT.isValidEmail('member@example.com'), true);
+  assert.equal(CT.isValidEmail('bad-email'), false);
+  assert.equal(CT.isValidEmail('a@' + 'b'.repeat(105) + '.com'), false);
+
   assert.equal(CT.formatStars(4.5), '★★★★½');
   assert.equal(
     CT.renderStarIcons(3.5),
@@ -239,14 +292,41 @@ test('shared pricing, card expiry validation, star-rating, and fetchJson helpers
   assert.equal(fetchCalls[0].opts.body, '{"email":"test@example.com"}');
 });
 
-test('AdminApp.createTableController and bindCheckControls handle search, filter, sort, pagination, and checklists', () => {
-  const { sandbox, domById, makeElement } = createBrowserSandbox('/admin/movies.html');
+test('cross-tab storage listener syncs darkMode and customer auth state across tabs', () => {
+  const { storage, classes, windowEvents, windowListeners } = createBrowserSandbox('/pages/homepage.html');
+  const storageHandlers = windowListeners.get('storage') || [];
+  assert.ok(storageHandlers.length >= 1);
+
+  storage.set('darkMode', 'true');
+  storageHandlers.forEach((fn) => fn({ key: 'darkMode' }));
+  assert.equal(classes.has('dark-mode'), true);
+
+  storage.set('userToken', 'authenticated');
+  storage.set('userId', '1');
+  storage.set('userName', 'LI JIAQI');
+  const beforeLen = windowEvents.length;
+  storageHandlers.forEach((fn) => fn({ key: 'userToken' }));
+  assert.ok(windowEvents.slice(beforeLen).some((e) => e.type === 'cinetix:authchange' && e.detail?.userId === 1));
+});
+
+test('AdminApp.createTableController, populateUserSelect, ensureSelectOption, and downloadCsv handle reset, bulk actions, and CSV export', async () => {
+  const deletedIds = [];
+  const { sandbox, storage, domById, makeElement } = createBrowserSandbox('/admin/movies.html', async (url, opts) => {
+    const parsed = JSON.parse(opts.body);
+    deletedIds.push(parsed.id);
+    return { status: 200, json: async () => ({ success: true }) };
+  });
+  storage.set('adminToken', 'csrf-token-123');
   const adminCode = fs.readFileSync(path.join(ROOT, 'public/js/admin/admin.js'), 'utf8');
   vm.runInNewContext(adminCode, sandbox);
 
   const searchInput = makeElement('input');
   const filterSelect = makeElement('select');
   const sortSelect = makeElement('select');
+  const resetBtn = makeElement('button');
+  const bulkBtn = makeElement('button');
+  const exportBtn = makeElement('button');
+  const printBtn = makeElement('button');
   const countSpan = makeElement('span');
   const pagerDiv = makeElement('div');
   const toolbar = makeElement('div');
@@ -254,11 +334,20 @@ test('AdminApp.createTableController and bindCheckControls handle search, filter
     if (sel === '.toolbar-search') return searchInput;
     if (sel === '[data-role="filter"]') return filterSelect;
     if (sel === '[data-role="sort"]') return sortSelect;
+    if (sel === '[data-role="reset"]') return resetBtn;
+    if (sel === '[data-role="bulk"]') return bulkBtn;
+    if (sel === '[data-role="export"]') return exportBtn;
+    if (sel === '[data-role="print"]') return printBtn;
     if (sel === '[data-role="count"]') return countSpan;
     if (sel === '[data-role="pager"]') return pagerDiv;
     return null;
   };
+
+  let rowChecks = [];
+  const checkAll = makeElement('input');
   const tbody = makeElement('tbody');
+  tbody.closest = () => ({ querySelector: () => checkAll });
+  tbody.querySelectorAll = (sel) => (sel === '.row-check' ? rowChecks : []);
   domById.set('test-toolbar', toolbar);
   domById.set('test-tbody', tbody);
 
@@ -266,46 +355,65 @@ test('AdminApp.createTableController and bindCheckControls handle search, filter
     toolbarId: 'test-toolbar',
     tbodyId: 'test-tbody',
     pageSize: 2,
-    colSpan: 3,
+    colSpan: 4,
     filters: [{ value: 'all', label: 'All' }, { value: 'Sci-Fi', label: 'Sci-Fi' }],
     sorts: [
       { key: 'id_asc', label: 'ID', compare: (a, b) => a.id - b.id },
       { key: 'rating_desc', label: 'Rating', compare: (a, b) => b.rating - a.rating },
     ],
+    bulkAction: {
+      label: 'Delete Selected',
+      endpoint: '/index.php/admin/movie/delete',
+      idKey: 'id',
+    },
+    exportCsv: {
+      filename: 'movies.csv',
+      headers: ['ID', 'Title'],
+      row: (item) => [item.id, item.title],
+    },
     searchText: (item) => item.title,
     matchFilter: (item, f) => item.genre === f,
     renderRow: (item) => `<tr><td>${item.title}</td></tr>`,
   });
 
+  rowChecks = [makeElement('input'), makeElement('input')];
+  rowChecks[0].value = '1';
+  rowChecks[1].value = '2';
+
   ctrl.setItems([
-    { id: 1, title: 'Alpha', genre: 'Action', rating: 4.2 },
+    { id: 1, title: 'Alpha, "Director\'s Cut"', genre: 'Action', rating: 4.2 },
     { id: 2, title: 'Interstellar', genre: 'Sci-Fi', rating: 4.9 },
     { id: 3, title: 'Arrival', genre: 'Sci-Fi', rating: 4.7 },
   ]);
 
   assert.equal(countSpan.textContent, '3 records');
-  assert.ok(tbody.innerHTML.includes('Alpha') && tbody.innerHTML.includes('Interstellar'));
-  assert.ok(!tbody.innerHTML.includes('Arrival'));
+  assert.equal(resetBtn.classList.contains('is-hidden'), true);
 
   filterSelect.trigger('change', { target: { value: 'Sci-Fi' } });
-  assert.ok(countSpan.textContent.includes('2 of 2'));
+  assert.equal(resetBtn.classList.contains('is-hidden'), false);
   assert.ok(tbody.innerHTML.includes('Interstellar') && tbody.innerHTML.includes('Arrival'));
 
-  searchInput.trigger('input', { target: { value: 'arr' } });
-  assert.ok(tbody.innerHTML.includes('Arrival') && !tbody.innerHTML.includes('Interstellar'));
+  resetBtn.trigger('click');
+  assert.equal(countSpan.textContent, '3 records');
+  assert.equal(resetBtn.classList.contains('is-hidden'), true);
 
-  const checkboxes = [{ value: '1', checked: false }, { value: '3', checked: false }];
-  const grid = {
-    querySelectorAll: (sel) => (sel.includes(':checked') ? checkboxes.filter((c) => c.checked) : checkboxes),
-  };
-  const btnAll = makeElement('button');
-  const btnClear = makeElement('button');
-  domById.set('sel-all', btnAll);
-  domById.set('clr-all', btnClear);
+  checkAll.checked = true;
+  checkAll.trigger('change');
+  assert.equal(bulkBtn.classList.contains('is-hidden'), false);
+  await bulkBtn.trigger('click', { currentTarget: bulkBtn });
+  assert.deepEqual(deletedIds, ['1', '2']);
 
-  sandbox.AdminApp.bindCheckControls(grid, 'sel-all', 'clr-all');
-  btnAll.trigger('click');
-  assert.deepEqual(Array.from(sandbox.AdminApp.getCheckedIds(grid)), [1, 3]);
-  btnClear.trigger('click');
-  assert.deepEqual(Array.from(sandbox.AdminApp.getCheckedIds(grid)), []);
+  exportBtn.trigger('click');
+  const csvBody = sandbox.__lastBlob.parts[0];
+  assert.ok(csvBody.includes('"Alpha, ""Director\'s Cut"""'));
+
+  const userSel = makeElement('select');
+  sandbox.AdminApp.populateUserSelect(userSel, [{ user_code: 5, user_name: 'Jane', email: 'j@e.com' }], 5);
+  assert.equal(userSel.value, '5');
+  assert.equal(userSel.options.length, 1);
+
+  const genreSel = makeElement('select');
+  sandbox.AdminApp.ensureSelectOption(genreSel, 'Documentary');
+  assert.equal(genreSel.value, 'Documentary');
+  assert.equal(genreSel.options.length, 1);
 });

@@ -22,12 +22,8 @@
     loadingSeats: false,
   };
 
-  function toIsoDate(dateObj) {
-    return (
-      dateObj.getFullYear() + '-' +
-      String(dateObj.getMonth() + 1).padStart(2, '0') + '-' +
-      String(dateObj.getDate()).padStart(2, '0')
-    );
+  function isBookingReady() {
+    return Boolean(state.movieValid && state.theaterCode);
   }
 
   function updateSeatAria(seatEl) {
@@ -35,13 +31,23 @@
     const isVip = seatEl.classList.contains('vip');
     const isReserved = seatEl.classList.contains('reserved');
     const isSelected = seatEl.classList.contains('selected');
-    const statusText = isReserved ? 'Reserved' : (isSelected ? 'Selected' : 'Available');
+    const unavailable = !isBookingReady() || isReserved;
+    const statusText = !isBookingReady() ? 'Unavailable' : (isReserved ? 'Reserved' : (isSelected ? 'Selected' : 'Available'));
+    seatEl.disabled = !isBookingReady();
     seatEl.setAttribute('aria-pressed', String(isSelected));
-    seatEl.setAttribute('aria-disabled', String(isReserved));
+    seatEl.setAttribute('aria-disabled', String(unavailable));
     seatEl.setAttribute(
       'aria-label',
       'Seat ' + code + (isVip ? ', Prime VIP Row' : ', Standard Row') + ', ' + statusText
     );
+  }
+
+  function syncAuditoriumControls() {
+    document.querySelectorAll('.seat[data-seat]').forEach(updateSeatAria);
+    const vrBtn = document.querySelector('.vr-button');
+    if (vrBtn) {
+      vrBtn.disabled = !isBookingReady();
+    }
   }
 
   function focusSeatByRowCol(rowIdx, colNum) {
@@ -83,7 +89,7 @@
         updateSeatAria(seatEl);
 
         seatEl.addEventListener('click', function () {
-          if (!state.movieValid || state.loadingSeats || seatEl.classList.contains('reserved')) return;
+          if (!isBookingReady() || state.loadingSeats || seatEl.classList.contains('reserved')) return;
           toggleSeatSelection(seatCode, seatEl);
         });
 
@@ -126,6 +132,7 @@
     const dateContainer = document.querySelector('.date-selector');
     if (!dateContainer) return;
 
+    const CT = window.CineTicket;
     dateContainer.innerHTML = '';
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -134,15 +141,12 @@
 
     for (let i = 0; i < 7; i++) {
       const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i);
-      dates.push({ dateObj: d, iso: toIsoDate(d) });
+      dates.push({ dateObj: d, iso: CT.toIsoDate(d) });
     }
 
-    if (preferredIsoDate && /^\d{4}-\d{2}-\d{2}$/.test(preferredIsoDate) && !dates.some(function (x) { return x.iso === preferredIsoDate; })) {
+    if (preferredIsoDate && CT.isValidIsoDate(preferredIsoDate) && !dates.some(function (x) { return x.iso === preferredIsoDate; })) {
       const parts = preferredIsoDate.split('-').map(Number);
-      const customObj = new Date(parts[0], parts[1] - 1, parts[2]);
-      if (!isNaN(customObj.getTime())) {
-        dates.unshift({ dateObj: customObj, iso: preferredIsoDate });
-      }
+      dates.unshift({ dateObj: new Date(parts[0], parts[1] - 1, parts[2]), iso: preferredIsoDate });
     }
 
     const activeIso = dates.some(function (x) { return x.iso === preferredIsoDate; })
@@ -217,6 +221,22 @@
   async function loadMovieDetails() {
     const CT = window.CineTicket;
     const esc = CT.escapeHtml;
+    if (!/^\d+$/.test(state.movieCode) || parseInt(state.movieCode, 10) <= 0) {
+      state.movieValid = false;
+      const movieInfo = document.querySelector('.movie-info');
+      if (movieInfo) {
+        movieInfo.innerHTML =
+          '<div class="movie-details">' +
+          '<h1>Invalid Movie Parameter</h1>' +
+          '<p class="muted-note">Please return to the Movies catalog and select an active screening.</p>' +
+          '<a href="homepage.html" class="inline-action-link">Return to Movies Catalog &rarr;</a>' +
+          '</div>';
+      }
+      syncAuditoriumControls();
+      updateSummaryPanel();
+      return;
+    }
+
     try {
       const payload = await CT.fetchJson('/index.php/movie/movies/getMovieByCode?movie_code=' + encodeURIComponent(state.movieCode));
       if (!payload.success || !payload.data) {
@@ -231,6 +251,7 @@
             '<a href="homepage.html" class="inline-action-link">Return to Movies Catalog &rarr;</a>' +
             '</div>';
         }
+        syncAuditoriumControls();
         updateSummaryPanel();
         return;
       }
@@ -254,6 +275,7 @@
           '</div>';
       }
 
+      syncAuditoriumControls();
       updateSummaryPanel();
     } catch (_) {
       window.showToast('Unable to load movie details', 'error');
@@ -263,6 +285,14 @@
   async function loadTheaters() {
     const select = document.getElementById('theater-select');
     if (!select) return;
+    if (!/^\d+$/.test(state.movieCode) || parseInt(state.movieCode, 10) <= 0) {
+      select.innerHTML = '<option value="">Unavailable</option>';
+      state.theaterCode = '';
+      state.theaterName = 'Unavailable';
+      syncAuditoriumControls();
+      updateSummaryPanel();
+      return;
+    }
 
     const CT = window.CineTicket;
     try {
@@ -273,6 +303,7 @@
         select.innerHTML = '<option value="">No theaters currently screening this movie</option>';
         state.theaterCode = '';
         state.theaterName = 'Unscheduled';
+        syncAuditoriumControls();
         updateSummaryPanel();
         return;
       }
@@ -306,6 +337,7 @@
         loadOccupiedSeats([]);
       });
 
+      syncAuditoriumControls();
       updateSummaryPanel();
     } catch (_) {
       // Keep default theater fallback if offline
@@ -321,7 +353,7 @@
   }
 
   async function loadOccupiedSeats(restoreList) {
-    if (!state.movieValid || !state.movieCode || !state.theaterCode || !state.date || !state.time) return;
+    if (!isBookingReady() || !state.movieCode || !state.date || !state.time) return;
 
     state.selectedSeats = [];
     state.loadingSeats = true;
@@ -439,11 +471,12 @@
         (pricing.groupDiscount > 0 ? ' (30% group savings)' : '');
     }
     if (proceedBtn) {
-      proceedBtn.disabled = !state.movieValid || count === 0 || !state.theaterCode;
+      proceedBtn.disabled = !isBookingReady() || count === 0;
     }
   }
 
   function viewSeatsInVR() {
+    if (!isBookingReady()) return;
     const params = new URLSearchParams({
       movie_code: state.movieCode,
       theater_code: state.theaterCode || '1',
@@ -456,8 +489,6 @@
     }
     window.location.href = '3d-model.html?' + params.toString();
   }
-
-  window.viewSeatsInVR = viewSeatsInVR;
 
   document.addEventListener('DOMContentLoaded', async function () {
     const urlParams = new URLSearchParams(window.location.search);
@@ -478,7 +509,7 @@
     document.getElementById('clear-seats-btn')?.addEventListener('click', clearSelectedSeats);
 
     document.querySelector('.proceed-button')?.addEventListener('click', function () {
-      if (!state.selectedSeats.length) {
+      if (!isBookingReady() || !state.selectedSeats.length) {
         window.showToast('Please select at least one seat', 'warning');
         return;
       }
@@ -494,5 +525,11 @@
 
     await Promise.all([loadMovieDetails(), loadTheaters()]);
     await loadOccupiedSeats(initialSeats);
+
+    window.addEventListener('pageshow', function (event) {
+      if (event && event.persisted && isBookingReady()) {
+        loadOccupiedSeats(state.selectedSeats.slice());
+      }
+    });
   });
 })();

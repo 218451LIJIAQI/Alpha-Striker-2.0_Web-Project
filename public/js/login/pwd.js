@@ -20,8 +20,8 @@
       window.showToast('Please enter the 6-digit verification code', 'warning');
       return;
     }
-    if (password.length < 6) {
-      window.showToast('New password must be at least 6 characters', 'warning');
+    if (password.length < 6 || password.length > 72) {
+      window.showToast('New password must be 6-72 characters', 'warning');
       return;
     }
 
@@ -57,8 +57,8 @@
       window.showToast('Please complete all password fields', 'warning');
       return;
     }
-    if (newPassword.length < 6) {
-      window.showToast('New password must be at least 6 characters', 'warning');
+    if (newPassword.length < 6 || newPassword.length > 72) {
+      window.showToast('New password must be 6-72 characters', 'warning');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -116,6 +116,12 @@
       switchMode('change');
     });
 
+    window.addEventListener('cinetix:authchange', function () {
+      if (!CT.AuthStore.getUser().isLoggedIn && tabOldPwd?.classList.contains('active')) {
+        switchMode('code');
+      }
+    });
+
     await CT.AuthStore.syncSession();
     const currentUser = CT.AuthStore.getUser();
     const emailInput = document.getElementById('email');
@@ -137,7 +143,7 @@
       if (countdown > 0) return;
 
       const email = emailInput ? emailInput.value.trim() : '';
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (!CT.isValidEmail(email)) {
         window.showToast('Please enter a valid email address first', 'warning');
         emailInput?.focus();
         return;
@@ -184,7 +190,4 @@
       }
     });
   });
-
-  window.resetPwd = resetPwd;
-  window.changeSignedInPwd = changeSignedInPwd;
 })();

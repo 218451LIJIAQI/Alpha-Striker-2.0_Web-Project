@@ -5,6 +5,7 @@
  */
 
 html.dark-mode, body.dark-mode {
+  color-scheme: dark;
   --surface-canvas: #0c101a;
   --surface-bg: #161d2e;
   --surface-subtle: #111726;
@@ -13,9 +14,13 @@ html.dark-mode, body.dark-mode {
   --border-strong: #3b4968;
   --text-main: #f1f5f9;
   --text-muted: #94a3b8;
+  --text-muted-local: #94a3b8;
   --focus-ring: #60a5fa;
   --brand-primary-soft: rgba(59, 130, 246, 0.16);
-  --primary: #60a5fa;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --admin-primary: #2563eb;
+  --admin-primary-dark: #1d4ed8;
   --text-dark: #f1f5f9;
   --text-light: #94a3b8;
   --bg-light: #111726;
@@ -49,6 +54,11 @@ body.dark-mode .auth-topbar .auth-back-link {
   background-color: #161d2e;
   color: #f1f5f9;
   border-color: #2b364f;
+}
+
+body.dark-mode .auth-topbar .auth-back-link:hover {
+  border-color: #60a5fa;
+  color: #93c5fd;
 }
 
 body.dark-mode .auth-topbar .dark-mode-toggle {
@@ -94,7 +104,8 @@ body.dark-mode h1, body.dark-mode h2, body.dark-mode h3,
 body.dark-mode h4, body.dark-mode .section-title, body.dark-mode .movie-title,
 body.dark-mode .theater-name, body.dark-mode .offer-title, body.dark-mode .team-name,
 body.dark-mode .value-title, body.dark-mode .author-info h4, body.dark-mode .form-label,
-body.dark-mode .form-group label, body.dark-mode .question { color: #f8fafc; }
+body.dark-mode .form-group label, body.dark-mode .question, body.dark-mode .logo-brand-link,
+body.dark-mode .admin-branding h1 { color: #f8fafc; }
 
 body.dark-mode p, body.dark-mode .movie-info, body.dark-mode .theater-location,
 body.dark-mode .offer-description, body.dark-mode .offer-validity, body.dark-mode .story-content p,
@@ -102,20 +113,57 @@ body.dark-mode .value-description, body.dark-mode .team-bio, body.dark-mode .tes
 body.dark-mode .author-info p, body.dark-mode .availability, body.dark-mode .response-time,
 body.dark-mode .call-tips li, body.dark-mode .remember-me label, body.dark-mode .terms-check label,
 body.dark-mode .copyright, body.dark-mode .faq-answer, body.dark-mode .answer,
-body.dark-mode .terms-link { color: #cbd5e1; }
+body.dark-mode .terms-link, body.dark-mode .rating-meta { color: #cbd5e1; }
 
 body.dark-mode .auth-link, body.dark-mode .forgot-password, body.dark-mode .terms-check a,
 body.dark-mode .guide-link, body.dark-mode .modify-seats-link, body.dark-mode .inline-action-link,
 body.dark-mode .mini-link-btn, body.dark-mode .phone-number, body.dark-mode .email-address,
-body.dark-mode .team-position { color: #93c5fd; }
+body.dark-mode .team-position, body.dark-mode .story-content h3, body.dark-mode .schedule-card-price,
+body.dark-mode .detail-list-row.is-today, body.dark-mode .stub-badge, body.dark-mode .email-tab.active,
+body.dark-mode .tab-btn:hover:not(.active) { color: #93c5fd; }
+
+/* Dark-Surface Accent Icons (WCAG AA >= 6.7:1) */
+body.dark-mode .quick-info-card .info-icon i, body.dark-mode .section-title i,
+body.dark-mode .info-card h3 i, body.dark-mode .meta-item i, body.dark-mode .movie-meta i,
+body.dark-mode .detail-item i, body.dark-mode .step-item i, body.dark-mode .empty-receipt-icon,
+body.dark-mode .empty-context-icon, body.dark-mode .no-tickets i, body.dark-mode .giftcard-feature-item i,
+body.dark-mode .category-card i, body.dark-mode .action-card i, body.dark-mode .stat-icon,
+body.dark-mode .icon, body.dark-mode .method-icon, body.dark-mode .method-icon.paypal,
+body.dark-mode .method-icon.google { color: #60a5fa; }
+
+body.dark-mode .method-icon.apple { color: #f8fafc; }
+
+body.dark-mode .rating i, body.dark-mode .rating-stars, body.dark-mode .review-stars,
+body.dark-mode .star-amber, body.dark-mode .detail-value.zone-vip { color: #fbbf24; }
+
+body.dark-mode .promo-status-note.success, body.dark-mode .discount-text,
+body.dark-mode .security-notice, body.dark-mode .trust-item i,
+body.dark-mode .success-checkmark i, body.dark-mode .call-tips li::before { color: #4ade80; }
+
+body.dark-mode .promo-status-note.error { color: #fca5a5; }
+
+body.dark-mode .giftcard-balance-result.success {
+  background-color: rgba(34, 197, 94, 0.16);
+  border-color: rgba(74, 222, 128, 0.45);
+  color: #86efac;
+}
+
+body.dark-mode .giftcard-balance-result.error {
+  background-color: rgba(239, 68, 68, 0.16);
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fecaca;
+}
 
 /* Preserve white text on rich gradient hero banners & profile headers */
 body.dark-mode .hero h1, body.dark-mode .hero p, body.dark-mode .theater-hero h1,
-body.dark-mode .theater-hero p, body.dark-mode .newsletter h2, body.dark-mode .newsletter p,
-body.dark-mode .counter-section .counter-number, body.dark-mode .counter-section .counter-text, body.dark-mode .contact-section h2,
-body.dark-mode .contact-section p, body.dark-mode .modal-header h3, body.dark-mode .modal-header p,
-body.dark-mode .chat-header h3, body.dark-mode .user-profile-card .user-display-name, body.dark-mode .user-profile-card .user-email,
-body.dark-mode .movie-banner .movie-title, body.dark-mode .giftcard-visual-card h3, body.dark-mode .giftcard-visual-card p { color: #ffffff; }
+body.dark-mode .theater-hero .theater-name, body.dark-mode .theater-hero p,
+body.dark-mode .newsletter h2, body.dark-mode .newsletter p,
+body.dark-mode .counter-section .counter-number, body.dark-mode .counter-section .counter-text,
+body.dark-mode .contact-section h2, body.dark-mode .contact-section p,
+body.dark-mode .modal-header h3, body.dark-mode .modal-header p,
+body.dark-mode .chat-header h3, body.dark-mode .user-profile-card .user-display-name,
+body.dark-mode .user-profile-card .user-email, body.dark-mode .movie-banner .movie-title,
+body.dark-mode .giftcard-visual-card h3, body.dark-mode .giftcard-visual-card p { color: #ffffff; }
 
 /* Inputs, Selects & Textareas */
 body.dark-mode input, body.dark-mode select, body.dark-mode textarea,
@@ -132,15 +180,25 @@ body.dark-mode input::placeholder, body.dark-mode textarea::placeholder { color:
 
 body.dark-mode input:focus, body.dark-mode select:focus, body.dark-mode textarea:focus { border-color: #60a5fa; }
 
-/* Filter Chips, Category Tabs & Pills */
+/* Filter Chips, Category Tabs, Toolbar Buttons & Pills */
 body.dark-mode .btn-filter, body.dark-mode .btn-outline, body.dark-mode .filter-options button,
 body.dark-mode .filter-tabs button, body.dark-mode .tab-btn, body.dark-mode .amenity,
 body.dark-mode .quick-action-btn, body.dark-mode .topic-chip, body.dark-mode .amount-pill,
-body.dark-mode .pager-btn, body.dark-mode .social-icon, body.dark-mode .social-link,
-body.dark-mode .faq-question:not(.active), body.dark-mode .auth-tab-btn:not(.active), body.dark-mode .relation-check-item {
+body.dark-mode .pager-btn, body.dark-mode .toolbar-btn, body.dark-mode .social-icon,
+body.dark-mode .social-link, body.dark-mode .faq-question:not(.active),
+body.dark-mode .auth-tab-btn:not(.active), body.dark-mode .relation-check-item {
   background-color: #1e273d;
   color: #e2e8f0;
   border-color: #3b4968;
+}
+
+body.dark-mode .btn-filter:hover:not(.active), body.dark-mode .btn-outline:hover,
+body.dark-mode .filter-options button:hover:not(.active), body.dark-mode .filter-tabs button:hover:not(.active),
+body.dark-mode .topic-chip:hover:not(.active), body.dark-mode .amount-pill:hover:not(.active),
+body.dark-mode .toolbar-btn:hover:not(:disabled) {
+  background-color: #27324a;
+  border-color: #60a5fa;
+  color: #ffffff;
 }
 
 body.dark-mode .btn-filter.active, body.dark-mode .filter-options button.active, body.dark-mode .filter-tabs button.active,
@@ -151,10 +209,26 @@ body.dark-mode .auth-tab-btn.active {
   border-color: #3b82f6;
 }
 
+body.dark-mode .remind-btn:not(.reminded) {
+  color: #93c5fd;
+  border-color: #60a5fa;
+}
+
+body.dark-mode .send-code-btn:not(:disabled) {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
 body.dark-mode .promo-code, body.dark-mode .promo-tag {
   background-color: #0f1523;
   border-color: #3b4968;
   color: #93c5fd;
+}
+
+body.dark-mode .promo-tag:hover {
+  background-color: #2563eb;
+  border-color: #3b82f6;
+  color: #ffffff;
 }
 
 body.dark-mode .promo-clear-btn, body.dark-mode .clear-seats-btn, body.dark-mode .cancel-btn {
@@ -165,12 +239,21 @@ body.dark-mode .promo-clear-btn, body.dark-mode .clear-seats-btn, body.dark-mode
 
 body.dark-mode .edit-btn { background-color: rgba(59, 130, 246, 0.18); color: #93c5fd; }
 
-body.dark-mode .delete-btn, body.dark-mode .refund-btn { background-color: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+body.dark-mode .delete-btn, body.dark-mode .refund-btn, body.dark-mode .expired-pill {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #fecaca;
+}
 
-body.dark-mode .tag-badge, body.dark-mode .badge-tag, body.dark-mode .movie-rating { background-color: rgba(245, 158, 11, 0.18); color: #fcd34d; }
+body.dark-mode .tag-badge, body.dark-mode .badge-tag, body.dark-mode .movie-rating {
+  background-color: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+}
 
 body.dark-mode .type-badge, body.dark-mode .scope-badge, body.dark-mode .upcoming-format-pill,
-body.dark-mode .catalog-count-badge, body.dark-mode .wallet-count-badge, body.dark-mode .feature-tag { background-color: rgba(59, 130, 246, 0.2); color: #bfdbfe; }
+body.dark-mode .catalog-count-badge, body.dark-mode .wallet-count-badge, body.dark-mode .feature-tag {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: #bfdbfe;
+}
 
 body.dark-mode .seat-number { background-color: rgba(34, 197, 94, 0.2); color: #86efac; }
 
@@ -210,7 +293,7 @@ body.dark-mode .seat, body.dark-mode .seat-demo.available {
   color: #cbd5e1;
 }
 
-body.dark-mode .seat:hover:not(.reserved):not(.selected) { background-color: #3b82f6; color: #ffffff; }
+body.dark-mode .seat:hover:not(.reserved):not(.selected) { background-color: #2563eb; color: #ffffff; }
 
 body.dark-mode .seat.vip:not(.reserved):not(.selected), body.dark-mode .seat-demo.vip {
   background-color: #3b2a14;
@@ -227,7 +310,7 @@ body.dark-mode .seat.selected, body.dark-mode .seat-demo.selected {
 body.dark-mode .seat.reserved, body.dark-mode .seat-demo.reserved {
   background-color: #475569;
   border-color: #64748b;
-  color: #94a3b8;
+  color: #cbd5e1;
   opacity: 0.65;
 }
 
@@ -247,6 +330,11 @@ body.dark-mode .secondary-btn {
   background-color: #111726;
   color: #93c5fd;
   border-color: #3b82f6;
+}
+
+body.dark-mode .secondary-btn:hover {
+  background-color: #2563eb;
+  color: #ffffff;
 }
 
 body.dark-mode .detail-row, body.dark-mode .summary-row, body.dark-mode .faq-section,

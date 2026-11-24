@@ -239,10 +239,17 @@
 
     const pricingEl = document.getElementById('ticket-pricing');
     if (pricingEl) {
+      const validPrices = movies
+        .map(function (m) { return parseFloat(m.money); })
+        .filter(function (v) { return Number.isFinite(v) && v >= 0; });
+      const basePrice = validPrices.length ? Math.min.apply(null, validPrices) : 39.0;
+      const studentPrice = Math.max(0, +(basePrice - 5).toFixed(2));
+      const groupSeatPrice = +(basePrice * 0.7).toFixed(2);
+
       pricingEl.innerHTML = [
-        { label: 'Standard Reserved', price: '$39.00' },
-        { label: 'Student Pass (STUDENT30)', price: '$34.00' },
-        { label: 'Group 5+ Tickets (30% Off)', price: '$27.30' },
+        { label: 'Standard Reserved', price: '$' + basePrice.toFixed(2) },
+        { label: 'Student Pass ($5 Off)', price: '$' + studentPrice.toFixed(2) },
+        { label: 'Group 5+ Tickets (30% Off)', price: '$' + groupSeatPrice.toFixed(2) },
       ].map(function (tier) {
         return '<div class="detail-list-row bordered tabular-nums"><span>' + esc(tier.label) + '</span><strong>' + esc(tier.price) + '</strong></div>';
       }).join('');
@@ -297,11 +304,15 @@
 
   document.addEventListener('DOMContentLoaded', async function () {
     initTabs();
-    const theaterCode = new URLSearchParams(window.location.search).get('theater_code') || '1';
+    const rawCode = new URLSearchParams(window.location.search).get('theater_code') || '1';
+    if (!/^\d+$/.test(rawCode) || parseInt(rawCode, 10) <= 0) {
+      renderNotFoundState('Invalid theater identifier.');
+      return;
+    }
 
     try {
       const payload = await window.CineTicket.fetchJson(
-        '/index.php/theater/theater/getTheaterDetails?theater_code=' + encodeURIComponent(theaterCode)
+        '/index.php/theater/theater/getTheaterDetails?theater_code=' + encodeURIComponent(rawCode)
       );
       if (payload.success && payload.data) {
         renderTheaterPage(payload.data);

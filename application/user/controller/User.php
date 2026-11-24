@@ -1,6 +1,7 @@
 <?php
 namespace app\user\controller;
 
+use app\admin\controller\BaseAdmin;
 use app\common\controller\ApiController;
 use think\Db;
 use think\facade\Env;
@@ -13,10 +14,9 @@ class User extends ApiController
     public function reg()
     {
         try {
-            $data     = $this->payload();
             $name     = $this->strParam('name');
             $email    = strtolower($this->strParam('email'));
-            $password = isset($data['password']) ? (string) $data['password'] : '';
+            $password = $this->rawStrParam('password');
 
             if ($name === '' || $this->textLen($name) > 50) {
                 return $this->fail('Please enter a valid name (1-50 characters)');
@@ -24,8 +24,8 @@ class User extends ApiController
             if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 100) {
                 return $this->fail('Please enter a valid email address');
             }
-            if (strlen($password) < 6) {
-                return $this->fail('Password must be at least 6 characters');
+            if (strlen($password) < 6 || strlen($password) > self::MAX_PASSWORD_BYTES) {
+                return $this->fail('Password must be 6-72 characters');
             }
             if (Db::name('user')->where('email', $email)->find()) {
                 return $this->fail('This email has already been registered');
@@ -58,9 +58,8 @@ class User extends ApiController
     public function login()
     {
         try {
-            $data     = $this->payload();
             $email    = strtolower($this->strParam('email'));
-            $password = isset($data['password']) ? (string) $data['password'] : '';
+            $password = $this->rawStrParam('password');
 
             if ($email === '' || $password === '') {
                 return $this->fail('Email and password are required');
@@ -85,7 +84,16 @@ class User extends ApiController
     public function logout()
     {
         try {
-            $this->destroySession();
+            Session::delete('user_id');
+            Session::delete('user_email');
+            $this->clearResetChallenge();
+
+            if (BaseAdmin::hasAdminSession()) {
+                $this->rotateSession();
+            } else {
+                $this->destroySession();
+            }
+
             return $this->ok(null, 'Logout successful');
         } catch (\Throwable $e) {
             return $this->serverError('Logout failed', $e);
@@ -181,14 +189,13 @@ class User extends ApiController
     public function changePassword()
     {
         try {
-            $data             = $this->payload();
             $sessionUserId    = (int) Session::get('user_id', 0);
-            $oldPassword      = isset($data['old_password']) ? (string) $data['old_password'] : '';
-            $newPassword      = isset($data['pwd']) ? (string) $data['pwd'] : '';
+            $oldPassword      = $this->rawStrParam('old_password');
+            $newPassword      = $this->rawStrParam('pwd');
             $verificationCode = $this->strParam('verification_code');
 
-            if (strlen($newPassword) < 6) {
-                return $this->fail('New password must be at least 6 characters');
+            if (strlen($newPassword) < 6 || strlen($newPassword) > self::MAX_PASSWORD_BYTES) {
+                return $this->fail('New password must be 6-72 characters');
             }
 
             // Path A: Signed-in user changing password by verifying current password
@@ -199,7 +206,8 @@ class User extends ApiController
 
                 $user = Db::name('user')->where('user_code', $sessionUserId)->find();
                 if (!$user) {
-                    $this->destroySession();
+                    Session::delete('user_id');
+                    Session::delete('user_email');
                     return $this->fail('Account session is no longer valid', 401);
                 }
 
@@ -239,10 +247,10 @@ class User extends ApiController
                 return $this->fail('Please enter the 6-digit verification code');
             }
 
-            $resetEmail   = (string) Session::get('reset_email', '');
-            $resetHash    = (string) Session::get('reset_code_hash', '');
-            $expiresAt    = (int) Session::get('reset_expires_at', 0);
-            $attempts     = (int) Session::get('reset_attempts', 0);
+            $resetEmail = (string) Session::get('reset_email', '');
+            $resetHash  = (string) Session::get('reset_code_hash', '');
+            $expiresAt  = (int) Session::get('reset_expires_at', 0);
+            $attempts   = (int) Session::get('reset_attempts', 0);
 
             if ($resetEmail === '' || $resetHash === '' || $expiresAt <= 0) {
                 return $this->fail('Please request a verification code first');

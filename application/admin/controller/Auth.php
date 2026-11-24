@@ -10,9 +10,8 @@ class Auth extends ApiController
     public function login()
     {
         try {
-            $data     = $this->payload();
             $username = $this->strParam('username');
-            $password = isset($data['password']) ? (string) $data['password'] : '';
+            $password = $this->rawStrParam('password');
 
             if ($username === '' || $password === '') {
                 return $this->fail('Username and password are required');
@@ -55,7 +54,17 @@ class Auth extends ApiController
             if (BaseAdmin::hasAdminSession() && !BaseAdmin::checkSession()) {
                 return $this->fail('Forbidden: valid X-Admin-Token header is required', 403);
             }
-            $this->destroySession();
+
+            Session::delete('admin_auth');
+            Session::delete('admin_token');
+            Session::delete('admin_user');
+
+            if ((int) Session::get('user_id', 0) > 0) {
+                $this->rotateSession();
+            } else {
+                $this->destroySession();
+            }
+
             return $this->ok(null, 'Logout successful');
         } catch (\Throwable $e) {
             return $this->serverError('Admin logout failed', $e);
