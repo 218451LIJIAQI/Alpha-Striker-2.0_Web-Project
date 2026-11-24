@@ -45,7 +45,7 @@
 }
 
 .search-location button {
-  background-color: var(--brand-accent);
+  background-color: var(--brand-primary);
   color: #ffffff;
   border: none;
   padding: 13px 26px;
@@ -57,7 +57,7 @@
   transition: background-color 0.18s ease;
 }
 
-.search-location button:hover { background-color: var(--brand-accent-hover); }
+.search-location button:hover { background-color: var(--brand-primary-hover); }
 
 .filter-options {
   display: flex;
@@ -112,12 +112,11 @@
   right: 12px;
   padding: 4px 11px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.86);
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   color: #f8fafc;
   font-size: 12px;
   font-weight: 700;
-  backdrop-filter: blur(6px);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
 }
 

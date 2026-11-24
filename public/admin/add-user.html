@@ -20,7 +20,7 @@
       </div>
     </div>
 
-    <form id="add-user-form" class="form-container">
+    <form id="add-user-form" class="form-container" novalidate>
       <div class="form-grid">
         <div class="form-group">
           <label for="user_name" class="form-label">Display Name *</label>
@@ -50,40 +50,25 @@
       AdminApp.renderAdminNav('users');
       if (!(await AdminApp.ensureAuthenticated())) return;
 
-      const formEl = document.getElementById('add-user-form');
-      const CT = window.CineTicket;
-      CT.bindFieldErrorClear(formEl);
-
-      formEl.addEventListener('submit', function (e) {
+      document.getElementById('add-user-form').addEventListener('submit', function (e) {
         e.preventDefault();
+        const CT = window.CineTicket;
         const nameEl = document.getElementById('user_name');
         const emailEl = document.getElementById('email');
         const pwdEl = document.getElementById('login_pwd');
-        [nameEl, emailEl, pwdEl].forEach(CT.clearFieldError);
 
-        const userName = nameEl.value.trim();
-        const email = emailEl.value.trim();
-        const pwd = pwdEl.value;
+        if (!AdminApp.validateFields([
+          { el: nameEl, check: function (v) { return v.trim().length > 0 && v.trim().length <= 50; }, message: 'Display name is required (max 50 characters)' },
+          { el: emailEl, check: function (v) { return CT.isValidEmail(v); }, message: 'Please enter a valid email address' },
+          { el: pwdEl, check: function (v) { return CT.isValidPasswordBytes(v); }, message: 'Initial password must be 6-72 UTF-8 bytes' },
+        ])) {
+          return;
+        }
 
-        if (!userName || userName.length > 50) {
-          CT.flagFieldError(nameEl, 'Display name (1-50 characters) is required');
-          window.showToast('Please enter a valid display name', 'warning');
-          return;
-        }
-        if (!CT.isValidEmail(email)) {
-          CT.flagFieldError(emailEl, 'Please enter a valid email address');
-          window.showToast('Please enter a valid email address', 'warning');
-          return;
-        }
-        if (!CT.isValidPasswordBytes(pwd)) {
-          CT.flagFieldError(pwdEl, 'Initial password must be 6-72 UTF-8 bytes');
-          window.showToast('Initial password must be 6-72 UTF-8 bytes', 'warning');
-          return;
-        }
         AdminApp.submitForm('/index.php/admin/user/create', {
-          user_name: userName,
-          email: email,
-          login_pwd: pwd,
+          user_name: nameEl.value.trim(),
+          email: emailEl.value.trim(),
+          login_pwd: pwdEl.value,
         }, 'user.html', 'User created successfully', 'Failed to create user', e.submitter);
       });
     });

@@ -20,7 +20,7 @@
       </div>
     </div>
 
-    <form id="add-offer-form" class="form-container">
+    <form id="add-offer-form" class="form-container" novalidate>
       <div class="form-grid">
         <div class="form-group full-width">
           <label for="offer_title" class="form-label">Offer Title *</label>
@@ -44,7 +44,7 @@
 
         <div class="form-group">
           <label for="money" class="form-label">Discount Amount ($) *</label>
-          <input type="number" id="money" name="money" class="form-input tabular-nums" step="0.01" min="0" value="5.00" required>
+          <input type="number" id="money" name="money" class="form-input tabular-nums" step="0.01" min="0" max="9999.99" value="5.00" required>
         </div>
 
         <div class="form-group">
@@ -79,13 +79,13 @@
 
         <div class="form-group full-width">
           <div class="form-label-row">
-            <span class="form-label">Eligible Movies</span>
+            <span class="form-label" id="label-eligible-movies">Eligible Movies</span>
             <div class="mini-link-group">
               <button type="button" class="mini-link-btn" id="select-all-movies">Select All</button>
               <button type="button" class="mini-link-btn" id="clear-all-movies">Clear</button>
             </div>
           </div>
-          <div id="movie-check-grid" class="relation-check-grid"></div>
+          <div id="movie-check-grid" class="relation-check-grid" role="group" aria-labelledby="label-eligible-movies"></div>
           <span class="form-hint">Only checked movies can redeem this promo code at checkout.</span>
         </div>
       </div>
@@ -125,16 +125,36 @@
 
       document.getElementById('add-offer-form').addEventListener('submit', function (e) {
         e.preventDefault();
+        const CT = window.CineTicket;
+        const titleEl = document.getElementById('offer_title');
+        const typeEl = document.getElementById('offer_type');
+        const codeEl = document.getElementById('promo_code');
+        const moneyEl = document.getElementById('money');
+        const validEl = document.getElementById('offer_validity');
+        const badgeEl = document.getElementById('badge');
+        const descEl = document.getElementById('offer_description');
+
+        if (!AdminApp.validateFields([
+          { el: titleEl, check: function (v) { return v.trim().length > 0 && v.trim().length <= 200; }, message: 'Offer title is required (max 200 characters)' },
+          { el: codeEl, check: function (v) { return v.trim().length > 0 && v.trim().length <= 100; }, message: 'Promo code is required (max 100 characters)' },
+          { el: moneyEl, check: function (v) { const n = Number(v); return v !== '' && Number.isFinite(n) && n >= 0 && n <= 9999.99; }, message: 'Discount amount must be between $0.00 and $9,999.99' },
+          { el: validEl, check: function (v) { return CT.isValidIsoDate(v); }, message: 'Enter a valid expiration date (YYYY-MM-DD)' },
+          { el: imgInput, check: function (v) { return CT.isValidAssetPath(v); }, message: 'Enter a valid offer image path or http(s) URL' },
+          { el: descEl, check: function (v) { return v.trim().length > 0 && v.trim().length <= 500; }, message: 'Offer description is required (max 500 characters)' },
+        ])) {
+          return;
+        }
+
         AdminApp.submitForm('/index.php/admin/offer/create', {
-          offer_title: document.getElementById('offer_title').value.trim(),
-          offer_type: document.getElementById('offer_type').value,
-          promo_code: document.getElementById('promo_code').value.trim().toUpperCase(),
-          money: document.getElementById('money').value,
-          offer_validity: document.getElementById('offer_validity').value,
-          badge: document.getElementById('badge').value.trim(),
+          offer_title: titleEl.value.trim(),
+          offer_type: typeEl.value,
+          promo_code: codeEl.value.trim().toUpperCase(),
+          money: moneyEl.value,
+          offer_validity: validEl.value,
+          badge: badgeEl.value.trim(),
           user_code: userSelect.value,
           img: imgInput.value.trim(),
-          offer_description: document.getElementById('offer_description').value.trim(),
+          offer_description: descEl.value.trim(),
           movie_codes: AdminApp.getCheckedIds(movieGrid),
         }, 'offers.html', 'Offer created successfully', 'Failed to create offer', e.submitter);
       });

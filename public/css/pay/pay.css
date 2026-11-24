@@ -395,7 +395,7 @@ body {
 .order-summary {
   background: var(--surface-bg);
   border: 1px solid var(--border-color);
-  border-top: 4px solid var(--brand-accent);
+  border-top: 4px solid var(--brand-primary);
   border-radius: var(--radius-lg);
   padding: 22px 24px;
   box-shadow: var(--shadow-card);

@@ -20,7 +20,7 @@
       </div>
     </div>
 
-    <form id="add-movie-form" class="form-container">
+    <form id="add-movie-form" class="form-container" novalidate>
       <div class="form-grid">
         <div class="form-group full-width">
           <label for="movie_name" class="form-label">Movie Title *</label>
@@ -53,7 +53,7 @@
 
         <div class="form-group">
           <label for="money" class="form-label">Ticket Price ($) *</label>
-          <input type="number" id="money" name="money" class="form-input tabular-nums" step="0.01" min="0" value="39.00" required>
+          <input type="number" id="money" name="money" class="form-input tabular-nums" step="0.01" min="0" max="9999.99" value="39.00" required>
         </div>
 
         <div class="form-group">
@@ -71,25 +71,25 @@
 
         <div class="form-group full-width">
           <div class="form-label-row">
-            <span class="form-label">Screening Theaters</span>
+            <span class="form-label" id="label-screening-theaters">Screening Theaters</span>
             <div class="mini-link-group">
               <button type="button" class="mini-link-btn" id="select-all-theaters">Select All</button>
               <button type="button" class="mini-link-btn" id="clear-all-theaters">Clear</button>
             </div>
           </div>
-          <div id="theater-check-grid" class="relation-check-grid"></div>
+          <div id="theater-check-grid" class="relation-check-grid" role="group" aria-labelledby="label-screening-theaters"></div>
           <span class="form-hint">Checked partner cinemas will list this film under Now Showing and accept seat bookings.</span>
         </div>
 
         <div class="form-group full-width">
           <div class="form-label-row">
-            <span class="form-label">Eligible Promotional Offers</span>
+            <span class="form-label" id="label-eligible-offers">Eligible Promotional Offers</span>
             <div class="mini-link-group">
               <button type="button" class="mini-link-btn" id="select-all-offers">Select All</button>
               <button type="button" class="mini-link-btn" id="clear-all-offers">Clear</button>
             </div>
           </div>
-          <div id="offer-check-grid" class="relation-check-grid"></div>
+          <div id="offer-check-grid" class="relation-check-grid" role="group" aria-labelledby="label-eligible-offers"></div>
           <span class="form-hint">Checked promo codes can be redeemed immediately when booking this film at checkout.</span>
         </div>
       </div>
@@ -138,13 +138,31 @@
 
       document.getElementById('add-movie-form').addEventListener('submit', function (e) {
         e.preventDefault();
+        const CT = window.CineTicket;
+        const nameEl = document.getElementById('movie_name');
+        const typeEl = document.getElementById('movie_type');
+        const timesEl = document.getElementById('times');
+        const starEl = document.getElementById('star');
+        const moneyEl = document.getElementById('money');
+        const tagEl = document.getElementById('tag');
+
+        if (!AdminApp.validateFields([
+          { el: nameEl, check: function (v) { return v.trim().length > 0 && v.trim().length <= 200; }, message: 'Movie title is required (max 200 characters)' },
+          { el: timesEl, check: function (v) { return v.trim().length > 0 && v.trim().length <= 50; }, message: 'Duration is required (e.g. 2h 15m)' },
+          { el: starEl, check: function (v) { const n = Number(v); return v !== '' && Number.isFinite(n) && n >= 0 && n <= 5; }, message: 'Rating must be between 0.0 and 5.0' },
+          { el: moneyEl, check: function (v) { const n = Number(v); return v !== '' && Number.isFinite(n) && n >= 0 && n <= 9999.99; }, message: 'Ticket price must be between $0.00 and $9,999.99' },
+          { el: imgInput, check: function (v) { return CT.isValidAssetPath(v); }, message: 'Enter a valid poster path or http(s) URL' },
+        ])) {
+          return;
+        }
+
         AdminApp.submitForm('/index.php/admin/movie/create', {
-          movie_name: document.getElementById('movie_name').value.trim(),
-          movie_type: document.getElementById('movie_type').value,
-          times: document.getElementById('times').value.trim(),
-          star: document.getElementById('star').value,
-          money: document.getElementById('money').value,
-          tag: document.getElementById('tag').value.trim(),
+          movie_name: nameEl.value.trim(),
+          movie_type: typeEl.value,
+          times: timesEl.value.trim(),
+          star: starEl.value,
+          money: moneyEl.value,
+          tag: tagEl.value.trim(),
           img: imgInput.value.trim(),
           theater_codes: AdminApp.getCheckedIds(theaterGrid),
           offer_codes: AdminApp.getCheckedIds(offerGrid),

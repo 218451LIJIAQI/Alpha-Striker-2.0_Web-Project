@@ -9,9 +9,14 @@ class Offer extends ApiController
     public function getOfferList()
     {
         try {
+            $sessionState = $this->resolveSessionUser('user_code');
+            if ($sessionState['stale']) {
+                return $this->fail('Account session is no longer valid — please sign in again', 401);
+            }
+
             $offerType     = $this->strParam('offer_type');
             $movieCode     = $this->idParam('movie_code');
-            $sessionUserId = $this->resolveActiveSessionUserId();
+            $sessionUserId = $sessionState['user_id'];
             $today         = date('Y-m-d');
             $targetDate    = $this->targetDateParam('date');
 
@@ -85,11 +90,16 @@ class Offer extends ApiController
     public function getMoneyByBadge()
     {
         try {
+            $sessionState = $this->resolveSessionUser('user_code');
+            if ($sessionState['stale']) {
+                return $this->fail('Account session is no longer valid — please sign in again', 401);
+            }
+
             $code          = strtoupper($this->strParam('badge') ?: $this->strParam('promo_code'));
             $movieCode     = $this->idParam('movie_code');
             $seatCount     = $this->idParam('seat_count');
             $date          = $this->strParam('date');
-            $sessionUserId = $this->resolveActiveSessionUserId();
+            $sessionUserId = $sessionState['user_id'];
 
             $validation = $this->validatePromoForContext($code, $movieCode, $sessionUserId, $date);
             if (!$validation['valid']) {

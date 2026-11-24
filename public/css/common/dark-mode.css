@@ -182,6 +182,11 @@ body.dark-mode textarea[aria-invalid="true"] {
 
 body.dark-mode .search-bar { background-color: #0f1523; border: 1px solid #3b4968; }
 
+body.dark-mode .chat-input:focus-within {
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.24);
+}
+
 body.dark-mode input::placeholder, body.dark-mode textarea::placeholder { color: #94a3b8; }
 
 body.dark-mode input:focus, body.dark-mode select:focus, body.dark-mode textarea:focus { border-color: #fbbf24; }
@@ -288,6 +293,14 @@ body.dark-mode .date-item.active, body.dark-mode .time-slot.active {
   background-color: #be123c;
   border-color: #f43f5e;
   color: #ffffff;
+}
+
+body.dark-mode .time-slot:disabled,
+body.dark-mode .time-slot.is-expired {
+  background-color: #1e273d;
+  border-color: #2b364f;
+  color: #94a3b8;
+  opacity: 0.75;
 }
 
 body.dark-mode .seats-container, body.dark-mode .selected-seats { background-color: #111726; border: 1px solid #2b364f; }

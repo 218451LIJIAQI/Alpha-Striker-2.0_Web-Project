@@ -259,9 +259,9 @@ class Movie extends BaseAdmin
         if ($star === null) {
             return [null, 'Rating must be between 0.0 and 5.0'];
         }
-        $money = $this->parseFiniteFloat($data['money'] ?? null, 0.0);
+        $money = $this->parseFiniteFloat($data['money'] ?? null, 0.0, self::MAX_CURRENCY_AMOUNT);
         if ($money === null) {
-            return [null, 'Ticket price must be a non-negative number'];
+            return [null, 'Ticket price must be between $0.00 and $9,999.99'];
         }
 
         return [[

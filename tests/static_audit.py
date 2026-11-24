@@ -132,6 +132,14 @@ def verify_sql_schema_and_seed_assets() -> None:
 
     fk_violations = conn.execute("PRAGMA foreign_key_check;").fetchall()
     assert_true(len(fk_violations) == 0, f"Foreign key violations in seed data: {fk_violations}")
+    assert_true(
+        re.search(r"CONSTRAINT\s+`fk_offer_user`[^;]*ON DELETE CASCADE", sql_text, re.I) is not None,
+        "movies.sql fk_offer_user must enforce ON DELETE CASCADE to prevent exclusive voucher leakage!",
+    )
+    assert_true(
+        re.search(r"CONSTRAINT\s+`fk_seat_user`[^;]*ON DELETE SET NULL", sql_text, re.I) is not None,
+        "movies.sql fk_seat_user must preserve historical seat occupancy via ON DELETE SET NULL!",
+    )
 
     counts = {
         tbl: conn.execute(f"SELECT COUNT(*) FROM `{tbl}`").fetchone()[0]
@@ -235,6 +243,7 @@ def verify_php_and_security_contracts() -> None:
         "function isValidAssetPath(",
         "function parseScreeningMinutes(",
         "function isScreeningCancelable(",
+        "function resolveSessionUser(",
         "function compareSeatCodes(",
         "function compareScreeningRows(",
         "function checkLoginThrottle(",
@@ -251,6 +260,7 @@ def verify_php_and_security_contracts() -> None:
         assert_true(helper_sig in api_ctrl_src, f"ApiController.php missing {helper_sig}")
     assert_true(re.search(r"MAX_PASSWORD_BYTES\s*=\s*72", api_ctrl_src) is not None, "ApiController.php missing MAX_PASSWORD_BYTES = 72")
     assert_true(re.search(r"MAX_LOGIN_ATTEMPTS\s*=\s*5", api_ctrl_src) is not None, "ApiController.php missing MAX_LOGIN_ATTEMPTS = 5")
+    assert_true(re.search(r"MAX_CURRENCY_AMOUNT\s*=\s*9999\.99", api_ctrl_src) is not None, "ApiController.php missing MAX_CURRENCY_AMOUNT = 9999.99")
     assert_true("function textSub(" not in api_ctrl_src, "Dead ApiController::textSub helper should remain removed")
 
     base_admin_src = (ROOT / "application/admin/controller/BaseAdmin.php").read_text(encoding="utf-8")
@@ -293,13 +303,28 @@ def verify_php_and_security_contracts() -> None:
     admin_user_src = (ROOT / "application/admin/controller/User.php").read_text(encoding="utf-8")
     safe_match = re.search(r"SAFE_FIELDS\s*=\s*'([^']+)'", admin_user_src)
     assert_true(safe_match is not None and "login_pwd" not in safe_match.group(1), "Admin User leaked login_pwd!")
+    assert_true(
+        "Db::table('movie_offer')" in admin_user_src and "Db::name('offer')" in admin_user_src,
+        "Admin User::delete must cascade-delete member-exclusive offers and movie_offer links!",
+    )
 
+    offer_pub_src = (ROOT / "application/offer/controller/Offer.php").read_text(encoding="utf-8")
     seat_src = (ROOT / "application/movie/controller/Seat.php").read_text(encoding="utf-8")
+    for sess_guarded_name, sess_guarded_src in (
+        ("Seat.php", seat_src),
+        ("Offer.php", offer_pub_src),
+        ("User.php", user_ctrl_src),
+        ("admin/Auth.php", admin_auth_src),
+    ):
+        assert_true(
+            "resolveSessionUser(" in sess_guarded_src,
+            f"{sess_guarded_name} must verify active DB user existence via resolveSessionUser()",
+        )
     assert_true(
         "?: $this->idParam('user_code')" not in seat_src and "$this->idParam('user_code') ?:" not in seat_src,
         "Seat.php still trusts client-supplied user_code fallback!",
     )
-    assert_true("isScreeningCancelable(" in seat_src, "Seat.php must enforce screening start-time cancellation guard")
+    assert_true("isScreeningCancelable(" in seat_src, "Seat.php must enforce screening start-time cutoff guard")
 
     # Verify 3-way route & helper parity: Frontend <-> PHP Controllers <-> mock_thinkphp_server.py
     mock_src = (ROOT / "tests/mock_thinkphp_server.py").read_text(encoding="utf-8")
@@ -318,6 +343,7 @@ def verify_php_and_security_contracts() -> None:
         "def round_cents(",
         "def _verify_same_origin(",
         "def _rotate_session(",
+        "def _resolve_session_user(",
     ):
         assert_true(mock_sig in mock_src, f"mock_thinkphp_server.py missing 1:1 {mock_sig} parity")
     assert_true(re.search(r"MAX_PASSWORD_BYTES\s*=\s*72", mock_src) is not None, "mock_thinkphp_server.py missing MAX_PASSWORD_BYTES = 72")
@@ -380,6 +406,7 @@ def verify_js_html_css_and_binaries() -> None:
         "function isValidPasswordBytes(",
         "function parseSeatCodes(",
         "function compareSeatCodes(",
+        "function isValidAssetPath(",
         "function parseScreeningMinutes(",
         "function isScreeningCancelable(",
         "function flagFieldError(",
@@ -393,6 +420,7 @@ def verify_js_html_css_and_binaries() -> None:
 
     admin_js_src = (ROOT / "public/js/admin/admin.js").read_text(encoding="utf-8")
     assert_true("function sanitizeCsvCell(" in admin_js_src, "public/js/admin/admin.js missing sanitizeCsvCell")
+    assert_true("function validateFields(" in admin_js_src, "public/js/admin/admin.js missing validateFields")
     assert_true("function getQueryId(" in admin_js_src, "public/js/admin/admin.js missing getQueryId")
     assert_true("function renderFormLoadError(" in admin_js_src, "public/js/admin/admin.js missing renderFormLoadError")
     assert_true("adminRemember" not in admin_js_src, "Dead adminRemember key should remain removed from admin.js")
@@ -426,9 +454,19 @@ def verify_js_html_css_and_binaries() -> None:
             ext_asset_re.search(txt) is None,
             f"External CDN stylesheet/script tag found in offline build: {hf}",
         )
+        assert_true("backdrop-filter" not in txt, f"Compositor-heavy backdrop-filter found in {hf.relative_to(ROOT)}")
+        assert_true('class="story-image floating"' not in txt, f"Continuous infinite floating class found in {hf.relative_to(ROOT)}")
 
-        # Verify 100% explicit <label> or ARIA naming across all interactive form controls
+        # Verify 100% explicit <label> or ARIA naming across all interactive form controls + ARIA tablist/tabpanel pairing
         soup = BeautifulSoup(txt, "html.parser")
+        for tab_el in soup.find_all(attrs={"role": "tab"}):
+            ctrl_id = (tab_el.get("aria-controls") or "").strip()
+            assert_true(bool(ctrl_id), f"role='tab' missing aria-controls in {hf.relative_to(ROOT)}: {tab_el}")
+            panel_el = soup.find(id=ctrl_id)
+            assert_true(
+                panel_el is not None and panel_el.get("role") == "tabpanel",
+                f"aria-controls='{ctrl_id}' missing matching role='tabpanel' in {hf.relative_to(ROOT)}",
+            )
         label_fors = {lbl.get("for") for lbl in soup.find_all("label") if lbl.get("for")}
         for ctrl in soup.find_all(["input", "select", "textarea"]):
             if ctrl.name == "input" and (ctrl.get("type") or "text").lower() in ("hidden", "submit", "button", "reset", "image"):
@@ -501,7 +539,7 @@ def verify_js_html_css_and_binaries() -> None:
     admin_css_txt = (ROOT / "public/css/admin/admin.css").read_text(encoding="utf-8")
     assert_true("position: sticky" in admin_css_txt and "@media print" in admin_css_txt, "Missing sticky thead or @media print in admin.css")
 
-    for scroll_css in ("public/css/booking3/booking3.css", "public/css/pay/pay.css", "public/css/about/about.css"):
+    for scroll_css in ("public/css/common/header.css", "public/css/booking3/booking3.css", "public/css/pay/pay.css", "public/css/about/about.css"):
         sc_txt = (ROOT / scroll_css).read_text(encoding="utf-8")
         assert_true("max-height: calc(100vh -" in sc_txt, f"Missing viewport-safe max-height in {scroll_css}")
 
@@ -530,6 +568,9 @@ def verify_js_html_css_and_binaries() -> None:
             legacy_blue_re.search(no_comments) is None,
             f"Leftover pre-rebrand blue color/shadow found in {cf}",
         )
+        assert_true("backdrop-filter" not in no_comments, f"Compositor-heavy backdrop-filter found in {cf}")
+        assert_true("@keyframes float" not in no_comments and ".floating" not in no_comments, f"Continuous infinite float animation found in {cf}")
+        assert_true("--brand-accent" not in no_comments, f"Duplicate --brand-accent token found in {cf}")
         if cf.name not in ("dark-mode.css", "header.css"):
             assert_true(
                 "body.dark-mode" not in no_comments,

@@ -20,6 +20,42 @@
     window.CineTicket.restoreDialogFocus();
   }
 
+  function applyFieldPrefill(inputEl, nextVal) {
+    if (!inputEl) return;
+    if (inputEl.dataset && !inputEl.dataset.prefillTrackBound) {
+      inputEl.dataset.prefillTrackBound = '1';
+      inputEl.addEventListener('input', function () {
+        inputEl.dataset.userEdited = inputEl.value.trim() ? '1' : '';
+        delete inputEl.dataset.autofilled;
+      });
+    }
+    const isUntouched = !inputEl.dataset || !inputEl.dataset.userEdited;
+    const wasAutofilled = Boolean(inputEl.dataset && inputEl.dataset.autofilled === '1');
+    if (nextVal) {
+      if (!inputEl.value.trim() || (wasAutofilled && isUntouched)) {
+        inputEl.value = nextVal;
+        if (inputEl.dataset) {
+          inputEl.dataset.autofilled = '1';
+          inputEl.dataset.userEdited = '';
+        }
+      }
+    } else if (wasAutofilled && isUntouched) {
+      inputEl.value = '';
+      if (inputEl.dataset) {
+        delete inputEl.dataset.autofilled;
+      }
+    }
+  }
+
+  function syncSupportUserPrefill() {
+    const user = window.CineTicket.AuthStore.getUser();
+    const nameVal = user.isLoggedIn ? (user.userName || '') : '';
+    const emailVal = user.isLoggedIn ? (user.userEmail || '') : '';
+    applyFieldPrefill(document.getElementById('support-name-input'), nameVal);
+    applyFieldPrefill(document.getElementById('support-email-input'), emailVal);
+    applyFieldPrefill(document.getElementById('cat-email-input'), emailVal);
+  }
+
   function selectCategory(category, triggerEl) {
     const CT = window.CineTicket;
     CT.activatePill(document.querySelectorAll('.category-card'), triggerEl);
@@ -33,37 +69,49 @@
       account: 'Account Assistance',
       feedback: 'Guest Experience Feedback',
     };
-
-    const currentUser = CT.AuthStore && CT.AuthStore.isAuthenticated() ? CT.AuthStore.getUser() : null;
-    const prefilledEmail = currentUser && currentUser.email ? CT.escapeHtml(currentUser.email) : '';
+    const resolvedTitle = titles[category] || 'Support Inquiry';
 
     container.classList.remove('is-hidden');
-    container.innerHTML =
-      '<h4>' + CT.escapeHtml(titles[category] || 'Support Inquiry') + '</h4>' +
-      '<div class="form-group"><label for="cat-email-input">Contact Email *</label><input type="email" id="cat-email-input" class="cat-email" value="' + prefilledEmail + '" placeholder="your.email@example.com" required></div>' +
-      '<div class="form-group"><label for="cat-details-input">Details *</label><textarea id="cat-details-input" class="cat-details" rows="3" placeholder="Share relevant booking ID or details..." required></textarea></div>' +
-      '<button type="button" class="send-email-btn submit-category-form">Submit Request</button>';
+    if (!container.querySelector('.submit-category-form')) {
+      container.innerHTML =
+        '<h4 class="category-form-heading">' + CT.escapeHtml(resolvedTitle) + '</h4>' +
+        '<div class="form-group"><label for="cat-email-input">Contact Email *</label><input type="email" id="cat-email-input" class="cat-email" placeholder="your.email@example.com" required></div>' +
+        '<div class="form-group"><label for="cat-details-input">Details *</label><textarea id="cat-details-input" class="cat-details" rows="3" placeholder="Share relevant booking ID or details..." required></textarea></div>' +
+        '<button type="button" class="send-email-btn submit-category-form">Submit Request</button>';
 
-    container.querySelector('.submit-category-form').addEventListener('click', function () {
-      const emailEl = container.querySelector('.cat-email');
-      const detailsEl = container.querySelector('.cat-details');
-      const email = emailEl ? emailEl.value.trim() : '';
-      const details = detailsEl ? detailsEl.value.trim() : '';
-      [emailEl, detailsEl].forEach(CT.clearFieldError);
+      container.querySelector('.submit-category-form').addEventListener('click', function () {
+        const emailEl = container.querySelector('.cat-email');
+        const detailsEl = container.querySelector('.cat-details');
+        const email = emailEl ? emailEl.value.trim() : '';
+        const details = detailsEl ? detailsEl.value.trim() : '';
+        [emailEl, detailsEl].forEach(CT.clearFieldError);
 
-      if (!CT.isValidEmail(email)) {
-        CT.flagFieldError(emailEl, 'Please enter a valid contact email');
-        window.showToast('Please provide a valid email and inquiry details', 'warning');
-        return;
-      }
-      if (!details) {
-        CT.flagFieldError(detailsEl, 'Please describe your inquiry');
-        window.showToast('Please provide a valid email and inquiry details', 'warning');
-        return;
-      }
-      window.showToast('Request received! Our team will follow up shortly.', 'success');
-      container.classList.add('is-hidden');
-    });
+        if (!CT.isValidEmail(email)) {
+          CT.flagFieldError(emailEl, 'Please enter a valid contact email');
+          window.showToast('Please provide a valid email and inquiry details', 'warning');
+          return;
+        }
+        if (!details) {
+          CT.flagFieldError(detailsEl, 'Please describe your inquiry');
+          window.showToast('Please provide a valid email and inquiry details', 'warning');
+          return;
+        }
+        window.showToast('Request received! Our team will follow up shortly.', 'success');
+        if (detailsEl) detailsEl.value = '';
+        if (emailEl && emailEl.dataset) {
+          emailEl.dataset.userEdited = '';
+        }
+        syncSupportUserPrefill();
+        CT.activatePill(document.querySelectorAll('.category-card'), null);
+        container.classList.add('is-hidden');
+      });
+    } else {
+      const headingEl = container.querySelector('.category-form-heading') || container.querySelector('h4');
+      if (headingEl) headingEl.textContent = resolvedTitle;
+      [container.querySelector('.cat-email'), container.querySelector('.cat-details')].forEach(CT.clearFieldError);
+    }
+
+    syncSupportUserPrefill();
   }
 
   function clickLiveChat() {
@@ -154,20 +202,7 @@
     });
 
     document.querySelector('.call-btn')?.addEventListener('click', window.clickCallUs);
-    document.querySelector('.email-btn')?.addEventListener('click', function () {
-      const currentUser = CT.AuthStore && CT.AuthStore.isAuthenticated() ? CT.AuthStore.getUser() : null;
-      if (currentUser) {
-        const nameEl = document.getElementById('support-name-input');
-        const emailEl = document.getElementById('support-email-input');
-        if (nameEl && !nameEl.value.trim() && currentUser.user_name && currentUser.user_name !== 'Guest') {
-          nameEl.value = currentUser.user_name;
-        }
-        if (emailEl && !emailEl.value.trim() && currentUser.email) {
-          emailEl.value = currentUser.email;
-        }
-      }
-      window.clickEmailUs();
-    });
+    document.querySelector('.email-btn')?.addEventListener('click', window.clickEmailUs);
     document.querySelector('.chat-btn')?.addEventListener('click', clickLiveChat);
 
     document.querySelectorAll('[data-call-phone]').forEach(function (btn) {
@@ -221,13 +256,10 @@
       if (timeSelect) timeSelect.selectedIndex = 0;
     });
 
-    const emailContents = document.querySelectorAll('.email-tab-content');
-    CT.bindTabList(document.querySelectorAll('.email-tab'), function (tab) {
-      const targetId = tab.getAttribute('data-tab');
-      emailContents.forEach(function (c) {
-        c.classList.toggle('active', c.id === targetId);
-      });
-    });
+    CT.bindTabList(document.querySelectorAll('.email-tab'));
+    syncSupportUserPrefill();
+    window.addEventListener('cinetix:authchange', syncSupportUserPrefill);
+    window.addEventListener('cinetix:emailmodalopen', syncSupportUserPrefill);
 
     document.querySelector('.send-email-btn')?.addEventListener('click', function () {
       const categoryEl = document.querySelector('.support-category');
@@ -271,10 +303,14 @@
       }
 
       window.showToast('Support ticket submitted! We will reply within 24 hours.', 'success');
+      if (categoryEl) categoryEl.selectedIndex = 0;
       nameInput.value = '';
       emailInput.value = '';
+      if (nameInput.dataset) { nameInput.dataset.userEdited = ''; delete nameInput.dataset.autofilled; }
+      if (emailInput.dataset) { emailInput.dataset.userEdited = ''; delete emailInput.dataset.autofilled; }
       subjectInput.value = '';
       messageInput.value = '';
+      syncSupportUserPrefill();
       closeModalAndRestoreFocus(document.getElementById('email-modal'));
     });
 

@@ -20,7 +20,7 @@
       </div>
     </div>
 
-    <form id="edit-user-form" class="form-container">
+    <form id="edit-user-form" class="form-container" novalidate>
       <div class="form-grid">
         <div class="form-group">
           <label for="user_name" class="form-label">Display Name *</label>
@@ -76,18 +76,23 @@
 
       formEl.addEventListener('submit', function (e) {
         e.preventDefault();
-        window.CineTicket.clearFieldError(pwdInput);
-        const newPwd = pwdInput.value;
-        if (newPwd !== '' && !window.CineTicket.isValidPasswordBytes(newPwd)) {
-          window.CineTicket.flagFieldError(pwdInput, 'New password must be 6-72 UTF-8 bytes');
-          window.showToast('New password must be 6-72 UTF-8 bytes', 'warning');
+        const CT = window.CineTicket;
+        const nameEl = document.getElementById('user_name');
+        const emailEl = document.getElementById('email');
+
+        if (!AdminApp.validateFields([
+          { el: nameEl, check: function (v) { return v.trim().length > 0 && v.trim().length <= 50; }, message: 'Display name is required (max 50 characters)' },
+          { el: emailEl, check: function (v) { return CT.isValidEmail(v); }, message: 'Please enter a valid email address' },
+          { el: pwdInput, check: function (v) { return v === '' || CT.isValidPasswordBytes(v); }, message: 'New password must be 6-72 UTF-8 bytes' },
+        ])) {
           return;
         }
+
         AdminApp.submitForm('/index.php/admin/user/update', {
           user_code: userCode,
-          user_name: document.getElementById('user_name').value.trim(),
-          email: document.getElementById('email').value.trim(),
-          login_pwd: newPwd,
+          user_name: nameEl.value.trim(),
+          email: emailEl.value.trim(),
+          login_pwd: pwdInput.value,
         }, 'user.html', 'User updated successfully', 'Failed to update user', e.submitter);
       });
     });

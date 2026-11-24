@@ -32,11 +32,11 @@
         </div>
 
         <div class="auth-tabs" role="tablist" aria-label="Password Update Mode">
-          <button type="button" id="tab-reset-code" class="auth-tab-btn active" role="tab" aria-selected="true">Email Verification</button>
-          <button type="button" id="tab-old-pwd" class="auth-tab-btn" role="tab" aria-selected="false">Current Password</button>
+          <button type="button" id="tab-reset-code" class="auth-tab-btn active" role="tab" aria-selected="true" aria-controls="reset-form">Email Verification</button>
+          <button type="button" id="tab-old-pwd" class="auth-tab-btn" role="tab" aria-selected="false" aria-controls="change-pwd-form">Current Password</button>
         </div>
 
-        <form id="reset-form">
+        <form id="reset-form" role="tabpanel" aria-labelledby="tab-reset-code">
           <div class="form-group">
             <label for="email" class="form-label">Email Address *</label>
             <input type="email" id="email" class="form-input" placeholder="Enter your registered email" required maxlength="100" autocomplete="email">
@@ -58,7 +58,7 @@
           <button type="submit" class="btn btn-primary">Reset Password</button>
         </form>
 
-        <form id="change-pwd-form" class="is-hidden">
+        <form id="change-pwd-form" role="tabpanel" aria-labelledby="tab-old-pwd" hidden>
           <div class="form-group">
             <label for="old-password" class="form-label">Current Password *</label>
             <input type="password" id="old-password" class="form-input" placeholder="Enter your current password" required maxlength="72" autocomplete="current-password">

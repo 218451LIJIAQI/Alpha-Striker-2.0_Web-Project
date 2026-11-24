@@ -451,6 +451,8 @@ test('sanitizeRedirectPath, UTF-8 password byte bounds, parseSeatCodes, activate
 
   // UTF-8 byte ceiling (19 x 4-byte emoji = 76 UTF-8 bytes even though .length is 38)
   assert.equal(CT.isValidPasswordBytes('short'), false);
+  assert.equal(CT.isValidPasswordBytes('你好'), false);
+  assert.equal(CT.isValidPasswordBytes('🎬'.repeat(2)), false);
   assert.equal(CT.isValidPasswordBytes('x'.repeat(72)), true);
   assert.equal(CT.isValidPasswordBytes('x'.repeat(73)), false);
   assert.equal(CT.utf8ByteLength('🎬'.repeat(19)), 76);
@@ -673,4 +675,87 @@ test('AdminApp atomic batchKey bulk delete, whitelisted sortKey fallback, explic
   assert.ok(formEl.innerHTML.includes('offers.html'));
   retryBtn.trigger('click');
   assert.equal(retried, true);
+});
+
+test('isValidAssetPath, malformed-time cutoff guard, bindTabList hidden-panel sync, and AdminApp.validateFields first-error focus work accurately', () => {
+  const { sandbox, domById, makeElement } = createBrowserSandbox('/admin/add-movie.html');
+  const adminCode = fs.readFileSync(path.join(ROOT, 'public/js/admin/admin.js'), 'utf8');
+  vm.runInNewContext(adminCode, sandbox);
+  const CT = sandbox.CineTicket;
+
+  // Asset path scheme & length validation parity with ApiController::isValidAssetPath
+  assert.equal(CT.isValidAssetPath('../img/homepage/frozen_2.jpeg'), true);
+  assert.equal(CT.isValidAssetPath('https://example.com/poster.png'), true);
+  assert.equal(CT.isValidAssetPath('data:image/png;base64,AAAA'), true);
+  assert.equal(CT.isValidAssetPath(''), false);
+  assert.equal(CT.isValidAssetPath('javascript:alert(1)'), false);
+  assert.equal(CT.isValidAssetPath('data:text/html,<h1>x</h1>'), false);
+  assert.equal(CT.isValidAssetPath('a'.repeat(501)), false);
+
+  // Malformed time strings must be rejected even on future dates
+  const nowRef = new Date(2026, 10, 24, 10, 0, 0);
+  assert.equal(CT.isScreeningCancelable('2027-05-01', 'invalid-time', nowRef), false);
+  assert.equal(CT.isScreeningCancelable('2027-05-01', '99:99', nowRef), false);
+  assert.equal(CT.isScreeningCancelable('2027-05-01', '', nowRef), false);
+  assert.equal(CT.isScreeningCancelable('2027-05-01', '08:00 PM', nowRef), true);
+
+  // bindTabList synchronizes aria-selected, tabindex, active class, and native hidden attribute on controlled tabpanels
+  const panelA = makeElement('div');
+  panelA.id = 'panel-a';
+  const panelB = makeElement('div');
+  panelB.id = 'panel-b';
+  domById.set('panel-a', panelA);
+  domById.set('panel-b', panelB);
+
+  const tabA = makeElement('button');
+  tabA.classList.add('active');
+  tabA.setAttribute('aria-controls', 'panel-a');
+  const tabB = makeElement('button');
+  tabB.setAttribute('aria-controls', 'panel-b');
+
+  const syncTabs = CT.bindTabList([tabA, tabB]);
+  assert.equal(panelA.hidden, false);
+  assert.equal(panelB.hidden, true);
+  assert.equal(panelB.getAttribute('hidden'), '');
+
+  syncTabs(tabB);
+  assert.equal(tabA.getAttribute('aria-selected'), 'false');
+  assert.equal(tabB.getAttribute('aria-selected'), 'true');
+  assert.equal(panelA.hidden, true);
+  assert.equal(panelB.hidden, false);
+  assert.equal(panelB.getAttribute('hidden'), null);
+
+  // AdminApp.validateFields flags ALL invalid controls while focusing strictly the FIRST invalid control
+  const wrapField = (id, val) => {
+    const group = makeElement('div');
+    group.querySelector = (sel) =>
+      group.children.find((ch) => sel.includes(ch.getAttribute('data-error-for') || '__none__')) || null;
+    const el = makeElement('input');
+    el.id = id;
+    el.value = val;
+    el.closest = () => group;
+    group.appendChild(el);
+    return { el, group };
+  };
+
+  const f1 = wrapField('movie_name', '');
+  const f2 = wrapField('money', '25000');
+  const f3 = wrapField('img', 'javascript:alert(1)');
+
+  const valid = sandbox.AdminApp.validateFields([
+    { el: f1.el, check: (v) => v.trim().length > 0, message: 'Title required' },
+    { el: f2.el, check: (v) => Number(v) <= 9999.99, message: 'Price too high' },
+    { el: f3.el, check: (v) => CT.isValidAssetPath(v), message: 'Bad image URL' },
+  ]);
+
+  assert.equal(valid, false);
+  assert.equal(f1.el.focused, true);
+  assert.equal(f2.el.focused, undefined);
+  assert.equal(f3.el.focused, undefined);
+  assert.equal(f1.el.getAttribute('aria-invalid'), 'true');
+  assert.equal(f2.el.getAttribute('aria-invalid'), 'true');
+  assert.equal(f3.el.getAttribute('aria-invalid'), 'true');
+  assert.equal(f1.group.children[1].textContent, 'Title required');
+  assert.equal(f2.group.children[1].textContent, 'Price too high');
+  assert.equal(f3.group.children[1].textContent, 'Bad image URL');
 });

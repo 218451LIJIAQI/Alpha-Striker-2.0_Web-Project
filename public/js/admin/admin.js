@@ -296,6 +296,29 @@
     }
   }
 
+  function validateFields(rules) {
+    let firstInvalidEl = null;
+    let firstMessage = '';
+    (rules || []).forEach(function (rule) {
+      if (!rule || !rule.el) return;
+      CT.clearFieldError(rule.el);
+      const ok = typeof rule.check === 'function' ? Boolean(rule.check(rule.el.value, rule.el)) : true;
+      if (!ok) {
+        const isFirst = firstInvalidEl === null;
+        if (isFirst) {
+          firstInvalidEl = rule.el;
+          firstMessage = rule.message || 'Please review highlighted fields';
+        }
+        CT.flagFieldError(rule.el, rule.message || 'Invalid value', !isFirst);
+      }
+    });
+    if (firstInvalidEl) {
+      window.showToast(firstMessage, 'warning');
+      return false;
+    }
+    return true;
+  }
+
   async function submitForm(endpoint, payload, redirectUrl, successMsg, fallbackErr, submitBtn) {
     const btn = submitBtn || document.querySelector('.submit-btn');
     if (btn && btn.disabled) return;
@@ -744,5 +767,6 @@
     renderFormLoadError: renderFormLoadError,
     sanitizeCsvCell: sanitizeCsvCell,
     submitForm: submitForm,
+    validateFields: validateFields,
   };
 })();

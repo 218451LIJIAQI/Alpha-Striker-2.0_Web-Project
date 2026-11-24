@@ -57,6 +57,10 @@
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
 }
 
+.search-bar:focus-within {
+  box-shadow: 0 0 0 3px #fbbf24, 0 12px 28px rgba(0, 0, 0, 0.24);
+}
+
 .search-input {
   flex: 1;
   min-width: 0;
@@ -72,7 +76,7 @@
 .search-input:focus { outline: none; }
 
 .search-btn {
-  background: var(--brand-accent);
+  background: var(--brand-primary);
   color: #ffffff;
   border: none;
   border-radius: 999px;
@@ -84,7 +88,7 @@
   transition: background-color 0.18s ease;
 }
 
-.search-btn:hover { background: var(--brand-accent-hover); }
+.search-btn:hover { background: var(--brand-primary-hover); }
 
 /* Catalog Section & 2:3 Poster Grid */
 .main-content { padding: 8px 0 48px; }
@@ -122,7 +126,7 @@
   top: 4px;
   bottom: 4px;
   width: 4px;
-  background: var(--brand-accent);
+  background: var(--brand-primary);
   border-radius: 3px;
 }
 
@@ -192,7 +196,7 @@
   top: 12px;
   right: 12px;
   z-index: 2;
-  background: var(--brand-accent);
+  background: var(--brand-primary);
   color: #ffffff;
   padding: 4px 11px;
   border-radius: 999px;

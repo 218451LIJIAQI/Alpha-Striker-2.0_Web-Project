@@ -298,6 +298,12 @@
         body: { seat_code: seatObj.seat_code },
       });
 
+      if (payload.httpStatus === 401) {
+        CT.AuthStore.clearLocal();
+        window.showToast(payload.message || 'Session expired — please sign in again', 'warning');
+        await loadUserTickets();
+        return;
+      }
       if (payload.success) {
         purgeCancelledSeatFromReceipt(seatObj);
         window.showToast('Seat booking cancelled and seat released', 'success');

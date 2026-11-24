@@ -97,6 +97,11 @@
         setTimeout(function () { window.location.href = CT.pageUrl('homepage.html'); }, 650);
         return;
       }
+      if (data.httpStatus === 401) {
+        CT.AuthStore.clearLocal();
+        window.showToast(data.message || 'Session expired — please sign in again', 'warning');
+        return;
+      }
       CT.flagFieldError(oldEl, data.message || 'Password update failed');
       window.showToast(data.message || 'Password update failed', 'error');
     } catch (_) {
@@ -131,18 +136,13 @@
         window.showToast('Please sign in first to change password with your current password', 'info');
         return false;
       }
-      const isOld = btn === tabOldPwd;
-      resetForm?.classList.toggle('is-hidden', isOld);
-      changeForm?.classList.toggle('is-hidden', !isOld);
-      syncUrlMode(isOld);
+      syncUrlMode(btn === tabOldPwd);
       return true;
     });
 
     function switchMode(mode) {
       const isOld = mode === 'change' && CT.AuthStore.getUser().isLoggedIn;
       syncTabs(isOld ? tabOldPwd : tabCode);
-      resetForm?.classList.toggle('is-hidden', isOld);
-      changeForm?.classList.toggle('is-hidden', !isOld);
     }
 
     window.addEventListener('cinetix:authchange', function () {

@@ -21,7 +21,7 @@
       <button type="button" class="add-btn" id="open-add-theater-btn"><i class="fas fa-plus" aria-hidden="true"></i> Add Theater</button>
     </div>
 
-    <form id="theater-form" class="form-container is-hidden" aria-label="Theater Editor">
+    <form id="theater-form" class="form-container is-hidden" aria-label="Theater Editor" novalidate>
       <h2 id="theater-form-heading"><i class="fas fa-plus-circle" aria-hidden="true"></i> Add Partner Theater</h2>
       <input type="hidden" id="theater_code" value="">
 
@@ -71,13 +71,13 @@
 
         <div class="form-group full-width">
           <div class="form-label-row">
-            <span class="form-label">Scheduled Movies</span>
+            <span class="form-label" id="label-scheduled-movies">Scheduled Movies</span>
             <div class="mini-link-group">
               <button type="button" class="mini-link-btn" id="theater-select-all-movies">Select All</button>
               <button type="button" class="mini-link-btn" id="theater-clear-movies">Clear</button>
             </div>
           </div>
-          <div id="theater-movies-grid" class="relation-check-grid"></div>
+          <div id="theater-movies-grid" class="relation-check-grid" role="group" aria-labelledby="label-scheduled-movies"></div>
         </div>
       </div>
 
@@ -148,8 +148,15 @@
         }
       }
 
+      function clearEditorErrors() {
+        ['theater_name', 'address', 'star', 'img'].forEach(function (id) {
+          CT.clearFieldError(document.getElementById(id));
+        });
+      }
+
       function openCreateForm() {
         lastFormTrigger = openAddBtn;
+        clearEditorErrors();
         document.getElementById('theater_code').value = '';
         document.getElementById('theater_name').value = '';
         document.getElementById('theater_id').value = '';
@@ -168,6 +175,7 @@
 
       async function openEditForm(theaterCode, triggerBtn) {
         lastFormTrigger = triggerBtn || openAddBtn;
+        clearEditorErrors();
         try {
           const res = await AdminApp.apiFetch('/index.php/admin/theater/getTheaterByCode?theater_code=' + encodeURIComponent(theaterCode));
           if (!res.success || !res.data) {
@@ -288,6 +296,20 @@
       form.addEventListener('submit', async function (e) {
         e.preventDefault();
         if (saveBtn.disabled) return;
+
+        const nameEl = document.getElementById('theater_name');
+        const addressEl = document.getElementById('address');
+        const starEl = document.getElementById('star');
+
+        if (!AdminApp.validateFields([
+          { el: nameEl, check: function (v) { return v.trim().length > 0 && v.trim().length <= 200; }, message: 'Theater name is required (max 200 characters)' },
+          { el: addressEl, check: function (v) { return v.trim().length > 0 && v.trim().length <= 500; }, message: 'Street address is required (max 500 characters)' },
+          { el: starEl, check: function (v) { const n = Number(v); return v !== '' && Number.isFinite(n) && n >= 0 && n <= 5; }, message: 'Rating must be between 0.0 and 5.0' },
+          { el: imgInput, check: function (v) { return CT.isValidAssetPath(v); }, message: 'Enter a valid theater image path or http(s) URL' },
+        ])) {
+          return;
+        }
+
         saveBtn.disabled = true;
 
         const editingCode = document.getElementById('theater_code').value.trim();

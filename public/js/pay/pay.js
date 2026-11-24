@@ -66,8 +66,11 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   if (!CT.isScreeningCancelable(date, time)) {
-    showBlockedCheckout('Showtime Already Started', 'This screening time has already started or passed. Please pick a later showtime.');
-    window.showToast('Selected screening time has already started', 'warning');
+    showBlockedCheckout(
+      'Showtime Already Started',
+      'This showtime has already started or passed. Please return to the seat map and choose an upcoming showtime.'
+    );
+    window.showToast('Selected showtime has already started or is invalid', 'warning');
     return;
   }
 
@@ -144,7 +147,11 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!suggestionsEl) return;
     try {
       const qs = new URLSearchParams({ movie_code: movieCode, date: date });
-      const offerRes = await CT.fetchJson('/index.php/offer/offer/getOfferList?' + qs.toString());
+      let offerRes = await CT.fetchJson('/index.php/offer/offer/getOfferList?' + qs.toString());
+      if (offerRes && offerRes.httpStatus === 401 && CT.AuthStore.getUser().isLoggedIn) {
+        CT.AuthStore.clearLocal();
+        offerRes = await CT.fetchJson('/index.php/offer/offer/getOfferList?' + qs.toString());
+      }
       if (!offerRes || !offerRes.success || !Array.isArray(offerRes.data)) return;
       if (offerRes.data.length === 0) {
         suggestionsEl.innerHTML = '';
@@ -224,6 +231,15 @@ document.addEventListener('DOMContentLoaded', function () {
   payBtn?.addEventListener('click', async function () {
     if (isSubmitting || isVerifyingPromo || !contextVerified) return;
 
+    if (!CT.isScreeningCancelable(date, time)) {
+      showBlockedCheckout(
+        'Showtime Already Started',
+        'This showtime has already started or passed. Please return to the seat map and choose an upcoming showtime.'
+      );
+      window.showToast('Selected showtime has already started', 'warning');
+      return;
+    }
+
     const checkedRadio = document.querySelector('input[name="payment"]:checked');
     const selectedMethod = checkedRadio ? checkedRadio.value : 'card';
 
@@ -275,6 +291,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }));
         window.location.href = 'paysuccess.html';
         return;
+      }
+
+      if (payload.httpStatus === 401) {
+        CT.AuthStore.clearLocal();
       }
 
       if (payload.httpStatus === 409 && payload.data && Array.isArray(payload.data.conflict_seats)) {
@@ -502,6 +522,9 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         const payload = await CT.fetchJson('/index.php/offer/offer/getMoneyByBadge?' + params.toString());
         if (seq !== promoVerifySeq) return;
+        if (payload.httpStatus === 401) {
+          CT.AuthStore.clearLocal();
+        }
         if (payload.success && payload.data && payload.data.money !== undefined) {
           promoDiscount = parseFloat(payload.data.money) || 0;
           appliedPromoCode = payload.data.promo_code || code;

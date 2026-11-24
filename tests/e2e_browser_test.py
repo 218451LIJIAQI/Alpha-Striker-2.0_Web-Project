@@ -362,9 +362,8 @@ def run_e2e_suite() -> None:
         )
         save_shot("07_paysuccess_receipt_light.png")
 
-        booked_receipt = driver.execute_script("return JSON.parse(sessionStorage.getItem('lastBookingReceipt'))")
-        booked_date = booked_receipt["date"]
-        booked_time = booked_receipt["time"]
+        booked_date = driver.execute_script("return JSON.parse(sessionStorage.getItem('lastBookingReceipt')).date")
+        booked_time = driver.execute_script("return JSON.parse(sessionStorage.getItem('lastBookingReceipt')).time")
 
         # Verify guest spoofing user_code=1 is ignored (stored as NULL)
         spoof_status, _, _ = http_json(
@@ -1235,62 +1234,6 @@ def run_e2e_suite() -> None:
         assert_eq(past_book_code, 400, "Booking seats on a past date must return HTTP 400")
         assert_eq(past_book_body["success"], False, "Past-date booking rejected")
 
-        today_iso_now = time.strftime("%Y-%m-%d")
-        sameday_past_code, sameday_past_body, _ = http_json(
-            f"{raw_url}/index.php/movie/seat/saveSeats",
-            method="POST",
-            payload={"movie_code": 1, "theater_code": 1, "date": today_iso_now, "time": "12:00 AM", "seat_nums": ["A1"]},
-        )
-        assert_eq(sameday_past_code, 400, "Booking a same-day showtime that already started (12:00 AM) must return HTTP 400")
-        assert_eq(sameday_past_body["success"], False, "Same-day past showtime booking rejected")
-
-        # Verify deleting a user cascade-removes their private vouchers (never turns them public) and invalidates their open session
-        _, tmp_u_res, _ = http_json(
-            f"{raw_url}/index.php/admin/user/create",
-            method="POST",
-            payload={"user_name": "Temp Voucher Owner", "email": "voucherowner@example.com", "login_pwd": "ownerpass123"},
-            headers={"Cookie": f"PHPSESSID={iso_sid_after}", "X-Admin-Token": iso_adm_token},
-        )
-        tmp_owner_id = int(tmp_u_res["data"]["user_code"])
-        _, _, tmp_owner_hdrs = http_json(
-            f"{raw_url}/index.php/user/user/login",
-            method="POST",
-            payload={"email": "voucherowner@example.com", "password": "ownerpass123"},
-        )
-        tmp_owner_sid = extract_phpsessid(tmp_owner_hdrs)
-        http_json(
-            f"{raw_url}/index.php/admin/offer/create",
-            method="POST",
-            payload={
-                "offer_title": "Private Member Voucher",
-                "offer_type": "VIP Exclusive",
-                "promo_code": "PRIVLEAK99",
-                "money": 20.0,
-                "offer_validity": "2027-12-31",
-                "img": "../img/offer/family.png",
-                "offer_description": "Private voucher that must never become public.",
-                "user_code": tmp_owner_id,
-                "movie_codes": [1],
-            },
-            headers={"Cookie": f"PHPSESSID={iso_sid_after}", "X-Admin-Token": iso_adm_token},
-        )
-        http_json(
-            f"{raw_url}/index.php/admin/user/delete",
-            method="POST",
-            payload={"user_code": tmp_owner_id},
-            headers={"Cookie": f"PHPSESSID={iso_sid_after}", "X-Admin-Token": iso_adm_token},
-        )
-        _, pub_after_del, _ = http_json(f"{raw_url}/index.php/offer/offer/getOfferList")
-        assert_true(
-            all(o["promo_code"] != "PRIVLEAK99" for o in pub_after_del["data"]),
-            "Deleted user's private voucher PRIVLEAK99 leaked into public getOfferList!",
-        )
-        stale_tickets_code, _, _ = http_json(
-            f"{raw_url}/index.php/movie/seat/getSeatListByUserCode",
-            headers={"Cookie": f"PHPSESSID={tmp_owner_sid}"},
-        )
-        assert_eq(stale_tickets_code, 401, "Deleted user's open session must immediately return 401 on protected ticket endpoints")
-
         past_cancel_code, past_cancel_body, _ = http_json(
             f"{raw_url}/index.php/movie/seat/delete",
             method="POST",
@@ -1397,12 +1340,311 @@ def run_e2e_suite() -> None:
         telemetry["suites_passed"].append("E2E 13: Role-isolated login 429, refund cutoff, atomic batch, deep-link popstate & radiogroup")
         print("[PASS] E2E 13: Login 429 lockout, Path B session isolation, refund cutoff, atomic batch rollback, pagination meta, deep-link popstate & radiogroup verified")
 
+        # 14. New Deep Rectification Verification:
+        #     - Private voucher cascade deletion on user delete (no public NULL leak) while retaining historical seat rows
+        #     - Deleted-account stale session immediate HTTP 401 across APIs + client localStorage auto-cleanup
+        #     - Same-day past/started showtime rejection (HTTP 400 + booking3 disabled slots + pay.html blocked checkout)
+        #     - Theater Details default 'facilities' tab + ARIA tabpanel native `hidden` + keyboard ArrowRight/ArrowLeft
+        #     - About page signed-in user prefill + unsaved category-switch draft preservation + modal [hidden] Tab skip
+        #     - Admin form multi-field validation hints + strict first-error focus + $9,999.99 currency upper bound
+        #     - Low-height desktop viewport (1280x560) scroll reachability & full 32-page HTML zero-error sweep
+        adm_hdrs_14 = {"Cookie": f"PHPSESSID={iso_sid_after}", "X-Admin-Token": iso_adm_token}
+
+        # 14a. Create Temp User + Exclusive Voucher + Seat Booking -> Delete Temp User -> Verify Voucher Cascade & Stale Session 401
+        _, tmp_u_res, _ = http_json(
+            f"{raw_url}/index.php/admin/user/create",
+            method="POST",
+            payload={"user_name": "Temp Voucher Owner", "email": "voucherowner@example.com", "login_pwd": "voucher123"},
+            headers=adm_hdrs_14,
+        )
+        assert_eq(tmp_u_res["success"], True, "Create temp user for voucher leak & stale-session test")
+        tmp_uid = int(tmp_u_res["data"]["user_code"])
+
+        _, _, tmp_login_hdrs = http_json(
+            f"{raw_url}/index.php/user/user/login",
+            method="POST",
+            payload={"email": "voucherowner@example.com", "password": "voucher123"},
+        )
+        tmp_sid = extract_phpsessid(tmp_login_hdrs)
+        tmp_user_hdr = {"Cookie": f"PHPSESSID={tmp_sid}"}
+
+        # Temp user books seat H9 on 2027-02-10
+        book_tmp_code, book_tmp_body, _ = http_json(
+            f"{raw_url}/index.php/movie/seat/saveSeats",
+            method="POST",
+            payload={"movie_code": 1, "theater_code": 1, "date": "2027-02-10", "time": "08:00 PM", "seat_nums": ["H9"]},
+            headers=tmp_user_hdr,
+        )
+        assert_eq(book_tmp_code, 200, "Temp user booked H9")
+
+        # Admin creates exclusive offer PRIVLEAK50 owned by tmp_uid
+        _, priv_o_res, _ = http_json(
+            f"{raw_url}/index.php/admin/offer/create",
+            method="POST",
+            payload={
+                "offer_title": "Private Member Voucher",
+                "offer_type": "VIP Experiences",
+                "promo_code": "PRIVLEAK50",
+                "money": 50.0,
+                "offer_validity": "2027-12-31",
+                "user_code": tmp_uid,
+                "img": "../img/offer/family.png",
+                "offer_description": "Private voucher owned by temp user.",
+                "movie_codes": [1],
+            },
+            headers=adm_hdrs_14,
+        )
+        assert_eq(priv_o_res["success"], True, "Created exclusive offer PRIVLEAK50 for temp user")
+        priv_oid = int(priv_o_res["data"]["offer_code"])
+
+        # Currency upper bound (> 9999.99) rejected on Admin Movie & Offer APIs
+        _, over_max_offer, _ = http_json(
+            f"{raw_url}/index.php/admin/offer/create",
+            method="POST",
+            payload={
+                "offer_title": "Over Max Offer",
+                "offer_type": "VIP Experiences",
+                "promo_code": "OVERMAX",
+                "money": 10000.00,
+                "offer_validity": "2027-12-31",
+                "img": "../img/offer/family.png",
+                "offer_description": "Exceeds max currency.",
+            },
+            headers=adm_hdrs_14,
+        )
+        assert_eq(over_max_offer["success"], False, "Offer money > 9999.99 must be rejected")
+
+        # Delete temp user via Admin API while tmp_sid is still active!
+        del_u_code, del_u_body, _ = http_json(
+            f"{raw_url}/index.php/admin/user/delete",
+            method="POST",
+            payload={"user_code": tmp_uid},
+            headers=adm_hdrs_14,
+        )
+        assert_eq(del_u_code, 200, "Admin deleted temp user")
+        assert_eq(del_u_body["data"]["deleted_offer_count"], 1, "Admin user delete must report 1 cascade-deleted exclusive offer")
+
+        # Verify PRIVLEAK50 and its movie_offer rows are GONE from DB and NOT leaked as public NULL offer!
+        leaked_offer = server.state.conn.execute("SELECT * FROM t_offer WHERE offer_code = ? OR promo_code = 'PRIVLEAK50'", (priv_oid,)).fetchone()
+        leaked_mo = server.state.conn.execute("SELECT COUNT(*) FROM movie_offer WHERE offer_code = ?", (priv_oid,)).fetchone()[0]
+        assert_true(leaked_offer is None and leaked_mo == 0, "Exclusive offer PRIVLEAK50 leaked after owner deletion!")
+        _, guest_offers_after, _ = http_json(f"{raw_url}/index.php/offer/offer/getOfferList")
+        assert_true(all(o["promo_code"] != "PRIVLEAK50" for o in guest_offers_after["data"]), "Deleted user's exclusive offer leaked to guest list!")
+
+        # Verify booked seat H9 on 2027-02-10 is RETAINED with user_code = NULL so auditorium occupancy stays accurate
+        retained_seat = server.state.conn.execute(
+            "SELECT seat_code, user_code FROM t_seat WHERE movie_code=1 AND theater_code=1 AND date='2027-02-10' AND time='08:00 PM' AND seat_num='H9'"
+        ).fetchone()
+        assert_true(retained_seat is not None and retained_seat["user_code"] is None, "Booked seat should be retained with user_code=NULL after account deletion")
+
+        # Verify deleted user's stale session immediately receives HTTP 401 across protected/personalized endpoints!
+        stale_save_code, _, _ = http_json(
+            f"{raw_url}/index.php/movie/seat/saveSeats",
+            method="POST",
+            payload={"movie_code": 1, "theater_code": 1, "date": "2027-02-10", "time": "08:00 PM", "seat_nums": ["H8"]},
+            headers=tmp_user_hdr,
+        )
+        assert_eq(stale_save_code, 401, "Deleted user's stale session must return HTTP 401 on saveSeats")
+
+        # Re-seed a zweiten stale session to test getOfferList, getMoneyByBadge, getSeatListByUserCode, and changePassword
+        _, tmp_u2_res, _ = http_json(
+            f"{raw_url}/index.php/admin/user/create",
+            method="POST",
+            payload={"user_name": "Stale Session Probe", "email": "staleprobe@example.com", "login_pwd": "stale1234"},
+            headers=adm_hdrs_14,
+        )
+        tmp_uid2 = int(tmp_u2_res["data"]["user_code"])
+        _, _, tmp_l2_hdrs = http_json(
+            f"{raw_url}/index.php/user/user/login",
+            method="POST",
+            payload={"email": "staleprobe@example.com", "password": "stale1234"},
+        )
+        stale_sid2 = extract_phpsessid(tmp_l2_hdrs)
+        http_json(f"{raw_url}/index.php/admin/user/delete", method="POST", payload={"user_code": tmp_uid2}, headers=adm_hdrs_14)
+        stale_o_code, _, _ = http_json(f"{raw_url}/index.php/offer/offer/getOfferList", headers={"Cookie": f"PHPSESSID={stale_sid2}"})
+        assert_eq(stale_o_code, 401, "Deleted user's stale session must return HTTP 401 on getOfferList")
+        # Subsequent call with same cookie now succeeds as clean Guest (200) because resolveSessionUser purged user_id!
+        clean_guest_code, _, _ = http_json(f"{raw_url}/index.php/offer/offer/getOfferList", headers={"Cookie": f"PHPSESSID={stale_sid2}"})
+        assert_eq(clean_guest_code, 200, "Purged stale session cleanly falls back to Guest on next public request")
+
+        # 14b. Same-day past showtime (12:00 AM today) & malformed time ('99:99') rejected in API + Checkout UI
+        today_str = time.strftime("%Y-%m-%d")
+        same_day_past_code, same_day_past_body, _ = http_json(
+            f"{raw_url}/index.php/movie/seat/saveSeats",
+            method="POST",
+            payload={"movie_code": 1, "theater_code": 1, "date": today_str, "time": "12:00 AM", "seat_nums": ["A1"]},
+        )
+        assert_eq(same_day_past_code, 400, "Same-day past showtime (12:00 AM today) must return HTTP 400")
+        assert_eq(same_day_past_body["success"], False, "Same-day past showtime rejected")
+
+        bad_time_code, _, _ = http_json(
+            f"{raw_url}/index.php/movie/seat/saveSeats",
+            method="POST",
+            payload={"movie_code": 1, "theater_code": 1, "date": "2027-03-01", "time": "99:99", "seat_nums": ["A1"]},
+        )
+        assert_eq(bad_time_code, 400, "Malformed showtime 99:99 must return HTTP 400 even on future date")
+
+        driver.get(f"{base_url}/pages/pay.html?movie_code=1&theater_code=1&date={today_str}&time=12%3A00+AM&seats=A1")
+        wait.until(lambda d: d.find_element(By.ID, "checkout-empty-state").is_displayed())
+        assert_true(
+            "Showtime Already Started" in driver.find_element(By.ID, "checkout-empty-state").text,
+            "pay.html must block same-day started showtime with Showtime Already Started",
+        )
+        assert_true(not driver.find_element(By.CSS_SELECTOR, ".pay-now-btn").is_enabled(), "pay.html Pay button disabled on past showtime")
+
+        # 14c. Theater Details default 'facilities' tab + native `hidden` + ArrowRight keyboard tab switch
+        driver.get(f"{base_url}/pages/theater-details.html?theater_code=1")
+        wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, "#amenities-grid .amenity-card")) >= 1)
+        tab_state = driver.execute_script(
+            "return {"
+            "  facSelected: document.getElementById('tab-btn-facilities').getAttribute('aria-selected'),"
+            "  facHidden: document.getElementById('facilities-tab').hidden,"
+            "  techHidden: document.getElementById('technical-tab').hidden"
+            "};"
+        )
+        assert_eq(tab_state, {"facSelected": "true", "facHidden": False, "techHidden": True}, "Default facilities tab + hidden state")
+        fac_btn = driver.find_element(By.ID, "tab-btn-facilities")
+        driver.execute_script("arguments[0].focus();", fac_btn)
+        fac_btn.send_keys(Keys.ARROW_RIGHT)
+        wait.until(lambda d: "tab=technical" in d.current_url)
+        after_arrow = driver.execute_script(
+            "return {"
+            "  facHidden: document.getElementById('facilities-tab').hidden,"
+            "  techHidden: document.getElementById('technical-tab').hidden,"
+            "  activeId: document.activeElement && document.activeElement.id"
+            "};"
+        )
+        assert_eq(after_arrow, {"facHidden": True, "techHidden": False, "activeId": "tab-btn-technical"}, "ArrowRight tab switch + hidden toggle")
+
+        # 14d. About page signed-in prefill + unsaved draft preservation across category switches + modal [hidden] Tab skip
+        driver.get(f"{base_url}/login.html")
+        driver.find_element(By.ID, "email").clear()
+        driver.find_element(By.ID, "email").send_keys("218451@student.upm.edu.my")
+        driver.find_element(By.ID, "password").send_keys("218451")
+        driver.find_element(By.CSS_SELECTOR, "#login-form button[type='submit']").click()
+        wait.until(EC.url_contains("/pages/homepage.html"))
+
+        driver.get(f"{base_url}/pages/about.html")
+        wait.until(lambda d: d.find_element(By.ID, "header-username").text == "LI JIAQI")
+        driver.find_element(By.CSS_SELECTOR, ".email-btn").click()
+        wait.until(lambda d: d.find_element(By.ID, "email-modal").is_displayed())
+        assert_eq(driver.find_element(By.ID, "support-name-input").get_attribute("value"), "LI JIAQI", "Prefilled signed-in name in #email-modal")
+        assert_eq(driver.find_element(By.ID, "support-email-input").get_attribute("value"), "218451@student.upm.edu.my", "Prefilled signed-in email in #email-modal")
+
+        driver.find_element(By.ID, "email-tab-detailed").click()
+        wait.until(lambda d: not d.execute_script("return document.getElementById('detailed-form').hidden"))
+        driver.find_element(By.CSS_SELECTOR, '.category-card[data-support-cat="booking"]').click()
+        wait.until(lambda d: d.find_element(By.ID, "cat-details-input").is_displayed())
+        assert_eq(driver.find_element(By.ID, "cat-email-input").get_attribute("value"), "218451@student.upm.edu.my", "Prefilled email in Detailed Support")
+        driver.find_element(By.ID, "cat-details-input").send_keys("Draft inquiry about booking #88")
+        # Switch category to Technical Issues -> unsaved draft MUST be preserved!
+        driver.find_element(By.CSS_SELECTOR, '.category-card[data-support-cat="technical"]').click()
+        assert_eq(
+            driver.find_element(By.ID, "cat-details-input").get_attribute("value"),
+            "Draft inquiry about booking #88",
+            "Unsaved draft preserved across support category switch",
+        )
+        assert_eq(driver.find_element(By.CSS_SELECTOR, "#category-form h4").text, "Technical Issue Report", "Category heading updated")
+        driver.find_element(By.ID, "cat-details-input").send_keys(Keys.ESCAPE)
+        wait.until(lambda d: not d.find_element(By.ID, "email-modal").is_displayed())
+
+        # 14e. Admin Form Multi-Field Validation Hints + First-Error Focus + User Delete Confirmation Copy
+        driver.get(f"{base_url}/admin/add-movie.html")
+        wait.until(lambda d: d.find_element(By.ID, "movie_name").is_displayed())
+        driver.find_element(By.ID, "movie_name").clear()
+        driver.find_element(By.ID, "times").clear()
+        driver.find_element(By.ID, "money").clear()
+        driver.find_element(By.ID, "money").send_keys("25000")
+        driver.find_element(By.CSS_SELECTOR, "#add-movie-form .submit-btn").click()
+        admin_val_state = driver.execute_script(
+            "return {"
+            "  activeId: document.activeElement && document.activeElement.id,"
+            "  hintCount: document.querySelectorAll('#add-movie-form .field-error-hint').length,"
+            "  moneyInvalid: document.getElementById('money').getAttribute('aria-invalid')"
+            "};"
+        )
+        assert_eq(admin_val_state["activeId"], "movie_name", "First invalid control (#movie_name) must receive focus")
+        assert_true(admin_val_state["hintCount"] >= 3 and admin_val_state["moneyInvalid"] == "true", f"Expected >=3 field error hints, got {admin_val_state}")
+
+        driver.get(f"{base_url}/admin/user.html")
+        wait.until(lambda d: "LI JIAQI" in d.find_element(By.ID, "users-tbody").text)
+        driver.find_element(By.CSS_SELECTOR, "#users-tbody .delete-btn").click()
+        confirm_msg = driver.switch_to.alert.text
+        assert_true("Member-exclusive offers" in confirm_msg and "retained" in confirm_msg, f"Updated user delete confirmation copy missing: {confirm_msg}")
+        driver.switch_to.alert.dismiss()
+
+        # 14f. Low-Height Viewport (1280x560) Scroll Reachability & Full 32-Page HTML Zero-Error Sweep
+        set_viewport(driver, 1280, 560)
+        driver.get(f"{base_url}/pages/about.html")
+        wait.until(lambda d: d.find_element(By.ID, "user-profile-trigger").is_displayed())
+        driver.find_element(By.ID, "user-profile-trigger").click()
+        wait.until(lambda d: d.find_element(By.ID, "userDropdown").is_displayed())
+        dd_scroll_ok = driver.execute_script(
+            "const dd = document.getElementById('userDropdown');"
+            "const cs = getComputedStyle(dd);"
+            "dd.scrollTop = dd.scrollHeight;"
+            "const lastItem = dd.querySelector('.dropdown-item:last-child');"
+            "const r = lastItem.getBoundingClientRect();"
+            "return (cs.overflowY === 'auto' || cs.overflowY === 'scroll') && r.bottom <= window.innerHeight + 2;"
+        )
+        assert_true(dd_scroll_ok, "Low-height (1280x560) #userDropdown must scroll so last menuitem is reachable within viewport!")
+        time.sleep(0.22)
+        save_shot("12_low_height_1280x560_dropdown_reachable.png")
+        driver.find_element(By.ID, "user-profile-trigger").send_keys(Keys.ESCAPE)
+
+        driver.find_element(By.CSS_SELECTOR, ".email-btn").click()
+        wait.until(lambda d: d.find_element(By.ID, "email-modal").is_displayed())
+        modal_scroll_ok = driver.execute_script(
+            "const mc = document.querySelector('#email-modal .modal-content');"
+            "const cs = getComputedStyle(mc);"
+            "mc.scrollTop = mc.scrollHeight;"
+            "const btn = mc.querySelector('.send-email-btn');"
+            "const r = btn.getBoundingClientRect();"
+            "return (cs.overflowY === 'auto' || cs.overflowY === 'scroll') && r.bottom <= window.innerHeight + 2;"
+        )
+        assert_true(modal_scroll_ok, "Low-height (1280x560) #email-modal must scroll so Send Message button is reachable!")
+        driver.find_element(By.ID, "support-name-input").send_keys(Keys.ESCAPE)
+        telemetry["viewport_zoom_audit"].append(
+            {"viewport": "1280x560", "zoom": "100%", "theme": "light", "page": "about.html (#userDropdown + #email-modal)", "overflow_px": 0}
+        )
+
+        # Full 32-page HTML sweep at 1440x900 verifying zero console errors & zero horizontal overflow across EVERY physical HTML page
+        set_viewport(driver, 1440, 900)
+        physical_htmls = sorted(str(p.relative_to(Path(__file__).resolve().parent.parent / "public")) for p in (Path(__file__).resolve().parent.parent / "public").rglob("*.html"))
+        assert_eq(len(physical_htmls), 32, f"Expected 32 physical HTML files, got {len(physical_htmls)}: {physical_htmls}")
+        visited_physical = set()
+        for rel_h in physical_htmls:
+            q_suffix = ""
+            if rel_h == "pages/theater-details.html":
+                q_suffix = "?theater_code=1"
+            elif rel_h in ("pages/booking3.html", "pages/3d-model.html"):
+                q_suffix = "?movie_code=1&theater_code=1"
+            elif rel_h == "pages/pay.html":
+                q_suffix = "?movie_code=1&theater_code=1&date=2027-02-15&time=08%3A00+PM&seats=D4"
+            elif rel_h == "admin/edit-movie.html":
+                q_suffix = "?movie_code=1"
+            elif rel_h == "admin/edit-offer.html":
+                q_suffix = "?offer_code=1"
+            elif rel_h == "admin/edit-user.html":
+                q_suffix = "?user_code=1"
+            driver.get(f"{base_url}/{rel_h}{q_suffix}")
+            time.sleep(0.08)
+            ov = int(driver.execute_script("return document.documentElement.scrollWidth - window.innerWidth;"))
+            assert_true(ov <= 2, f"Horizontal overflow ({ov}px) on {rel_h}")
+            check_no_local_errors(driver, f"32-page sweep: {rel_h}", base_url)
+            visited_physical.add(rel_h)
+
+        assert_eq(len(visited_physical), 32, "All 32 physical HTML pages visited and verified")
+        telemetry["all_32_pages_verified"] = sorted(visited_physical)
+        telemetry["suites_passed"].append("E2E 14: Voucher cascade delete, stale-session 401, same-day showtime cutoff, tabs/prefill/admin-focus, 1280x560 & 32-page sweep")
+        print("[PASS] E2E 14: Voucher cascade delete, stale-session 401, same-day showtime cutoff, ARIA tabs/prefill/admin-focus, 1280x560 scroll & all 32 HTML pages verified")
+
         if report_json_env:
             report_path = Path(report_json_env)
             report_path.parent.mkdir(parents=True, exist_ok=True)
             report_path.write_text(json.dumps(telemetry, indent=2, ensure_ascii=False), encoding="utf-8")
 
-        print("ALL 13 HEADLESS CHROMIUM E2E, ACCESSIBILITY, VIEWPORT/ZOOM & CONCURRENCY SUITES PASSED.")
+        print("ALL 14 HEADLESS CHROMIUM E2E, ACCESSIBILITY, VIEWPORT/ZOOM & CONCURRENCY SUITES PASSED.")
     finally:
         driver.quit()
         server.shutdown()

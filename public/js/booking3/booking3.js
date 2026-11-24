@@ -25,7 +25,22 @@
   };
 
   function isBookingReady() {
-    return Boolean(state.movieValid && state.theaterCode);
+    return Boolean(
+      state.movieValid &&
+      state.theaterCode &&
+      state.date &&
+      state.time &&
+      window.CineTicket.isScreeningCancelable(state.date, state.time)
+    );
+  }
+
+  function hasBookableShowtimeOnDate(isoDate) {
+    const CT = window.CineTicket;
+    const domSlots = Array.from(document.querySelectorAll('.time-slot')).map(function (el) {
+      return el.textContent.trim();
+    });
+    const times = domSlots.length ? domSlots : ['09:30 AM', '01:00 PM', '04:30 PM', '08:00 PM', '10:30 PM'];
+    return times.some(function (t) { return CT.isScreeningCancelable(isoDate, t); });
   }
 
   function syncBookingUrl() {
@@ -169,13 +184,13 @@
       dates.unshift({ dateObj: new Date(parts[0], parts[1] - 1, parts[2]), iso: preferredIsoDate });
     }
 
-    const hasAnyUpcomingToday = Array.from(document.querySelectorAll('.time-slot')).some(function (slot) {
-      return CT.isScreeningCancelable(todayIso, slot.textContent.trim());
-    });
-    const fallbackIso = (!hasAnyUpcomingToday && dates.length > 1) ? dates[1].iso : dates[0].iso;
+    let defaultIso = dates[0].iso;
+    if (!preferredIsoDate && dates.length > 1 && !hasBookableShowtimeOnDate(dates[0].iso)) {
+      defaultIso = dates[1].iso;
+    }
     const activeIso = dates.some(function (x) { return x.iso === preferredIsoDate; })
       ? preferredIsoDate
-      : fallbackIso;
+      : defaultIso;
     state.date = activeIso;
 
     dates.forEach(function (entry) {
@@ -197,64 +212,75 @@
         if (state.date === iso) return;
         CT.activatePill(dateContainer.querySelectorAll('.date-item'), item);
         state.date = iso;
-        syncTimeSlotsForDate(state.time);
+        refreshTimeSlots(state.time);
         await loadTheaters();
-        await loadOccupiedSeats([]);
+        if (isBookingReady()) {
+          await loadOccupiedSeats([]);
+        } else {
+          state.selectedSeats = [];
+          document.querySelectorAll('.seat[data-seat]').forEach(function (seatEl) {
+            seatEl.classList.remove('selected', 'reserved');
+            updateSeatAria(seatEl);
+          });
+          updateSummaryPanel();
+        }
       });
 
       dateContainer.appendChild(item);
     });
   }
 
-  function syncTimeSlotsForDate(preferredTime) {
+  function refreshTimeSlots(preferredTime) {
     const CT = window.CineTicket;
     const slots = Array.from(document.querySelectorAll('.time-slot'));
     if (!slots.length) return;
 
-    const availableSlots = [];
+    let firstBookable = null;
+    let preferredBookable = null;
+    let currentBookable = null;
+
     slots.forEach(function (slot) {
-      const slotTime = slot.textContent.trim();
-      const isUpcoming = !state.date || CT.isScreeningCancelable(state.date, slotTime);
-      slot.disabled = !isUpcoming;
-      slot.classList.toggle('disabled', !isUpcoming);
-      if (!isUpcoming) {
-        slot.title = 'This showtime has already started';
-      } else {
-        slot.removeAttribute('title');
-        availableSlots.push(slot);
+      const slotText = slot.textContent.trim();
+      const bookable = CT.isScreeningCancelable(state.date, slotText);
+      slot.disabled = !bookable;
+      slot.classList.toggle('is-expired', !bookable);
+      slot.setAttribute('aria-disabled', String(!bookable));
+      slot.title = bookable
+        ? ('Select ' + slotText + ' screening')
+        : ('Showtime ' + slotText + ' has already started');
+
+      if (bookable) {
+        if (!firstBookable) firstBookable = slot;
+        if (preferredTime && slotText === preferredTime) preferredBookable = slot;
+        if (slot.classList.contains('active')) currentBookable = slot;
+      }
+
+      if (slot.dataset.timeBound !== 'true') {
+        slot.dataset.timeBound = 'true';
+        slot.addEventListener('click', function () {
+          const chosen = slot.textContent.trim();
+          if (slot.disabled || !CT.isScreeningCancelable(state.date, chosen)) {
+            window.showToast('This showtime has already started — please choose an upcoming time', 'warning');
+            return;
+          }
+          if (state.time === chosen) return;
+          CT.activatePill(slots, slot);
+          state.time = chosen;
+          syncAuditoriumControls();
+          loadOccupiedSeats([]);
+        });
       }
     });
 
-    const candidatePool = availableSlots.length ? availableSlots : slots;
-    const matched = preferredTime
-      ? candidatePool.find(function (s) { return s.textContent.trim() === preferredTime; })
-      : null;
-    const currentActive = candidatePool.find(function (s) { return s.classList.contains('active'); });
-    const nextActive = matched || currentActive || candidatePool[0];
-
-    CT.activatePill(slots, nextActive);
-    state.time = availableSlots.length ? nextActive.textContent.trim() : '';
-  }
-
-  function bindTimeSlots(preferredTime) {
-    const CT = window.CineTicket;
-    const slots = Array.from(document.querySelectorAll('.time-slot'));
-    if (!slots.length) return;
-
-    syncTimeSlotsForDate(preferredTime);
-
-    slots.forEach(function (slot) {
-      if (slot.dataset.timeBound === 'true') return;
-      slot.dataset.timeBound = 'true';
-      slot.addEventListener('click', function () {
-        if (slot.disabled) return;
-        const chosen = slot.textContent.trim();
-        if (state.time === chosen) return;
-        CT.activatePill(slots, slot);
-        state.time = chosen;
-        loadOccupiedSeats([]);
-      });
-    });
+    const nextActive = preferredBookable || currentBookable || firstBookable;
+    if (nextActive) {
+      CT.activatePill(slots, nextActive);
+      state.time = nextActive.textContent.trim();
+    } else {
+      CT.activatePill(slots, null);
+      state.time = '';
+    }
+    syncAuditoriumControls();
   }
 
   function renderMovieStatusBanner(title, message, onRetry) {
@@ -506,7 +532,11 @@
     const proceedBtn = document.querySelector('.proceed-button');
 
     if (theaterEl) theaterEl.textContent = state.theaterName;
-    if (datetimeEl) datetimeEl.textContent = state.date + ' • ' + state.time;
+    if (datetimeEl) {
+      datetimeEl.textContent = state.time
+        ? (state.date + ' • ' + state.time)
+        : (state.date + ' • No remaining showtimes today');
+    }
     if (countEl) countEl.textContent = String(count);
     if (unitEl) unitEl.textContent = '$' + state.unitPrice.toFixed(2);
 
@@ -548,7 +578,7 @@
       const initialSeats = window.CineTicket.parseSeatCodes(urlParams.get('seats') || '');
 
       buildDateSelector(initialDate);
-      bindTimeSlots(initialTime);
+      refreshTimeSlots(initialTime);
       await Promise.all([loadMovieDetails(), loadTheaters()]);
       state.suppressUrlSync = false;
       await loadOccupiedSeats(initialSeats);
@@ -560,6 +590,12 @@
     document.getElementById('clear-seats-btn')?.addEventListener('click', clearSelectedSeats);
 
     document.querySelector('.proceed-button')?.addEventListener('click', function () {
+      if (!window.CineTicket.isScreeningCancelable(state.date, state.time)) {
+        refreshTimeSlots('');
+        updateSummaryPanel();
+        window.showToast('Selected showtime has already started — please choose an upcoming time', 'warning');
+        return;
+      }
       if (!isBookingReady() || !state.selectedSeats.length) {
         window.showToast('Please select at least one seat', 'warning');
         return;

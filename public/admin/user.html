@@ -68,13 +68,17 @@
           endpoint: '/index.php/admin/user/delete',
           idKey: 'user_code',
           batchKey: 'user_codes',
-          confirmText: function (n) { return 'Delete ' + n + ' selected user account(s)? Private member vouchers will be removed and booked seats unlinked.'; },
+          confirmText: function (n) {
+            return 'Delete ' + n + ' selected user account(s)? Member-exclusive offers owned by these accounts will also be removed, while booked seats are retained without account linkage.';
+          },
           successPrefix: 'Deleted',
         },
         deleteAction: {
           endpoint: '/index.php/admin/user/delete',
           idKey: 'user_code',
-          confirmText: function (id) { return 'Delete user #' + id + '? Private member vouchers will be removed and booked seats unlinked.'; },
+          confirmText: function (id) {
+            return 'Delete user #' + id + '? Member-exclusive offers owned by this account will also be removed, while booked seats are retained without account linkage.';
+          },
           successText: 'User deleted',
         },
         exportCsv: {

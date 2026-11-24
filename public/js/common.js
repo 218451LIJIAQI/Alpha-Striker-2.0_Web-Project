@@ -59,6 +59,16 @@
     return currentDepthPrefix() + trimmed.replace(/^(\.\.\/|\.\/)+/, '');
   }
 
+  function isValidAssetPath(rawPath) {
+    if (typeof rawPath !== 'string') return false;
+    const trimmed = rawPath.trim();
+    if (!trimmed || trimmed.length > 500 || /[\x00-\x1f\x7f]/.test(trimmed)) return false;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+      return /^(?:https?:\/\/|data:image\/)/i.test(trimmed);
+    }
+    return true;
+  }
+
   function sanitizeRedirectPath(rawPath, fallbackPath) {
     const fallback = fallbackPath || pageUrl('homepage.html');
     const candidate = String(rawPath || '').trim();
@@ -99,7 +109,7 @@
 
   function isValidPasswordBytes(value) {
     const str = String(value || '');
-    return str.length >= 6 && utf8ByteLength(str) <= MAX_PASSWORD_BYTES;
+    return Array.from(str).length >= 6 && utf8ByteLength(str) <= MAX_PASSWORD_BYTES;
   }
 
   function toIsoDate(dateObj) {
@@ -147,12 +157,12 @@
   function isScreeningCancelable(dateStr, timeStr, referenceDate) {
     const iso = String(dateStr || '').trim();
     if (!isValidIsoDate(iso)) return false;
+    const mins = parseScreeningMinutes(timeStr);
+    if (mins < 0) return false;
     const now = referenceDate instanceof Date ? referenceDate : new Date();
     const curIso = toIsoDate(now);
     if (iso < curIso) return false;
     if (iso > curIso) return true;
-    const mins = parseScreeningMinutes(timeStr);
-    if (mins < 0) return false;
     const curMins = now.getHours() * 60 + now.getMinutes();
     return mins > curMins;
   }
@@ -217,7 +227,7 @@
     }
   }
 
-  function flagFieldError(inputEl, message) {
+  function flagFieldError(inputEl, message, skipFocus) {
     if (!inputEl) return;
     if (inputEl.classList) {
       inputEl.classList.add('input-error');
@@ -225,7 +235,7 @@
     if (typeof inputEl.setAttribute === 'function') {
       inputEl.setAttribute('aria-invalid', 'true');
     }
-    if (typeof inputEl.focus === 'function') {
+    if (!skipFocus && typeof inputEl.focus === 'function') {
       inputEl.focus();
     }
     if (inputEl.dataset && !inputEl.dataset.errClearBound && typeof inputEl.addEventListener === 'function') {
@@ -235,7 +245,7 @@
     }
     if (message) {
       const container =
-        (typeof inputEl.closest === 'function' && inputEl.closest('.form-group, .input-group')) ||
+        (typeof inputEl.closest === 'function' && inputEl.closest('.form-group, .input-group, .promo-form')) ||
         null;
       if (container && typeof container.querySelector === 'function' && typeof container.appendChild === 'function') {
         const selector = inputEl.id ? '[data-error-for="' + inputEl.id + '"]' : '.field-error-hint';
@@ -349,12 +359,30 @@
     const list = Array.from(buttons || []);
     if (!list.length) return function () {};
 
+    function syncPanelVisibility(btn, isActive) {
+      const panelId = typeof btn.getAttribute === 'function' ? btn.getAttribute('aria-controls') : '';
+      const panel = panelId && typeof document !== 'undefined' && typeof document.getElementById === 'function'
+        ? document.getElementById(panelId)
+        : null;
+      if (!panel) return;
+      if (panel.classList) {
+        panel.classList.toggle('active', isActive);
+      }
+      panel.hidden = !isActive;
+      if (isActive && typeof panel.removeAttribute === 'function') {
+        panel.removeAttribute('hidden');
+      } else if (!isActive && typeof panel.setAttribute === 'function') {
+        panel.setAttribute('hidden', '');
+      }
+    }
+
     function syncTabState(activeBtn) {
       list.forEach(function (btn) {
         const isActive = btn === activeBtn;
         btn.classList.toggle('active', isActive);
         btn.setAttribute('aria-selected', String(isActive));
         btn.setAttribute('tabindex', isActive ? '0' : '-1');
+        syncPanelVisibility(btn, isActive);
       });
     }
 
@@ -363,6 +391,7 @@
       const isInitial = btn.classList.contains('active');
       btn.setAttribute('aria-selected', String(isInitial));
       btn.setAttribute('tabindex', isInitial ? '0' : '-1');
+      syncPanelVisibility(btn, isInitial);
 
       btn.addEventListener('click', function () {
         if (typeof onActivate === 'function' && onActivate(btn, idx) === false) return;
@@ -765,6 +794,9 @@
     if (modal) {
       rememberDialogTrigger();
       modal.style.display = 'flex';
+      if (typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('cinetix:emailmodalopen'));
+      }
       modal.querySelector('.close-modal')?.focus();
       return;
     }
@@ -1096,7 +1128,7 @@
       const activeModal = getActiveModalDialog();
       if (activeModal && typeof activeModal.querySelectorAll === 'function') {
         const focusables = Array.from(activeModal.querySelectorAll(FOCUSABLE_SELECTOR)).filter(function (el) {
-          return !el.closest('.is-hidden');
+          return !el.closest('.is-hidden') && !el.closest('[hidden]');
         });
         if (focusables.length > 0) {
           const first = focusables[0];
@@ -1182,6 +1214,7 @@
     formatStars: formatStars,
     isCardExpiryValid: isCardExpiryValid,
     isScreeningCancelable: isScreeningCancelable,
+    isValidAssetPath: isValidAssetPath,
     isValidEmail: isValidEmail,
     isValidIsoDate: isValidIsoDate,
     isValidPasswordBytes: isValidPasswordBytes,

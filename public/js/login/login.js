@@ -51,7 +51,7 @@
     }
     if (CT.utf8ByteLength(password) > 72) {
       CT.flagFieldError(passwordEl, 'Password must be 6-72 UTF-8 bytes');
-      window.showToast('Password must be 6-72 bytes', 'warning');
+      window.showToast('Password must be 6-72 UTF-8 bytes', 'warning');
       return;
     }
 

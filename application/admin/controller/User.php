@@ -162,22 +162,27 @@ class User extends BaseAdmin
                     return $this->fail('User not found', 404);
                 }
 
+                // Preserve historical auditorium seat occupancy while unlinking deleted member account
                 Db::name('seat')->where('user_code', 'in', $existingIds)->update(['user_code' => null]);
+
+                // Cascade-delete member-exclusive offers so private vouchers never leak into public NULL scope
                 $ownedOfferIds = array_map(
                     'intval',
-                    Db::name('offer')->where('user_code', 'in', $existingIds)->column('offer_code') ?: []
+                    Db::name('offer')->where('user_code', 'in', $existingIds)->lock(true)->column('offer_code') ?: []
                 );
                 if (!empty($ownedOfferIds)) {
                     Db::table('movie_offer')->where('offer_code', 'in', $ownedOfferIds)->delete();
                     Db::name('offer')->where('offer_code', 'in', $ownedOfferIds)->delete();
                 }
+
                 Db::name('user')->where('user_code', 'in', $existingIds)->delete();
 
                 Db::commit();
                 return $this->ok([
-                    'user_code'     => $existingIds[0],
-                    'deleted_ids'   => $existingIds,
-                    'deleted_count' => count($existingIds),
+                    'user_code'           => $existingIds[0],
+                    'deleted_ids'         => $existingIds,
+                    'deleted_count'       => count($existingIds),
+                    'deleted_offer_count' => count($ownedOfferIds),
                 ], 'User deleted successfully');
             } catch (\Throwable $txErr) {
                 Db::rollback();
@@ -197,10 +202,10 @@ class User extends BaseAdmin
             return 'Valid email address is required';
         }
         if ($requirePassword && !$this->isValidPasswordLength($password)) {
-            return 'Password must be 6-72 characters';
+            return 'Password must be 6-72 UTF-8 bytes';
         }
         if (!$requirePassword && $password !== '' && !$this->isValidPasswordLength($password)) {
-            return 'New password must be 6-72 characters';
+            return 'New password must be 6-72 UTF-8 bytes';
         }
 
         $dupQuery = Db::name('user')->where('email', $email);

@@ -10,8 +10,6 @@
   --brand-primary: #be123c;
   --brand-primary-hover: #9f1239;
   --brand-primary-soft: #fff1f2;
-  --brand-accent: #be123c;
-  --brand-accent-hover: #9f1239;
   --brand-amber: #b45309;
   --brand-success: #15803d;
   --brand-success-soft: #dcfce7;
@@ -51,7 +49,7 @@ html, body {
 
 .tabular-nums { font-variant-numeric: tabular-nums; }
 
-.is-hidden { display: none !important; }
+.is-hidden, [hidden] { display: none !important; }
 
 html.theme-switching *,
 html.theme-switching *::before,
@@ -412,19 +410,22 @@ html.dark-mode .dark-mode-toggle .sun-icon, body.dark-mode .dark-mode-toggle .su
   right: 0;
   background: var(--surface-bg);
   min-width: 310px;
+  max-height: calc(100vh - 96px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-elevated);
   z-index: 1000;
-  overflow: hidden;
   border: 1px solid var(--border-color);
   cursor: default;
 }
 
-.dropdown-content.show { display: block; animation: headerSlideDown 0.14s ease-out; }
+.dropdown-content.show { display: block; animation: headerSlideDown 0.2s ease-out; }
 
 @keyframes headerSlideDown {
   from {
-    opacity: 0.96;
+    opacity: 0.98;
     transform: translateY(-4px);
   }
   to {
@@ -540,8 +541,7 @@ html.dark-mode .dark-mode-toggle .sun-icon, body.dark-mode .dark-mode-toggle .su
 .contact-popup {
   position: fixed;
   inset: 0;
-  background-color: rgba(15, 23, 42, 0.62);
-  backdrop-filter: blur(3px);
+  background-color: rgba(15, 23, 42, 0.7);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -556,6 +556,8 @@ html.dark-mode .dark-mode-toggle .sun-icon, body.dark-mode .dark-mode-toggle .su
   border-radius: var(--radius-lg);
   width: 400px;
   max-width: 100%;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-elevated);
 }
@@ -655,8 +657,8 @@ html.dark-mode .dark-mode-toggle .sun-icon, body.dark-mode .dark-mode-toggle .su
 
 @keyframes toastSlideIn {
   from {
-    transform: translateX(16px);
-    opacity: 0.96;
+    transform: translateX(100%);
+    opacity: 0;
   }
   to {
     transform: translateX(0);

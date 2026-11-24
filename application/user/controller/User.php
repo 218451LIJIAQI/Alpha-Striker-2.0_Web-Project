@@ -30,7 +30,7 @@ class User extends ApiController
                 return $this->fail('Please enter a valid email address');
             }
             if (!$this->isValidPasswordLength($password)) {
-                return $this->fail('Password must be 6-72 characters');
+                return $this->fail('Password must be 6-72 UTF-8 bytes');
             }
             if (Db::name('user')->where('email', $email)->find()) {
                 return $this->fail('This email has already been registered');
@@ -127,8 +127,8 @@ class User extends ApiController
         try {
             $this->purgeExpiredResetChallenge();
 
-            $userId = (int) Session::get('user_id', 0);
-            if ($userId <= 0) {
+            $sessionState = $this->resolveSessionUser('user_code, user_name, email');
+            if ($sessionState['user_id'] <= 0 || !$sessionState['user']) {
                 return $this->ok([
                     'authenticated' => false,
                     'user_id'       => 0,
@@ -137,22 +137,7 @@ class User extends ApiController
                 ]);
             }
 
-            $user = Db::name('user')
-                ->field('user_code, user_name, email')
-                ->where('user_code', $userId)
-                ->find();
-
-            if (!$user) {
-                Session::delete('user_id');
-                Session::delete('user_email');
-                return $this->ok([
-                    'authenticated' => false,
-                    'user_id'       => 0,
-                    'user_name'     => 'Guest',
-                    'email'         => '',
-                ]);
-            }
-
+            $user = $sessionState['user'];
             return $this->ok([
                 'authenticated' => true,
                 'user_id'       => (int) $user['user_code'],
@@ -223,27 +208,26 @@ class User extends ApiController
                 return $this->fail('Forbidden: cross-origin request rejected', 403);
             }
 
-            $sessionUserId    = (int) Session::get('user_id', 0);
             $oldPassword      = $this->rawStrParam('old_password');
             $newPassword      = $this->rawStrParam('pwd');
             $verificationCode = $this->strParam('verification_code');
 
             if (!$this->isValidPasswordLength($newPassword)) {
-                return $this->fail('New password must be 6-72 characters');
+                return $this->fail('New password must be 6-72 UTF-8 bytes');
             }
 
             // Path A: Signed-in user changing password by verifying current password
             if ($oldPassword !== '' && $verificationCode === '') {
-                if ($sessionUserId <= 0) {
+                $sessionState = $this->resolveSessionUser('*');
+                if ($sessionState['stale']) {
+                    return $this->fail('Account session is no longer valid — please sign in again', 401);
+                }
+                if ($sessionState['user_id'] <= 0 || !$sessionState['user']) {
                     return $this->fail('Please sign in to change your password using current password', 401);
                 }
 
-                $user = Db::name('user')->where('user_code', $sessionUserId)->find();
-                if (!$user) {
-                    Session::delete('user_id');
-                    Session::delete('user_email');
-                    return $this->fail('Account session is no longer valid', 401);
-                }
+                $sessionUserId = $sessionState['user_id'];
+                $user          = $sessionState['user'];
 
                 if (!$this->verifyAndUpgradePassword($user, $oldPassword)) {
                     return $this->fail('Current password is incorrect', 401);

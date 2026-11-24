@@ -50,7 +50,7 @@
   left: 0;
   width: 44px;
   height: 3px;
-  background-color: var(--brand-accent);
+  background-color: var(--brand-primary);
   border-radius: 3px;
 }
 
@@ -80,7 +80,7 @@
   position: absolute;
   top: 14px;
   right: 14px;
-  background-color: var(--brand-accent);
+  background-color: var(--brand-primary);
   color: #ffffff;
   padding: 5px 12px;
   border-radius: 999px;
@@ -90,7 +90,7 @@
   z-index: 2;
 }
 
-.limited-time { background-color: var(--brand-accent); }
+.limited-time { background-color: var(--brand-primary); }
 
 .exclusive, .member-exclusive { background-color: var(--brand-primary); }
 
@@ -264,7 +264,7 @@
 }
 
 .newsletter-form button {
-  background-color: var(--brand-accent);
+  background-color: var(--brand-primary);
   color: #ffffff;
   border: none;
   padding: 13px 24px;
@@ -276,4 +276,4 @@
   transition: background-color 0.18s ease;
 }
 
-.newsletter-form button:hover { background-color: var(--brand-accent-hover); }
+.newsletter-form button:hover { background-color: var(--brand-primary-hover); }

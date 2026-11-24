@@ -3,7 +3,6 @@ namespace app\movie\controller;
 
 use app\common\controller\ApiController;
 use think\Db;
-use think\facade\Session;
 
 class Seat extends ApiController
 {
@@ -17,8 +16,13 @@ class Seat extends ApiController
             $date        = $this->strParam('date');
             $time        = $this->strParam('time');
 
-            if ($movieCode <= 0 || $theaterCode <= 0 || !$this->isValidIsoDate($date) || $time === '') {
-                return $this->fail('Valid movie_code, theater_code, date (YYYY-MM-DD), and time are required');
+            if (
+                $movieCode <= 0 ||
+                $theaterCode <= 0 ||
+                !$this->isValidIsoDate($date) ||
+                $this->parseScreeningMinutes($time) < 0
+            ) {
+                return $this->fail('Valid movie_code, theater_code, date (YYYY-MM-DD), and showtime are required');
             }
 
             $seats = Db::name('seat')
@@ -45,6 +49,12 @@ class Seat extends ApiController
             if (!$this->verifySameOrigin()) {
                 return $this->fail('Forbidden: cross-origin request rejected', 403);
             }
+
+            $sessionState = $this->resolveSessionUser('user_code');
+            if ($sessionState['stale']) {
+                return $this->fail('Account session is no longer valid — please sign in again', 401);
+            }
+            $userCode = $sessionState['user_id'] > 0 ? $sessionState['user_id'] : null;
 
             $data          = $this->payload();
             $movieCode     = $this->idParam('movie_code');
@@ -73,11 +83,14 @@ class Seat extends ApiController
                 return $this->fail('Complete screening and seat parameters are required');
             }
 
+            if ($this->parseScreeningMinutes($time) < 0) {
+                return $this->fail('Valid showtime format is required', 400);
+            }
             if ($date < date('Y-m-d')) {
                 return $this->fail('Selected screening date has already passed', 400);
             }
             if (!$this->isScreeningCancelable($date, $time)) {
-                return $this->fail('Selected screening time has already started or passed', 400);
+                return $this->fail('Selected showtime has already started or passed', 400);
             }
 
             $seatList        = is_array($rawSeats) ? $rawSeats : explode(',', (string) $rawSeats);
@@ -107,10 +120,6 @@ class Seat extends ApiController
             if (count($seatNums) > self::MAX_SEATS_PER_ORDER) {
                 return $this->fail('Maximum ' . self::MAX_SEATS_PER_ORDER . ' seats allowed per transaction');
             }
-
-            // Strictly trust server-side verified Session user_id ONLY (never client-supplied user_code)
-            $activeUserId = $this->resolveActiveSessionUserId();
-            $userCode     = $activeUserId > 0 ? $activeUserId : null;
 
             Db::startTrans();
             try {
@@ -247,7 +256,11 @@ class Seat extends ApiController
     public function getSeatListByUserCode()
     {
         try {
-            $sessionUserId = $this->resolveActiveSessionUserId();
+            $sessionState = $this->resolveSessionUser('user_code');
+            if ($sessionState['stale']) {
+                return $this->fail('Account session is no longer valid — please sign in again', 401);
+            }
+            $sessionUserId = $sessionState['user_id'];
             if ($sessionUserId <= 0) {
                 return $this->fail('Authentication required to view tickets', 401);
             }
@@ -302,7 +315,11 @@ class Seat extends ApiController
                 return $this->fail('Forbidden: cross-origin request rejected', 403);
             }
 
-            $sessionUserId = $this->resolveActiveSessionUserId();
+            $sessionState = $this->resolveSessionUser('user_code');
+            if ($sessionState['stale']) {
+                return $this->fail('Account session is no longer valid — please sign in again', 401);
+            }
+            $sessionUserId = $sessionState['user_id'];
             if ($sessionUserId <= 0) {
                 return $this->fail('Authentication required to cancel a booking', 401);
             }

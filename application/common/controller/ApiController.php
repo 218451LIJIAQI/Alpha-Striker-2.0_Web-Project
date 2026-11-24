@@ -11,8 +11,8 @@ use think\facade\Session;
  * Shared JSON & CSV API base controller.
  * Centralizes payload parsing, strict integer/float/scalar/email/password/asset-URI guards, mbstring-free UTF-8 helpers,
  * ISO calendar & screening time-window validation, same-origin CSRF verification, CSV formula-injection sanitization,
- * role-isolated login rate limiting & session lifecycle, whitelisted sorting/pagination, cent-exact pricing math,
- * promo validation, and SQL conflict detection.
+ * role-isolated login rate limiting & DB-backed session user verification, whitelisted sorting/pagination,
+ * cent-exact pricing math, promo validation, and SQL conflict detection.
  */
 abstract class ApiController
 {
@@ -23,6 +23,7 @@ abstract class ApiController
     public const MAX_PASSWORD_BYTES       = 72;
     public const MAX_LOGIN_ATTEMPTS       = 5;
     public const LOGIN_LOCKOUT_SECONDS    = 60;
+    public const MAX_CURRENCY_AMOUNT      = 9999.99;
 
     /** @var array|null */
     private $cachedPayload = null;
@@ -173,6 +174,10 @@ abstract class ApiController
         if (!$this->isValidIsoDate($isoDate)) {
             return false;
         }
+        $mins = $this->parseScreeningMinutes($time);
+        if ($mins < 0) {
+            return false;
+        }
         $today = date('Y-m-d');
         if ($isoDate < $today) {
             return false;
@@ -180,12 +185,45 @@ abstract class ApiController
         if ($isoDate > $today) {
             return true;
         }
-        $mins = $this->parseScreeningMinutes($time);
-        if ($mins < 0) {
-            return false;
-        }
         $nowMins = ((int) date('G')) * 60 + ((int) date('i'));
         return $mins > $nowMins;
+    }
+
+    /**
+     * Verifies that any customer `user_id` stored in Session still exists in `t_user`.
+     * Immediately purges stale customer session keys if the account was deleted.
+     */
+    protected function resolveSessionUser($selectFields = 'user_code, user_name, email')
+    {
+        $sessionUserId = (int) Session::get('user_id', 0);
+        if ($sessionUserId <= 0) {
+            return [
+                'user_id' => 0,
+                'user'    => null,
+                'stale'   => false,
+            ];
+        }
+
+        $user = Db::name('user')
+            ->field($selectFields)
+            ->where('user_code', $sessionUserId)
+            ->find();
+
+        if (!$user) {
+            Session::delete('user_id');
+            Session::delete('user_email');
+            return [
+                'user_id' => 0,
+                'user'    => null,
+                'stale'   => true,
+            ];
+        }
+
+        return [
+            'user_id' => (int) $user['user_code'],
+            'user'    => $user,
+            'stale'   => false,
+        ];
     }
 
     protected function compareSeatCodes($a, $b)
@@ -232,8 +270,7 @@ abstract class ApiController
         if (!is_string($password)) {
             return false;
         }
-        $bytes = strlen($password);
-        return $bytes >= 6 && $bytes <= self::MAX_PASSWORD_BYTES;
+        return $this->textLen($password) >= 6 && strlen($password) <= self::MAX_PASSWORD_BYTES;
     }
 
     /**
@@ -399,24 +436,6 @@ abstract class ApiController
         Session::init();
         Session::clear();
         Session::destroy();
-    }
-
-    /**
-     * Resolves the authenticated customer ID against live t_user storage, clearing stale session keys if the user was deleted.
-     */
-    protected function resolveActiveSessionUserId()
-    {
-        $sessionUserId = (int) Session::get('user_id', 0);
-        if ($sessionUserId <= 0) {
-            return 0;
-        }
-        $exists = Db::name('user')->where('user_code', $sessionUserId)->value('user_code');
-        if (!$exists) {
-            Session::delete('user_id');
-            Session::delete('user_email');
-            return 0;
-        }
-        return (int) $exists;
     }
 
     protected function pickAllowed(array $source, array $allowedFields)

@@ -273,9 +273,9 @@ class Offer extends BaseAdmin
             return [null, 'Highlight badge must be 50 characters or fewer'];
         }
 
-        $money = $this->parseFiniteFloat($data['money'] ?? null, 0.0);
+        $money = $this->parseFiniteFloat($data['money'] ?? null, 0.0, self::MAX_CURRENCY_AMOUNT);
         if ($money === null) {
-            return [null, 'Discount amount must be a non-negative number'];
+            return [null, 'Discount amount must be between $0.00 and $9,999.99'];
         }
 
         $ownerUserCode = null;

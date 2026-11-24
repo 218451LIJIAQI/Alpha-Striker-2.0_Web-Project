@@ -77,7 +77,8 @@ class Auth extends ApiController
             Session::delete('admin_token');
             Session::delete('admin_user');
 
-            if ((int) Session::get('user_id', 0) > 0) {
+            $customerState = $this->resolveSessionUser('user_code');
+            if ($customerState['user_id'] > 0) {
                 $this->rotateSession();
             } else {
                 $this->destroySession();

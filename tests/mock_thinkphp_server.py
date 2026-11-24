@@ -43,6 +43,7 @@ MAX_RESET_ATTEMPTS = 5
 MAX_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_SECONDS = 60
 MAX_BATCH_IDS = 200
+MAX_CURRENCY_AMOUNT = 9999.99
 ALLOWED_PAYMENT_METHODS = {"card", "paypal", "applepay", "googlepay"}
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 POS_INT_RE = re.compile(r"^\d+$")
@@ -87,6 +88,10 @@ def format_csv_row(cells: list) -> str:
 def hash_password_bcrypt(password: str) -> str:
     salt = crypt.mksalt(crypt.METHOD_BLOWFISH, rounds=1024).replace("$2b$", "$2y$", 1)
     return crypt.crypt(password, salt)
+
+
+def is_valid_password_bytes(password: str) -> bool:
+    return len(password) >= 6 and len(password.encode("utf-8")) <= MAX_PASSWORD_BYTES
 
 
 def verify_password_bcrypt(password: str, stored_hash: str) -> bool:
@@ -148,15 +153,15 @@ def is_screening_cancelable(date_val, time_val) -> bool:
     iso_date = str(date_val or "").strip()
     if not is_valid_iso_date(iso_date):
         return False
+    mins = parse_screening_minutes(time_val)
+    if mins < 0:
+        return False
     now_dt = dt.datetime.now()
     today_iso = now_dt.strftime("%Y-%m-%d")
     if iso_date < today_iso:
         return False
     if iso_date > today_iso:
         return True
-    mins = parse_screening_minutes(time_val)
-    if mins < 0:
-        return False
     now_mins = now_dt.hour * 60 + now_dt.minute
     return mins > now_mins
 
@@ -526,8 +531,8 @@ def prepare_movie_data(p: dict) -> tuple[dict | None, str | None]:
         return None, "Rating must be between 0.0 and 5.0"
 
     money_val = parse_finite_float(p.get("money"))
-    if money_val is None or money_val < 0:
-        return None, "Ticket price must be a non-negative number"
+    if money_val is None or money_val < 0 or money_val > MAX_CURRENCY_AMOUNT:
+        return None, "Ticket price must be between $0.00 and $9,999.99"
 
     return {
         "movie_name": mname,
@@ -606,8 +611,8 @@ def prepare_offer_data(db: sqlite3.Connection, p: dict, exclude_offer_id: int) -
         return None, "Highlight badge must be 50 characters or fewer"
 
     money_val = parse_finite_float(p.get("money"))
-    if money_val is None or money_val < 0:
-        return None, "Discount amount must be a non-negative number"
+    if money_val is None or money_val < 0 or money_val > MAX_CURRENCY_AMOUNT:
+        return None, "Discount amount must be between $0.00 and $9,999.99"
 
     owner_uid = None
     if "user_code" in p and p["user_code"] is not None:
@@ -649,15 +654,14 @@ def validate_admin_user_input(
     require_password: bool,
     exclude_user_id: int,
 ) -> str | None:
-    pw_bytes = len(password.encode("utf-8"))
     if name == "" or len(name) > 50:
         return "Valid username (1-50 characters) is required"
     if email == "" or not EMAIL_RE.match(email) or len(email) > 100:
         return "Valid email address is required"
-    if require_password and (pw_bytes < 6 or pw_bytes > MAX_PASSWORD_BYTES):
-        return "Password must be 6-72 characters"
-    if not require_password and password != "" and (pw_bytes < 6 or pw_bytes > MAX_PASSWORD_BYTES):
-        return "New password must be 6-72 characters"
+    if require_password and not is_valid_password_bytes(password):
+        return "Password must be 6-72 UTF-8 bytes"
+    if not require_password and password != "" and not is_valid_password_bytes(password):
+        return "New password must be 6-72 UTF-8 bytes"
 
     dup = (
         db.execute("SELECT 1 FROM t_user WHERE email = ? AND user_code <> ?", (email, exclude_user_id)).fetchone()
@@ -695,19 +699,6 @@ def make_handler(state: ContractState):
         def _destroy_session(self, sid: str) -> None:
             with state.session_lock:
                 state.sessions.pop(sid, None)
-
-        def _resolve_active_session_user_id(self, session: dict, db: sqlite3.Connection) -> int:
-            uid = int(session.get("user_id") or 0)
-            if uid <= 0:
-                return 0
-            with state.db_lock:
-                urow = db.execute("SELECT user_code FROM t_user WHERE user_code = ?", (uid,)).fetchone()
-            if not urow:
-                with state.session_lock:
-                    session.pop("user_id", None)
-                    session.pop("user_email", None)
-                return 0
-            return int(urow["user_code"])
 
         def _clear_login_throttle(self, session: dict, scope: str) -> None:
             with state.session_lock:
@@ -814,6 +805,19 @@ def make_handler(state: ContractState):
                 else:
                     self._parse_qs_into(raw_body, params)
             return params
+
+        def _resolve_session_user(self, db: sqlite3.Connection, session: dict, columns: str = "user_code, user_name, email") -> dict:
+            with state.session_lock:
+                sess_uid = int(session.get("user_id") or 0)
+            if sess_uid <= 0:
+                return {"user_id": 0, "user": None, "stale": False}
+            urow = db.execute(f"SELECT {columns} FROM t_user WHERE user_code = ?", (sess_uid,)).fetchone()
+            if not urow:
+                with state.session_lock:
+                    session.pop("user_id", None)
+                    session.pop("user_email", None)
+                return {"user_id": 0, "user": None, "stale": True}
+            return {"user_id": int(urow["user_code"]), "user": dict(urow), "stale": False}
 
         def _has_admin_session(self, session: dict) -> bool:
             tok = str(session.get("admin_token") or "")
@@ -964,7 +968,9 @@ def make_handler(state: ContractState):
                 with state.session_lock:
                     for k in ("admin_auth", "admin_token", "admin_user"):
                         session.pop(k, None)
-                    has_customer = int(session.get("user_id") or 0) > 0
+                with state.db_lock:
+                    cust_state = self._resolve_session_user(db, session, "user_code")
+                has_customer = cust_state["user_id"] > 0
                 if has_customer:
                     new_sid, _ = self._rotate_session(sid)
                     return self._send_json({"success": True, "message": "Logout successful", "data": None}, 200, new_sid)
@@ -1128,9 +1134,12 @@ def make_handler(state: ContractState):
             if route == "offer/offer/getofferlist":
                 otype = self._str_param(p, "offer_type")
                 mc = self._id_param(p, "movie_code")
-                sess_uid = self._resolve_active_session_user_id(session, db)
                 target_date = self._target_date_param(p, "date")
                 with state.db_lock:
+                    sstate = self._resolve_session_user(db, session, "user_code")
+                    if sstate["stale"]:
+                        return self._send_json({"success": False, "message": "Account session is no longer valid — please sign in again"}, 401, sid)
+                    sess_uid = sstate["user_id"]
                     sql = "SELECT offer_code, offer_title, offer_description, promo_code, offer_validity, img, badge, money, offer_type, user_code FROM t_offer WHERE "
                     args = []
                     if sess_uid > 0:
@@ -1186,8 +1195,11 @@ def make_handler(state: ContractState):
                 mc = self._id_param(p, "movie_code")
                 sc = self._id_param(p, "seat_count")
                 d = self._str_param(p, "date")
-                sess_uid = self._resolve_active_session_user_id(session, db)
                 with state.db_lock:
+                    sstate = self._resolve_session_user(db, session, "user_code")
+                    if sstate["stale"]:
+                        return self._send_json({"success": False, "message": "Account session is no longer valid — please sign in again"}, 401, sid)
+                    sess_uid = sstate["user_id"]
                     res = validate_promo_for_context(db, code, mc, sess_uid, d)
                     if not res["valid"]:
                         return self._send_json({"success": False, "message": res["message"]}, res["status"], sid)
@@ -1204,8 +1216,8 @@ def make_handler(state: ContractState):
                 tc = self._optional_id_with_default(p, "theater_code", 1)
                 d = self._str_param(p, "date")
                 t = self._str_param(p, "time")
-                if mc <= 0 or tc <= 0 or not is_valid_iso_date(d) or not t:
-                    return self._send_json({"success": False, "message": "Valid movie_code, theater_code, date (YYYY-MM-DD), and time are required"}, 200, sid)
+                if mc <= 0 or tc <= 0 or not is_valid_iso_date(d) or parse_screening_minutes(t) < 0:
+                    return self._send_json({"success": False, "message": "Valid movie_code, theater_code, date (YYYY-MM-DD), and showtime are required"}, 200, sid)
                 with state.db_lock:
                     rows = db.execute(
                         "SELECT seat_num, seat_zone, theater_code FROM t_seat WHERE movie_code = ? AND theater_code = ? AND date = ? AND time = ?",
@@ -1217,6 +1229,11 @@ def make_handler(state: ContractState):
             if route == "movie/seat/saveseats":
                 if not self._verify_same_origin():
                     return self._send_json({"success": False, "message": "Forbidden: cross-origin request rejected"}, 403, sid)
+                with state.db_lock:
+                    sstate = self._resolve_session_user(db, session, "user_code")
+                if sstate["stale"]:
+                    return self._send_json({"success": False, "message": "Account session is no longer valid — please sign in again"}, 401, sid)
+
                 mc = self._id_param(p, "movie_code")
                 tc = self._optional_id_with_default(p, "theater_code", 1)
                 d = self._str_param(p, "date")
@@ -1239,10 +1256,12 @@ def make_handler(state: ContractState):
                 ):
                     return self._send_json({"success": False, "message": "Complete screening and seat parameters are required"}, 200, sid)
 
+                if parse_screening_minutes(t) < 0:
+                    return self._send_json({"success": False, "message": "Valid showtime format is required"}, 400, sid)
                 if d < today_str:
                     return self._send_json({"success": False, "message": "Selected screening date has already passed"}, 400, sid)
                 if not is_screening_cancelable(d, t):
-                    return self._send_json({"success": False, "message": "Selected screening time has already started or passed"}, 400, sid)
+                    return self._send_json({"success": False, "message": "Selected showtime has already started or passed"}, 400, sid)
 
                 seat_list = raw_seats if isinstance(raw_seats, list) else str(raw_seats).split(",")
                 seats_map: dict[str, str] = {}
@@ -1262,10 +1281,11 @@ def make_handler(state: ContractState):
                 if len(seats) > MAX_SEATS_PER_ORDER:
                     return self._send_json({"success": False, "message": f"Maximum {MAX_SEATS_PER_ORDER} seats allowed per transaction"}, 200, sid)
 
-                active_uid = self._resolve_active_session_user_id(session, db)
-                user_code = active_uid if active_uid > 0 else None
-
                 with state.db_lock:
+                    sstate_tx = self._resolve_session_user(db, session, "user_code")
+                    if sstate_tx["stale"]:
+                        return self._send_json({"success": False, "message": "Account session is no longer valid — please sign in again"}, 401, sid)
+                    user_code = sstate_tx["user_id"] if sstate_tx["user_id"] > 0 else None
 
                     db.execute("BEGIN IMMEDIATE")
                     try:
@@ -1375,13 +1395,16 @@ def make_handler(state: ContractState):
                 )
 
             if route == "movie/seat/getseatlistbyusercode":
-                sess_uid = self._resolve_active_session_user_id(session, db)
-                if sess_uid <= 0:
-                    return self._send_json({"success": False, "message": "Authentication required to view tickets"}, 401, sid)
-                req_uid = self._id_param(p, "user_code")
-                if req_uid > 0 and req_uid != sess_uid:
-                    return self._send_json({"success": False, "message": "Forbidden: cannot access another user's tickets"}, 403, sid)
                 with state.db_lock:
+                    sstate = self._resolve_session_user(db, session, "user_code")
+                    if sstate["stale"]:
+                        return self._send_json({"success": False, "message": "Account session is no longer valid — please sign in again"}, 401, sid)
+                    sess_uid = sstate["user_id"]
+                    if sess_uid <= 0:
+                        return self._send_json({"success": False, "message": "Authentication required to view tickets"}, 401, sid)
+                    req_uid = self._id_param(p, "user_code")
+                    if req_uid > 0 and req_uid != sess_uid:
+                        return self._send_json({"success": False, "message": "Forbidden: cannot access another user's tickets"}, 403, sid)
                     srows = rows_to_dicts(
                         db.execute(
                             "SELECT seat_code, movie_code, theater_code, date, time, seat_num, seat_zone, create_time FROM t_seat WHERE user_code = ? ORDER BY seat_code DESC",
@@ -1399,13 +1422,16 @@ def make_handler(state: ContractState):
             if route == "movie/seat/delete":
                 if not self._verify_same_origin():
                     return self._send_json({"success": False, "message": "Forbidden: cross-origin request rejected"}, 403, sid)
-                sess_uid = self._resolve_active_session_user_id(session, db)
-                if sess_uid <= 0:
-                    return self._send_json({"success": False, "message": "Authentication required to cancel a booking"}, 401, sid)
-                seat_id = self._id_param(p, "seat_code", allow_direct=True)
-                if seat_id <= 0:
-                    return self._send_json({"success": False, "message": "Valid seat_code is required"}, 200, sid)
                 with state.db_lock:
+                    sstate = self._resolve_session_user(db, session, "user_code")
+                    if sstate["stale"]:
+                        return self._send_json({"success": False, "message": "Account session is no longer valid — please sign in again"}, 401, sid)
+                    sess_uid = sstate["user_id"]
+                    if sess_uid <= 0:
+                        return self._send_json({"success": False, "message": "Authentication required to cancel a booking"}, 401, sid)
+                    seat_id = self._id_param(p, "seat_code", allow_direct=True)
+                    if seat_id <= 0:
+                        return self._send_json({"success": False, "message": "Valid seat_code is required"}, 200, sid)
                     db.execute("BEGIN IMMEDIATE")
                     try:
                         srow = db.execute("SELECT * FROM t_seat WHERE seat_code = ?", (seat_id,)).fetchone()
@@ -1436,13 +1462,12 @@ def make_handler(state: ContractState):
                 name = self._str_param(p, "name")
                 email = self._str_param(p, "email").lower()
                 pw = self._raw_str_param(p, "password")
-                pw_bytes = len(pw.encode("utf-8"))
                 if name == "" or len(name) > 50:
                     return self._send_json({"success": False, "message": "Please enter a valid name (1-50 characters)"}, 200, sid)
                 if email == "" or not EMAIL_RE.match(email) or len(email) > 100:
                     return self._send_json({"success": False, "message": "Please enter a valid email address"}, 200, sid)
-                if pw_bytes < 6 or pw_bytes > MAX_PASSWORD_BYTES:
-                    return self._send_json({"success": False, "message": "Password must be 6-72 characters"}, 200, sid)
+                if not is_valid_password_bytes(pw):
+                    return self._send_json({"success": False, "message": "Password must be 6-72 UTF-8 bytes"}, 200, sid)
                 with state.db_lock:
                     if db.execute("SELECT 1 FROM t_user WHERE email = ?", (email,)).fetchone():
                         return self._send_json({"success": False, "message": "This email has already been registered"}, 200, sid)
@@ -1507,16 +1532,11 @@ def make_handler(state: ContractState):
 
             if route == "user/user/session":
                 purge_expired_reset_challenge(session)
-                sess_uid = int(session.get("user_id") or 0)
-                if sess_uid <= 0:
-                    return self._send_json({"success": True, "message": "OK", "data": {"authenticated": False, "user_id": 0, "user_name": "Guest", "email": ""}}, 200, sid)
                 with state.db_lock:
-                    urow = db.execute("SELECT user_code, user_name, email FROM t_user WHERE user_code = ?", (sess_uid,)).fetchone()
-                if not urow:
-                    with state.session_lock:
-                        session.pop("user_id", None)
-                        session.pop("user_email", None)
+                    sstate = self._resolve_session_user(db, session, "user_code, user_name, email")
+                if sstate["user_id"] <= 0 or not sstate["user"]:
                     return self._send_json({"success": True, "message": "OK", "data": {"authenticated": False, "user_id": 0, "user_name": "Guest", "email": ""}}, 200, sid)
+                urow = sstate["user"]
                 return self._send_json(
                     {"success": True, "message": "OK", "data": {"authenticated": True, "user_id": int(urow["user_code"]), "user_name": urow["user_name"], "email": urow["email"]}},
                     200,
@@ -1563,22 +1583,20 @@ def make_handler(state: ContractState):
                 old_pw = self._raw_str_param(p, "old_password")
                 new_pw = self._raw_str_param(p, "pwd")
                 vcode = self._str_param(p, "verification_code")
-                new_pw_bytes = len(new_pw.encode("utf-8"))
 
-                if new_pw_bytes < 6 or new_pw_bytes > MAX_PASSWORD_BYTES:
-                    return self._send_json({"success": False, "message": "New password must be 6-72 characters"}, 200, sid)
+                if not is_valid_password_bytes(new_pw):
+                    return self._send_json({"success": False, "message": "New password must be 6-72 UTF-8 bytes"}, 200, sid)
 
                 # Path A: Signed-in user changing password with old_password
                 if old_pw and not vcode:
-                    if sess_uid <= 0:
-                        return self._send_json({"success": False, "message": "Please sign in to change your password using current password"}, 401, sid)
                     with state.db_lock:
-                        urow = db.execute("SELECT * FROM t_user WHERE user_code = ?", (sess_uid,)).fetchone()
-                        if not urow:
-                            with state.session_lock:
-                                session.pop("user_id", None)
-                                session.pop("user_email", None)
-                            return self._send_json({"success": False, "message": "Account session is no longer valid"}, 401, sid)
+                        sstate = self._resolve_session_user(db, session, "*")
+                        if sstate["stale"]:
+                            return self._send_json({"success": False, "message": "Account session is no longer valid — please sign in again"}, 401, sid)
+                        if sstate["user_id"] <= 0 or not sstate["user"]:
+                            return self._send_json({"success": False, "message": "Please sign in to change your password using current password"}, 401, sid)
+                        sess_uid = sstate["user_id"]
+                        urow = sstate["user"]
                         if not verify_password_bcrypt(old_pw, urow["login_pwd"]):
                             return self._send_json({"success": False, "message": "Current password is incorrect"}, 401, sid)
                         if hmac.compare_digest(old_pw, new_pw):
@@ -2321,7 +2339,7 @@ def make_handler(state: ContractState):
                         db.execute(f"UPDATE t_seat SET user_code = NULL WHERE user_code IN ({eph})", existing_ids)
                         owned_offer_ids = [
                             int(r["offer_code"])
-                            for r in db.execute(f"SELECT offer_code FROM t_offer WHERE user_code IN ({eph})", existing_ids).fetchall()
+                            for r in db.execute(f"SELECT offer_code FROM t_offer WHERE user_code IN ({eph}) ORDER BY offer_code ASC", existing_ids).fetchall()
                         ]
                         if owned_offer_ids:
                             oph = ",".join("?" for _ in owned_offer_ids)
@@ -2336,7 +2354,12 @@ def make_handler(state: ContractState):
                     {
                         "success": True,
                         "message": "User deleted successfully",
-                        "data": {"user_code": existing_ids[0], "deleted_ids": existing_ids, "deleted_count": len(existing_ids)},
+                        "data": {
+                            "user_code": existing_ids[0],
+                            "deleted_ids": existing_ids,
+                            "deleted_count": len(existing_ids),
+                            "deleted_offer_count": len(owned_offer_ids),
+                        },
                     },
                     200,
                     sid,

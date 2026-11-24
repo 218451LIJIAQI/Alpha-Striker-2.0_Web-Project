@@ -46,6 +46,10 @@
     try {
       const payload = await window.CineTicket.fetchJson(url);
       if (seq !== requestSeq) return;
+      if (payload.httpStatus === 401 && window.CineTicket.AuthStore.getUser().isLoggedIn) {
+        window.CineTicket.AuthStore.clearLocal();
+        return;
+      }
       if (payload.success) {
         renderOffers(payload.data || [], onReset);
       } else {
